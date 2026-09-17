@@ -9,18 +9,49 @@ use std::path::PathBuf;
 const MODERN_VERSION: &str = "2026-07-28";
 const LEGACY_VERSION: &str = "2025-11-25";
 
+/// Server configuration: persistence and detector selection.
+pub struct ServerConfig {
+    /// Optional local file for persistence across MCP process restarts.
+    pub vault_file: Option<PathBuf>,
+    /// Detector plugin name: `regex` (built-in) or `gliner2` (local ONNX NER).
+    pub detector: String,
+    /// Local directory holding the `GLiNER2` ONNX export; only used with `gliner2`.
+    pub model_dir: Option<PathBuf>,
+}
+
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            vault_file: None,
+            detector: "regex".to_owned(),
+            model_dir: None,
+        }
+    }
+}
+
 /// Run the MCP server over newline-delimited JSON-RPC on stdio.
 ///
 /// # Errors
 ///
 /// Returns an error when stdio I/O fails, a request cannot be answered, or a plugin cannot be constructed.
-pub fn run_stdio(vault_file: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>> {
-    let vault: Box<dyn do_context_shield_plugin_api::Vault> = match vault_file {
+pub fn run_stdio(config: ServerConfig) -> Result<(), Box<dyn std::error::Error>> {
+    let vault: Box<dyn do_context_shield_plugin_api::Vault> = match config.vault_file {
         Some(path) => Box::new(do_context_shield_vault_json::JsonVault::open(path)?),
         None => do_context_shield_plugin_registry::vault("memory")?,
     };
+    let detector: Box<dyn do_context_shield_plugin_api::Detector> = match config.detector.as_str() {
+        "gliner2" => {
+            use do_context_shield_detector_gliner2::{Gliner2Config, Gliner2Detector};
+            let detector_config = match config.model_dir {
+                Some(dir) => Gliner2Config::with_model_dir(dir),
+                None => Gliner2Config::default(),
+            };
+            Box::new(Gliner2Detector::new(detector_config))
+        }
+        name => do_context_shield_plugin_registry::detector(name)?,
+    };
     let mut pipeline = PrivacyPipeline::new(
-        do_context_shield_plugin_registry::detector("regex")?,
+        detector,
         do_context_shield_plugin_registry::policy("default")?,
         do_context_shield_plugin_registry::transformer("pseudonymize")?,
         vault,
@@ -103,16 +134,19 @@ fn handle_request(
             }),
         ),
         "notifications/initialized" => return Ok(None),
+        // Tools are returned in a fixed order so clients can cache reliably.
+        // `cacheScope` follows the 2026-07-28 `CacheableResult` vocabulary
+        // (`public`/`private`): results are session-scoped, so `private`.
         "tools/list" => response(
             id,
             json!({
                 "tools":[
-                    {"name":"private.sanitize","description":"Detect and sanitize sensitive coding context locally.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"}},"required":["text"]}},
-                    {"name":"private.restore","description":"Restore locally stored placeholders in a session.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"}},"required":["text"]}},
+                    {"name":"private.sanitize","description":"Detect and sanitize sensitive coding context locally.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"}},"required":["text","session"]}},
+                    {"name":"private.restore","description":"Restore locally stored placeholders in a session.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"}},"required":["text","session"]}},
                     {"name":"private.inspect","description":"Inspect detected sensitive entities without transforming them.","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}}
                 ],
                 "ttlMs":300_000,
-                "cacheScope":"process"
+                "cacheScope":"private"
             }),
         ),
         "tools/call" => {
@@ -125,6 +159,8 @@ fn handle_request(
                 .cloned()
                 .unwrap_or_else(|| json!({}));
             let text = args.get("text").and_then(Value::as_str).unwrap_or("");
+            // Schemas require `session`, but the server still falls back to
+            // `default` so older clients that send only `text` keep working.
             let session = args
                 .get("session")
                 .and_then(Value::as_str)
@@ -153,4 +189,194 @@ fn handle_request(
         _ => error_response(id, "unknown method"),
     };
     Ok(Some(result))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pipeline() -> PrivacyPipeline {
+        let vault = match do_context_shield_plugin_registry::vault("memory") {
+            Ok(vault) => vault,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        let detector = match do_context_shield_plugin_registry::detector("regex") {
+            Ok(detector) => detector,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        let policy = match do_context_shield_plugin_registry::policy("default") {
+            Ok(policy) => policy,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        let transformer = match do_context_shield_plugin_registry::transformer("pseudonymize") {
+            Ok(transformer) => transformer,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        PrivacyPipeline::new(detector, policy, transformer, vault)
+    }
+
+    fn request(pipeline: &mut PrivacyPipeline, body: &str) -> Option<Value> {
+        match handle_request(pipeline, body) {
+            Ok(response) => response,
+            Err(error) => panic!("unexpected error: {error}"),
+        }
+    }
+
+    fn tool_call(name: &str, text: &str, session: Option<&str>) -> String {
+        let session_arg = match session {
+            Some(session) => format!(r#","session":"{session}""#),
+            None => String::new(),
+        };
+        format!(
+            r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"{name}","arguments":{{"text":{text:?}{session_arg}}}}}}}"#
+        )
+    }
+
+    fn content_text(response: Option<Value>) -> String {
+        let Some(value) = response else {
+            panic!("expected a response");
+        };
+        value
+            .pointer("/result/content/0/text")
+            .and_then(Value::as_str)
+            .unwrap_or_else(|| panic!("missing content text in {value}"))
+            .to_owned()
+    }
+
+    #[test]
+    fn discover_advertises_modern_and_legacy() {
+        let mut pipeline = pipeline();
+        let response = request(
+            &mut pipeline,
+            r#"{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{}}"#,
+        );
+        let Some(value) = response else {
+            panic!("expected a response");
+        };
+        let versions = value
+            .pointer("/result/supportedVersions")
+            .and_then(Value::as_array)
+            .unwrap_or_else(|| panic!("missing supportedVersions in {value}"));
+        assert!(versions.iter().any(|version| version == MODERN_VERSION));
+        assert!(versions.iter().any(|version| version == LEGACY_VERSION));
+    }
+
+    #[test]
+    fn legacy_initialize_and_notification() {
+        let mut pipeline = pipeline();
+        let response = request(
+            &mut pipeline,
+            r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#,
+        );
+        let Some(value) = response else {
+            panic!("expected a response");
+        };
+        assert_eq!(
+            value
+                .pointer("/result/protocolVersion")
+                .and_then(Value::as_str),
+            Some(LEGACY_VERSION)
+        );
+        let notified = request(
+            &mut pipeline,
+            r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
+        );
+        assert_eq!(notified, None);
+    }
+
+    #[test]
+    fn tools_list_is_deterministic_and_cacheable() {
+        let mut pipeline = pipeline();
+        let response = request(
+            &mut pipeline,
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}"#,
+        );
+        let Some(value) = response else {
+            panic!("expected a response");
+        };
+        let names: Vec<&str> = value
+            .pointer("/result/tools")
+            .and_then(Value::as_array)
+            .unwrap_or_else(|| panic!("missing tools in {value}"))
+            .iter()
+            .map(|tool| {
+                tool.get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or_else(|| panic!("tool without name in {tool}"))
+            })
+            .collect();
+        assert_eq!(
+            names,
+            vec!["private.sanitize", "private.restore", "private.inspect"]
+        );
+        assert_eq!(
+            value.pointer("/result/ttlMs").and_then(Value::as_u64),
+            Some(300_000)
+        );
+        assert_eq!(
+            value.pointer("/result/cacheScope").and_then(Value::as_str),
+            Some("private")
+        );
+    }
+
+    #[test]
+    fn sanitize_restore_round_trip_is_scope_limited() {
+        let mut pipeline = pipeline();
+        let sanitized = content_text(request(
+            &mut pipeline,
+            &tool_call("private.sanitize", "alice@example.com", Some("s")),
+        ));
+        assert!(!sanitized.contains("alice@example.com"));
+        let restored = content_text(request(
+            &mut pipeline,
+            &tool_call("private.restore", &sanitized, Some("s")),
+        ));
+        assert_eq!(restored, "alice@example.com");
+        let blocked = content_text(request(
+            &mut pipeline,
+            &tool_call("private.restore", &sanitized, Some("other")),
+        ));
+        assert_eq!(blocked, sanitized);
+    }
+
+    #[test]
+    fn missing_session_falls_back_to_default_scope() {
+        let mut pipeline = pipeline();
+        let sanitized = content_text(request(
+            &mut pipeline,
+            &tool_call("private.sanitize", "alice@example.com", None),
+        ));
+        let restored = content_text(request(
+            &mut pipeline,
+            &tool_call("private.restore", &sanitized, None),
+        ));
+        assert_eq!(restored, "alice@example.com");
+    }
+
+    #[test]
+    fn inspect_reports_entities_as_json() {
+        let mut pipeline = pipeline();
+        let text = content_text(request(
+            &mut pipeline,
+            &tool_call("private.inspect", "alice@example.com", None),
+        ));
+        assert!(text.contains(r#""kind":"email""#));
+        assert!(text.contains("alice@example.com"));
+    }
+
+    #[test]
+    fn unknown_tool_method_and_malformed_json_are_errors() {
+        let mut pipeline = pipeline();
+        for body in [
+            tool_call("private.nope", "x", None),
+            r#"{"jsonrpc":"2.0","id":2,"method":"bogus/method","params":{}}"#.to_owned(),
+            r#"{"jsonrpc": broken"#.to_owned(),
+        ] {
+            let response = request(&mut pipeline, &body);
+            let Some(value) = response else {
+                panic!("expected an error response for {body}");
+            };
+            assert!(value.get("error").is_some(), "expected error in {value}");
+        }
+    }
 }

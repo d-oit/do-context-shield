@@ -19,6 +19,12 @@ Example generic stdio registration:
 
 Modern MCP 2026-07-28 clients discover the server with `server/discover` and then call `tools/list` / `tools/call` without the legacy initialize exchange. Legacy clients can still use `initialize`. See the official MCP release notes for the protocol-era split.
 
+Tool selection and caching contract:
+
+- `tools/list` returns `private.sanitize`, `private.restore`, `private.inspect` in a fixed order with `ttlMs: 300000` and `cacheScope: private` (session-scoped results must not sit in shared caches).
+- `sanitize` and `restore` schemas require `text` and `session`. The server still accepts a missing `session` as `default` for older clients, but always send an explicit per-task session.
+- Detector selection: `mcp-stdio --detector regex` (default) or `mcp-stdio --detector gliner2 --model-dir <dir>` for local ONNX NER (requires a binary built with `--features gliner2`).
+
 ## Skill-only clients
 
 Install `.agents/skills/private-data/SKILL.md` in the client's skills directory. Use the CLI for local sanitization. For reversible cross-process workflows, pass the same explicit `--vault-file` to `sanitize` and `restore`.

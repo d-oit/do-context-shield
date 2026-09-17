@@ -54,6 +54,8 @@ struct McpArgs {
     /// Optional local file for persistence across MCP process restarts.
     #[arg(long)]
     vault_file: Option<PathBuf>,
+    #[command(flatten)]
+    detector: DetectorSelection,
 }
 
 /// Detector plugin selection shared by sanitize and inspect.
@@ -132,7 +134,11 @@ fn run_simple(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             println!();
         }
         Command::McpStdio(args) => {
-            do_context_shield_mcp_server::run_stdio(args.vault_file)?;
+            do_context_shield_mcp_server::run_stdio(do_context_shield_mcp_server::ServerConfig {
+                vault_file: args.vault_file,
+                detector: args.detector.detector,
+                model_dir: args.detector.model_dir,
+            })?;
         }
     }
     io::stdout().flush()?;

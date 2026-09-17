@@ -353,6 +353,7 @@ name = "do-context-shield-mcp-server"
 version = "0.1.0"
 dependencies = [
  "do-context-shield-core",
+ "do-context-shield-detector-gliner2",
  "do-context-shield-plugin-api",
  "do-context-shield-plugin-registry",
  "do-context-shield-vault-json",
