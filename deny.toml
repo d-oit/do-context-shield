@@ -1,0 +1,40 @@
+# deny.toml - cargo-deny supply-chain policy.
+# Run: cargo deny check
+# Enforced in CI by the "Dependency policy" job.
+
+[graph]
+all-features = false
+no-default-features = false
+
+[output]
+feature-depth = 1
+
+# Vulnerabilities: deny crates with known advisories.
+[advisories]
+version = 2
+
+# Only OSI-approved permissive licenses plus explicit exceptions below.
+# This list matches the exact encountered set (see `cargo deny list`).
+# Adding a dependency with a new license fails CI until it is deliberately
+# allowed here. aho-corasick/memchr are dual-licensed MIT/Unlicense.
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+]
+
+# Dependency bans.
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"
+
+# Crates must come from crates.io; no ad-hoc registries or git deps.
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

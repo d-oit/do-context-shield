@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI (`sanitize`, `restore`, `inspect`, `mcp-stdio`) and MCP JSON-RPC stdio adapter.
 - Agent skills (`.agents/skills/private-data`, `.agents/skills/plugin-development`, indexed in `.agents/SKILLS.md`).
 - GitHub best-practice governance: CI, security scan, Dependabot, issue/PR templates.
+- Supply-chain policy (`deny.toml`: advisories, exact license allow-list, wildcard bans, crates.io-only sources) enforced by a CI dependency-policy job; Conventional Commits enforced on PR titles.
 
 ### Fixed
 
