@@ -73,6 +73,30 @@ docs: update client-integration guide
 5. Open a PR against `main`.
 6. Wait for CI to pass.
 
+## Release Process
+
+Release notes are drafted automatically from merged PRs (see `.github/release-drafter.yml`).
+
+### Publishing to crates.io
+
+Every publishable crate defines an `include` whitelist in its `Cargo.toml`
+so internal files never end up in the published package. Verify the surface with:
+
+```bash
+cargo package --list -p <crate-name>
+```
+
+(Requires a clean tree; pass `--allow-dirty` for local iteration.)
+
+Workspace crates depend on each other via versioned path dependencies, so they
+must be published **bottom-up in dependency order** — `cargo publish` resolves
+siblings through the crates.io index:
+
+```bash
+scripts/publish-crates.sh --dry-run  # rehearse the package surface
+CARGO_REGISTRY_TOKEN=... scripts/publish-crates.sh  # publish in order
+```
+
 ## Reporting Issues
 
 Open an issue at <https://github.com/d-oit/do-context-shield/issues>.

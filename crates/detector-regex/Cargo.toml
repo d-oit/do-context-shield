@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+description = "Regex detector plugin (email, phone, IBAN, IPv4, API keys) for do-context-shield"
+homepage.workspace = true
+repository.workspace = true
+include = ["src/**/*", "Cargo.toml"]
 
 [lints]
 workspace = true
