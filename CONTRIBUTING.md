@@ -54,7 +54,7 @@ cargo audit
 python3 scripts/validate-structure.py
 ```
 
-Local sensors are declared in `do-harness.toml` (`pre-commit`: fmt, check, loc; `pre-push`: the full verification set) with shell implementations in `scripts/check-*.sh`; CI enforces the same sensors plus structure validation, secret scanning, and publish-surface checks.
+Local sensors are declared in `do-harness.toml` (`pre-commit`: fmt, check, loc; `pre-push`: the full verification set) with shell implementations in `scripts/check-*.sh`; CI enforces the same sensors plus structure validation, secret scanning, and publish-surface checks. The `Harness` CI job installs the pinned `do-harness` and runs the `ci` signal set (`verification` minus `commitlint`, since PR titles are the enforced commit contract) with `--format json --strict`, verifies evidence freshness (`status --set ci`), and runs `do-harness eval --strict-fixtures` for the skill corpus.
 
 Git hooks: `.githooks/` is this repository's hook source of truth — versioned and reviewed alongside the code (`git config core.hooksPath .githooks`). `do-harness hook install` is a per-developer alternative that writes managed hooks into `.git/hooks/`; the two do not combine, because a `core.hooksPath` pointing at `.githooks` makes git ignore `.git/hooks/` entirely — pick one. (Upstream: `hook install`/`hook status` do not yet detect that conflict — [d-o-hub/do-harness#108](https://github.com/d-o-hub/do-harness/issues/108).)
 

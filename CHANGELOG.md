@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Client integration docs: client-agnostic MCP stdio registration with verified configs for OpenCode 1.18.31 (`opencode.json`, `opencode run`) and omp 18.2.4 (`.omp/mcp.json`, `xd://mcp__…` tool devices, `omp -p --mode=json`), plus the Claude Code and Codex shapes; shared session/`--vault-file` notes and per-client tool naming.
 
+- CI harness job: pinned `do-harness` v0.1.1 runs the new `ci` signal set (`verification` minus `commitlint`, because pull-request checkouts are merge refs while this repository enforces conventional PR titles) with `--format json --strict`, checks `do-harness status --set ci` evidence freshness, and runs `do-harness eval --strict-fixtures`; the job is required by `ci-success`.
+
 ### Fixed
 
 - Dependency policy: `cargo-deny` and `cargo-audit` now pass on the all-features graph — the reviewed `paste` exception (RUSTSEC-2024-0436, via `tokenizers` behind the `gliner2` feature) is documented in `deny.toml` and `.cargo/audit.toml`, and ISC joins the license allow-list for `libloading` (`ort` load-dynamic).

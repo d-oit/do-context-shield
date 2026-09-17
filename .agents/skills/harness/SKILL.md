@@ -45,13 +45,13 @@ Agent = Model + Harness. Feedforward guides (this skill, `AGENTS.md`, `CONTRIBUT
 | skills | `bash scripts/check-skills.sh` | pre-push | fix frontmatter/evals; see skill-creator |
 | deps | `bash scripts/check-deps.sh` | pre-push, CI | license allow-list, crates.io only, no wildcards; check feature-gated trees explicitly |
 | audit | `bash scripts/check-audit.sh` | CI | resolve or document the advisory in `deny.toml` / `.cargo/audit.toml` |
-| commitlint | `bash scripts/check-commitlint.sh` | CI | conventional commit with a type prefix |
+| commitlint | `bash scripts/check-commitlint.sh` | commit-msg hook, `verification` set | conventional commit with a type prefix; PR titles are enforced separately by `commitlint.yml` |
 | structure | `python3 scripts/validate-structure.py` | CI | restore required files; remove unwrap/expect; shrink files |
 | deny | `cargo deny check` | CI | dependency policy (`deny.toml`) |
 | publish-check | `cargo package --list -p <crate>` | CI | fix the crate's include whitelist |
 | secret-scan | gitleaks (`.github/workflows/secret-scan.yml`) | CI | remove and rotate the secret |
 
-Changed-only gate: `do-harness verify --changed --set verification`; preview the selection with `do-harness explain --set verification --changed`. A tool that is unavailable prints `SKIP:` and is reported as WARN, never as a silent pass; under `--strict` a warn is not a pass.
+Changed-only gate: `do-harness verify --changed --set verification`; preview the selection with `do-harness explain --set verification --changed`. Signal sets: `feedback` (edit loop), `verification` (full local gate), `release`, and `ci` — what the GitHub workflow runs: `verification` minus `commitlint`, because pull-request checkouts are merge refs and this repository enforces conventional PR titles rather than contributor commit subjects. A tool that is unavailable prints `SKIP:` and is reported as WARN, never as a silent pass; under `--strict` a warn is not a pass.
 
 ## Self-correction protocol
 
