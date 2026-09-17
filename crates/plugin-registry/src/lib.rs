@@ -1,0 +1,60 @@
+//! Built-in plugin registry.
+
+use do_context_shield_detector_regex::RegexDetector;
+use do_context_shield_plugin_api::{Detector, Policy, Transformer, Vault};
+use do_context_shield_policy_default::DefaultPolicy;
+use do_context_shield_transformer_pseudonymize::PseudonymizingTransformer;
+use do_context_shield_vault_memory::MemoryVault;
+use thiserror::Error;
+
+/// Registry errors.
+#[derive(Debug, Error)]
+pub enum RegistryError {
+    /// Unknown plugin name.
+    #[error("unknown {kind} plugin `{name}`")]
+    Unknown { kind: &'static str, name: String },
+}
+
+/// Construct a detector by logical name.
+pub fn detector(name: &str) -> Result<Box<dyn Detector>, RegistryError> {
+    match name {
+        "regex" => Ok(Box::new(RegexDetector::default())),
+        _ => Err(RegistryError::Unknown {
+            kind: "detector",
+            name: name.to_owned(),
+        }),
+    }
+}
+
+/// Construct a policy by logical name.
+pub fn policy(name: &str) -> Result<Box<dyn Policy>, RegistryError> {
+    match name {
+        "default" => Ok(Box::new(DefaultPolicy::default())),
+        _ => Err(RegistryError::Unknown {
+            kind: "policy",
+            name: name.to_owned(),
+        }),
+    }
+}
+
+/// Construct a transformer by logical name.
+pub fn transformer(name: &str) -> Result<Box<dyn Transformer>, RegistryError> {
+    match name {
+        "pseudonymize" => Ok(Box::new(PseudonymizingTransformer)),
+        _ => Err(RegistryError::Unknown {
+            kind: "transformer",
+            name: name.to_owned(),
+        }),
+    }
+}
+
+/// Construct a vault by logical name.
+pub fn vault(name: &str) -> Result<Box<dyn Vault>, RegistryError> {
+    match name {
+        "memory" => Ok(Box::new(MemoryVault::default())),
+        _ => Err(RegistryError::Unknown {
+            kind: "vault",
+            name: name.to_owned(),
+        }),
+    }
+}

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "do-context-shield": {
+      "command": "do-context-shield",
+      "args": ["mcp-stdio"]
+    }
+  }
+}

@@ -1,0 +1,50 @@
+# Rust build artifacts
+/target/
+
+# Cargo.lock is committed for this repo because it ships a binary (CLI).
+# Do not ignore it.
+
+# Generated documentation
+/doc/
+
+# IDE and editor files
+.idea/
+*.iml
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+.vscode/
+.cursor/
+.cursorrules
+
+# Coverage reports
+lcov.info
+coverage/
+*.profraw
+*.profdata
+
+# Environment files
+.env
+.env.local
+.env.*.local
+*.local
+
+# Reports and profiling
+flamegraph.svg
+perf.data
+perf.data.old
+criterion/
+
+# Temporary files
+*.tmp
+*.bak
+*.orig
+*.log
+
+# Python helpers
+__pycache__/
+*.pyc
+
+# Node.js (docs tooling)
+node_modules/

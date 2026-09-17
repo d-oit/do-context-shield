@@ -1,0 +1,19 @@
+[package]
+name = "do-context-shield-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+do-context-shield-plugin-api = { path = "../plugin-api" }
+thiserror.workspace = true
+
+[dev-dependencies]
+do-context-shield-detector-regex = { path = "../detector-regex" }
+do-context-shield-policy-default = { path = "../policy-default" }
+do-context-shield-transformer-pseudonymize = { path = "../transformer-pseudonymize" }
+do-context-shield-vault-memory = { path = "../vault-memory" }

@@ -1,0 +1,12 @@
+[package]
+name = "do-context-shield-transformer-pseudonymize"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+do-context-shield-plugin-api = { path = "../plugin-api" }

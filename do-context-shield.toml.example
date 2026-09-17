@@ -1,0 +1,9 @@
+# All runtime capabilities are selected independently.
+[plugins]
+detector = "regex"
+policy = "default"
+transformer = "pseudonymize"
+vault = "memory"
+
+# Future local replacements can use names such as `gliner2`, `redact`,
+# `sqlite`, or a process plugin without changing the core pipeline.
