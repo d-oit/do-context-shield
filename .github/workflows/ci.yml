@@ -72,15 +72,52 @@ jobs:
         with:
           command: check
 
+  publish-check:
+    name: Publish check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      # NOTE: `cargo publish --dry-run` cannot validate workspace crates that
+      # depend on unpublished siblings (crates.io index lookup fails), so CI
+      # checks the package surface and required metadata instead. Real
+      # publishing follows the bottom-up order in scripts/publish-crates.sh.
+      - name: Verify publish metadata
+        run: |
+          python3 - <<'EOF'
+          import json, subprocess, sys
+          meta = json.loads(subprocess.run(
+              ['cargo', 'metadata', '--format-version', '1', '--no-deps'],
+              capture_output=True, text=True, check=True).stdout)
+          bad = []
+          for pkg in meta['packages']:
+              if '/crates/' not in pkg['manifest_path']:
+                  continue
+              for field in ('description', 'license', 'repository'):
+                  if not pkg.get(field):
+                      bad.append(f"{pkg['name']}: missing {field}")
+          if bad:
+              print('\n'.join(bad))
+              sys.exit(1)
+          print('publish metadata ok')
+          EOF
+      - name: Verify include whitelists
+        run: |
+          for crate in $(cargo metadata --format-version 1 --no-deps \
+            | python3 -c "import json,sys; print(' '.join(sorted(p['name'] for p in json.load(sys.stdin)['packages'] if '/crates/' in p['manifest_path'])))"); do
+            echo "--- $crate ---"
+            cargo package --list -p "$crate"
+          done
+
   ci-success:
     name: CI Success
-    needs: [fmt, clippy, test, audit, deny]
+    needs: [fmt, clippy, test, audit, deny, publish-check]
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Check all jobs passed
         run: |
-          for res in "${{ needs.fmt.result }}" "${{ needs.clippy.result }}" "${{ needs.test.result }}" "${{ needs.audit.result }}" "${{ needs.deny.result }}"; do
+          for res in "${{ needs.fmt.result }}" "${{ needs.clippy.result }}" "${{ needs.test.result }}" "${{ needs.audit.result }}" "${{ needs.deny.result }}" "${{ needs.publish-check.result }}"; do
             if [ "$res" != "success" ]; then
               echo "Required CI job did not succeed: $res"
               exit 1

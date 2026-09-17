@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+description = "Local privacy boundary CLI for coding agents (sanitize, restore, inspect, mcp-stdio)"
+homepage.workspace = true
+repository.workspace = true
+include = ["src/**/*", "Cargo.toml"]
 
 [[bin]]
 name = "do-context-shield"

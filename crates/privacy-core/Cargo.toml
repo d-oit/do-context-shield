@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+description = "Composable privacy pipeline (Detector -> Policy -> Transformer -> Vault) for do-context-shield"
+homepage.workspace = true
+repository.workspace = true
+include = ["src/**/*", "tests/**/*", "Cargo.toml"]
 
 [lints]
 workspace = true

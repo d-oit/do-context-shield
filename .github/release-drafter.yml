@@ -1,0 +1,46 @@
+---
+# Configuration for automated release notes drafting
+
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+
+categories:
+  - title: 'Features'
+    labels:
+      - 'enhancement'
+      - 'feature'
+  - title: 'Bug Fixes'
+    labels:
+      - 'bug'
+      - 'fix'
+      - 'bugfix'
+  - title: 'Security'
+    labels:
+      - 'security'
+  - title: 'Maintenance'
+    labels:
+      - 'chore'
+      - 'deps'
+      - 'dependencies'
+      - 'refactor'
+  - title: 'Documentation'
+    labels:
+      - 'documentation'
+      - 'docs'
+
+change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
+change-title-escapes: '\<*_&'
+
+version-resolver:
+  major:
+    labels:
+      - 'major'
+  minor:
+    labels:
+      - 'enhancement'
+      - 'feature'
+  patch:
+    labels:
+      - 'bug'
+      - 'patch'
+      - 'chore'
