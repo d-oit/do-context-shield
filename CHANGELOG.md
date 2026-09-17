@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub best-practice governance: CI, security scan, Dependabot, issue/PR templates.
 - Supply-chain policy (`deny.toml`: advisories, exact license allow-list, wildcard bans, crates.io-only sources) enforced by a CI dependency-policy job; Conventional Commits enforced on PR titles.
 - Release readiness: per-crate descriptions and `include` whitelists, CI publish-surface check, ordered publish script (`scripts/publish-crates.sh`), automated release-note drafts.
+- PR auto-labeling by changed paths (feeds release-drafter categories); label definitions in `.github/labels.yml`.
 
 ### Fixed
 
