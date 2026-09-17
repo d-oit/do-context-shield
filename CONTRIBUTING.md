@@ -77,9 +77,12 @@ See [AGENTS.md](AGENTS.md):
 
 ### Commit Messages
 
-Use [Conventional Commits](https://www.conventionalcommits.org/). Subjects must be
-lowercase, which the local `commitlint` sensor (`scripts/check-commitlint.sh`) enforces
-in addition to CI's PR-title check.
+Use [Conventional Commits](https://www.conventionalcommits.org/). CI checks the type prefix on PR
+titles (`feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`)
+via `action-semantic-pull-request`, and the local `commitlint` sensor
+(`scripts/check-commitlint.sh`) checks the same shape on the last commit. Squash merges use the PR
+title as the commit subject, so keep both conventional. Subjects are conventionally lowercase, but
+case is not enforced.
 
 ```text
 feat(detector): add local name detector
