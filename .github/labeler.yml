@@ -1,0 +1,43 @@
+---
+# .github/labeler.yml
+# Path-to-label mapping for PR auto-labeling.
+# Labels must exist on the repo (see .github/labels.yml for definitions).
+
+rust:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'crates/**'
+          - 'Cargo.toml'
+          - 'Cargo.lock'
+          - 'rust-toolchain.toml'
+          - 'deny.toml'
+          - '.gitleaks.toml'
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**'
+
+scripts:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'scripts/**'
+
+agents:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'AGENTS.md'
+          - '.agents/**'
+          - 'skills/**'
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'docs/**'
+          - '*.md'
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'Cargo.lock'
+          - '.github/dependabot.yml'

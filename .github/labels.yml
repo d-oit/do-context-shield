@@ -1,5 +1,5 @@
-# These labels are synced by the labeler workflow (if enabled)
-# and used by issue templates.
+# Label definitions for this repo (issue templates, labeler, release-drafter).
+# Applied to the repo via the GitHub API; keep colors/descriptions in sync.
 - name: bug
   color: d73a4a
   description: Something isn't working
@@ -15,3 +15,18 @@
 - name: dependencies
   color: 0366d6
   description: Pull requests that update a dependency file
+- name: rust
+  color: b83944
+  description: Rust source changes
+- name: ci
+  color: 0e8a16
+  description: CI/CD and automation changes
+- name: agents
+  color: 5319e7
+  description: Agent skills and instructions
+- name: docs
+  color: 0075ca
+  description: Documentation changes
+- name: scripts
+  color: fbca04
+  description: Helper and release scripts
