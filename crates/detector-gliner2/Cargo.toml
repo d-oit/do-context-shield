@@ -1,0 +1,25 @@
+[package]
+name = "do-context-shield-detector-gliner2"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "GLiNER2 local NER detector plugin (ONNX, CPU-first, optional) for do-context-shield"
+homepage.workspace = true
+repository.workspace = true
+include = ["src/**/*", "Cargo.toml"]
+
+[features]
+default = []
+# Enable the bundled ONNX backend (ort + tokenizers + serde_json).
+# Off by default so the base workspace builds light and offline.
+gliner2 = ["dep:ort", "dep:tokenizers", "dep:serde_json"]
+
+[lints]
+workspace = true
+
+[dependencies]
+do-context-shield-plugin-api.workspace = true
+ort = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+tokenizers = { workspace = true, optional = true }

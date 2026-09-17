@@ -9,12 +9,19 @@ homepage.workspace = true
 repository.workspace = true
 include = ["src/**/*", "Cargo.toml"]
 
+[features]
+default = []
+# Re-export the GLiNER2 ONNX backend. Off by default so the base build
+# stays light (no native ONNX Runtime dependency) and offline-friendly.
+gliner2 = ["do-context-shield-detector-gliner2/gliner2"]
+
 [lints]
 workspace = true
 
 [dependencies]
 do-context-shield-plugin-api.workspace = true
 do-context-shield-detector-regex.workspace = true
+do-context-shield-detector-gliner2.workspace = true
 do-context-shield-policy-default.workspace = true
 do-context-shield-transformer-pseudonymize.workspace = true
 do-context-shield-vault-memory.workspace = true

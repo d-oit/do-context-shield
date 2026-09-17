@@ -4,7 +4,7 @@ The core does not know which detector, policy, transformer, or vault is used.
 
 | Capability | Contract | Initial plugin | Future replacements |
 | --- | --- | --- | --- |
-| detection | `Detector` | regex | GLiNER2, custom local NER, rules |
+| detection | `Detector` | regex | `detector-gliner2` (local ONNX NER), custom local NER, rules |
 | policy | `Policy` | default | project policy, enterprise DLP |
 | transformation | `Transformer` | pseudonymize | redact, generalize, encrypt, format-preserving |
 | storage | `Vault` | memory / JSON file | SQLite, OS keychain, encrypted local DB |

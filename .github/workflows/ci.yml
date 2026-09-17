@@ -72,6 +72,13 @@ jobs:
         with:
           command: check
 
+  structure:
+    name: Structure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: python3 scripts/validate-structure.py
+
   publish-check:
     name: Publish check
     runs-on: ubuntu-latest
@@ -111,13 +118,13 @@ jobs:
 
   ci-success:
     name: CI Success
-    needs: [fmt, clippy, test, audit, deny, publish-check]
+    needs: [fmt, clippy, test, audit, deny, structure, publish-check]
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Check all jobs passed
         run: |
-          for res in "${{ needs.fmt.result }}" "${{ needs.clippy.result }}" "${{ needs.test.result }}" "${{ needs.audit.result }}" "${{ needs.deny.result }}" "${{ needs.publish-check.result }}"; do
+          for res in "${{ needs.fmt.result }}" "${{ needs.clippy.result }}" "${{ needs.test.result }}" "${{ needs.audit.result }}" "${{ needs.deny.result }}" "${{ needs.structure.result }}" "${{ needs.publish-check.result }}"; do
             if [ "$res" != "success" ]; then
               echo "Required CI job did not succeed: $res"
               exit 1
