@@ -28,9 +28,21 @@ cargo test --workspace
 
 ### Quality Gates
 
-Always run before pushing (see the `harness` skill for the sensor map and fix procedures):
+Install the harness CLI once (Linux/macOS; see the
+[do-harness README](https://github.com/d-o-hub/do-harness) for other platforms):
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/d-o-hub/do-harness/main/scripts/install.sh \
+  | sh -s -- --version v0.1.1
+```
+
+Then run the whole local gate with one command, or the sensors directly:
+
+```bash
+do-harness verify --set verification          # fmt, check, clippy, test, loc, deps, audit, commitlint
+do-harness verify --changed --set verification   # only sensors whose inputs changed
+do-harness explain --set verification --changed  # show the selection without running it
+
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
@@ -39,7 +51,7 @@ cargo audit
 python3 scripts/validate-structure.py
 ```
 
-Local hooks are declared in `do-harness.toml` (`pre-commit`: fmt, check; `pre-push`: fmt, check, clippy, test) and implemented in `.githooks/`. CI enforces the same sensors plus audit, deny, structure validation, secret scanning, and publish-surface checks.
+Local sensors are declared in `do-harness.toml` (`pre-commit`: fmt, check, loc; `pre-push`: the full verification set) with shell implementations in `scripts/check-*.sh`, and mirrored by the git hooks in `.githooks/` (`git config core.hooksPath .githooks`; `do-harness hook install` writes equivalent managed hooks into `.git/hooks/`). CI enforces the same sensors plus structure validation, secret scanning, and publish-surface checks.
 
 ## Project Rules
 
@@ -63,7 +75,9 @@ See [AGENTS.md](AGENTS.md):
 
 ### Commit Messages
 
-Use [Conventional Commits](https://www.conventionalcommits.org/):
+Use [Conventional Commits](https://www.conventionalcommits.org/). Subjects must be
+lowercase, which the local `commitlint` sensor (`scripts/check-commitlint.sh`) enforces
+in addition to CI's PR-title check.
 
 ```text
 feat(detector): add local name detector
