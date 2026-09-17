@@ -1,0 +1,47 @@
+{
+  "methods": [
+    {
+      "name": "vertical-plugin-slice",
+      "subtasks": [
+        { "name": "define-contract", "sensor": null, "spike_candidate": false },
+        { "name": "write-failing-test", "sensor": null, "spike_candidate": false },
+        { "name": "implement-slice", "sensor": "test", "spike_candidate": false },
+        { "name": "verify-sensors", "sensor": "check", "spike_candidate": false },
+        { "name": "distill-learning", "sensor": "clippy", "spike_candidate": false }
+      ],
+      "preconditions": [
+        {
+          "description": "The capability boundary is understood: one plugin-api stage (Detector -> Policy -> Transformer -> Vault) or one protocol surface changes, and the privacy invariants it must preserve (redaction, scope isolation, fail-closed) are written down."
+        }
+      ]
+    },
+    {
+      "name": "spike-and-resolve",
+      "subtasks": [
+        { "name": "create-spike", "sensor": null, "spike_candidate": false },
+        { "name": "execute-spike", "sensor": "check", "spike_candidate": false },
+        { "name": "record-findings", "sensor": null, "spike_candidate": false },
+        { "name": "clean-spike", "sensor": "test", "spike_candidate": false },
+        { "name": "transition-to-slice", "sensor": "clippy", "spike_candidate": false }
+      ],
+      "preconditions": [
+        {
+          "description": "A third-party API, model artifact, coding-client integration, or wire protocol is uncertain; the unknown must be resolved by a throwaway prototype before a slice is committed."
+        }
+      ]
+    },
+    {
+      "name": "decision",
+      "subtasks": [
+        { "name": "record-decision-header", "sensor": null, "spike_candidate": false },
+        { "name": "verify-decision-evidence", "sensor": "test", "spike_candidate": false },
+        { "name": "confirm-feature-boundary", "sensor": "check", "spike_candidate": false }
+      ],
+      "preconditions": [
+        {
+          "description": "A design or dependency verdict (adopt, hold, reject) is being recorded in plans/invariants.json with its invariant/rationale/sensor/category header. Feature-gated surfaces (for example --features gliner2) are verified with an explicit feature build, not the default suite."
+        }
+      ]
+    }
+  ]
+}

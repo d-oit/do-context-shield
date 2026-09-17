@@ -1,0 +1,56 @@
+{
+  "skill_name": "htn-planner",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "You are about to add a new detector plugin. Break the work into ordered subtasks with gates.",
+      "expected_output": "Use vertical-plugin-slice: define-contract, write-failing-test, implement-slice (test), verify-sensors (check), distill-learning (clippy); persist with do-harness task add --method vertical-plugin-slice.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "explicit",
+      "assertions": [
+        "walk:",
+        "contains:htn_receipt.txt|add/list/export persisted a task",
+        "exists:plans/tasks.json",
+        "db:tasks:title=htn-walkthrough-probe:min=1",
+        "contains:.agents/skills/htn-planner/SKILL.md|write-failing-test"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Which sensor gates the implementation subtask, and which one gates verification?",
+      "expected_output": "implement-slice is gated by the test sensor; verify-sensors by the check sensor.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "implicit",
+      "assertions": [
+        "contains:.agents/skills/htn-planner/SKILL.md|(sensor: test)",
+        "contains:.agents/skills/htn-planner/SKILL.md|(sensor: check)"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Can you mark a task done right after writing the code, before running any sensors?",
+      "expected_output": "No: task done refuses until the method's named sensor has an ok beat recorded by verify --record --task <id>, and the pointer never advances on an unverified subtask.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "contextual",
+      "assertions": [
+        "contains:.agents/skills/htn-planner/SKILL.md|refuses until the method's named sensor has an ok beat",
+        "contains:.agents/skills/htn-planner/SKILL.md|Never advance the subtask pointer"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "What is the best pizza topping? General question; no repository work.",
+      "expected_output": "No planning action: no methods, tasks, or state are touched for an out-of-scope question.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "negative",
+      "assertions": [
+        "absent:plans/methods-generated.json",
+        "not-contains:htn_receipt.txt|pizza"
+      ]
+    }
+  ]
+}

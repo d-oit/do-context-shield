@@ -4,12 +4,12 @@ description: >
   Implement a new detector, policy, transformer, or vault plugin for do-context-shield.
   Use when asked to "add a detector", "support a new entity type", "customize the policy",
   "add a vault backend", or change what gets detected, decided, transformed, or stored.
-category: development
 license: MIT
-compatibility: Requires the Rust workspace in this repository (Rust 1.88, edition 2024). Heavy model dependencies must stay behind opt-in Cargo features.
 metadata:
   author: d-oit
   version: "1.0"
+  category: development
+  compatibility: Requires the Rust workspace in this repository (Rust 1.88, edition 2024). Heavy model dependencies must stay behind opt-in Cargo features.
   tags: plugin detector policy transformer vault rust
 ---
 

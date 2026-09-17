@@ -1,0 +1,11 @@
+# Heuristics
+
+Distilled from building and running the eval corpus in this repository.
+
+- **A `contains:` needle that spans a line break never matches.** A case in this corpus failed because the sentence wrapped between the two words of the needle; grep the skill file for the exact substring (including backticks and case) before committing a fixture.
+- **The eval sandbox (do-harness 0.1.1) contains only the skill under test plus skill-creator's `scripts/`, and the with-skill baseline strips `SKILL.md` + `references/`.** Do not depend on any other repository path in a walkthrough; repo-path claims (for example the sensor map naming `scripts/check-loc.sh`) are checked by `scripts/check-skills.sh`, which runs against the real workspace. Mirrored `scripts/` in newer harness versions makes `init` fall back to the zero-sensor generic pack, another reason walkthroughs should self-scaffold config.
+- **The without-skill baseline strips `SKILL.md` + `references/` and re-runs the identical walkthrough.** Assertions that only read walkthrough residue pass on both sides, so Skill Lift comes solely from assertions that read the guidance; keep at least one such assertion per skill or the fixture is self-answering.
+- **`eval --strict-fixtures` requires: at least one negative (out-of-scope) case, at least one graded assertion per case, no `gotchas` case without a negative assertion, and an assertion that reads the skill's own guidance.** A fixture can score 1.00 while measuring nothing until those hold.
+- **`do-harness eval` reports `structure=unknown` when `quick_validate.py` is not in the sandbox and `evals=none` for a skill without fixtures.** Both are gaps, not passes; `scripts/check-skills.sh` is the repo-local gate that refuses them.
+- **Grader drift is pinned by SHA-256 baselines; `--bless` is the only way to re-baseline, with a recorded approver.** Never bless to make a red fixture green — fix the fixture or the guidance.
+- **The gate is dependency-free on purpose.** `.agents/skills/skill-creator/scripts/quick_validate.py` parses the frontmatter subset the corpus uses (scalars and folded blocks) instead of importing PyYAML, because eval sandboxes and CI images do not guarantee Python packages.

@@ -5,12 +5,12 @@ description: >
   then restore placeholders only after the response returns. Use when context may contain
   personal data, credentials, secrets, customer data, or private URLs, or when asked to
   "sanitize context", "redact PII", "inspect sensitivity", or "restore placeholders".
-category: security
 license: MIT
-compatibility: Works with any coding client that can execute shell tools or MCP stdio servers. Requires the do-context-shield binary. No network access.
 metadata:
   author: d-oit
   version: "2.0"
+  category: security
+  compatibility: Works with any coding client that can execute shell tools or MCP stdio servers. Requires the do-context-shield binary. No network access.
   tags: privacy sanitization pii secrets mcp local-first
 ---
 

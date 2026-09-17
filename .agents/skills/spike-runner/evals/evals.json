@@ -1,0 +1,55 @@
+{
+  "skill_name": "spike-runner",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "You need to know how a new coding client performs the MCP handshake before writing the adapter. How do you de-risk that?",
+      "expected_output": "Run a spike: scratchpad under target/spikes/, write the hypothesis first, execute a real probe with exit-code success, record findings as a trace, clean up, then transition to the slice.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "explicit",
+      "assertions": [
+        "walk:",
+        "contains:spike_receipt.txt|trace recorded and listed",
+        "db:traces:session_id=spike-walkthrough:min=1",
+        "contains:.agents/skills/spike-runner/SKILL.md|target/spikes/"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The spike command has failed three times in a row. What does the workflow say to do?",
+      "expected_output": "Fail-fast halts the loop: record the error signature and inspect it before retrying; do not keep re-running the failing command.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "implicit",
+      "assertions": [
+        "contains:.agents/skills/spike-runner/SKILL.md|3 consecutive failures",
+        "contains:.agents/skills/spike-runner/SKILL.md|halt the loop"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Where do spike findings go, and how does the work rejoin the normal slice flow?",
+      "expected_output": "Findings are recorded with do-harness trace add; the task then re-enters vertical-plugin-slice with the resolved approach.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "contextual",
+      "assertions": [
+        "contains:.agents/skills/spike-runner/SKILL.md|do-harness trace add",
+        "contains:.agents/skills/spike-runner/SKILL.md|vertical-plugin-slice"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Rewrite the README in a friendlier tone. Documentation-only request; nothing is uncertain.",
+      "expected_output": "No spike: documentation work has no unknown to de-risk, so no scratchpad or trace is created.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "negative",
+      "assertions": [
+        "absent:target/spikes",
+        "not-contains:spike_receipt.txt|README"
+      ]
+    }
+  ]
+}

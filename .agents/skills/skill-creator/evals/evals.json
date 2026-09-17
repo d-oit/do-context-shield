@@ -1,0 +1,55 @@
+{
+  "skill_name": "skill-creator",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "You are adding a new skill to .agents/skills. What layout and gate must it satisfy?",
+      "expected_output": "SKILL.md with allowed frontmatter, evals/evals.json with graded assertions, optional hermetic evals/walkthrough.sh; validated by the vendored structure gate, scripts/check-skills.sh, and do-harness eval.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "explicit",
+      "assertions": [
+        "walk:",
+        "contains:skill_creator_receipt.txt|accepts valid skills, rejects invalid ones",
+        "exists:.agents/skills/probe-valid/SKILL.md",
+        "contains:.agents/skills/skill-creator/SKILL.md|evals/evals.json"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Your eval case lists expectations as plain sentences without any prefix. Does that grade anything?",
+      "expected_output": "No: only prefixed assertions are graded; unprefixed strings are documentation and count for nothing.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "implicit",
+      "assertions": [
+        "contains:.agents/skills/skill-creator/SKILL.md|Only prefixed assertions are graded",
+        "contains:.agents/skills/skill-creator/SKILL.md|documentation and scores"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Which frontmatter keys may a SKILL.md carry, and which licenses pass the gate?",
+      "expected_output": "name, description, license, allowed-tools, metadata; license must be MIT or Apache-2.0.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "contextual",
+      "assertions": [
+        "contains:.agents/skills/skill-creator/SKILL.md|allowed-tools",
+        "contains:.agents/skills/skill-creator/SKILL.md|Apache-2.0"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "What is the capital of Australia? General knowledge; no repository work involved.",
+      "expected_output": "No skill-creator action: no scaffolding, gate runs, or fixture writes happen for a general-knowledge question.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "negative",
+      "assertions": [
+        "absent:.agents/skills/probe-out-of-scope",
+        "not-contains:skill_creator_receipt.txt|scaffolded a skill for capital"
+      ]
+    }
+  ]
+}

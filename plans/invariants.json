@@ -1,0 +1,98 @@
+[
+  {
+    "invariant": "Maximum 500 LOC per source file; decompose when nearing 450",
+    "rationale": "Bounds per-file complexity and keeps files reviewable and agent-sized",
+    "sensor": "bash scripts/check-loc.sh (loc sensor)",
+    "category": "architecture"
+  },
+  {
+    "invariant": "`unwrap()` and `expect()` are forbidden in all Rust sources",
+    "rationale": "Typed, recoverable errors at boundaries; panics are never an acceptable failure mode",
+    "sensor": "cargo clippy --workspace --all-targets -- -D warnings (unwrap_used/expect_used deny) + python3 scripts/validate-structure.py",
+    "category": "errors"
+  },
+  {
+    "invariant": "No unsafe code in the workspace",
+    "rationale": "Eliminates undefined-behavior classes from the privacy boundary",
+    "sensor": "cargo check --workspace (workspace lint unsafe_code = forbid)",
+    "category": "safety"
+  },
+  {
+    "invariant": "Runtime crates stay provider-agnostic: no cloud LLM SDK or network-client dependency",
+    "rationale": "The privacy boundary must work offline and never leak context to a provider",
+    "sensor": "bash scripts/check-deps.sh + cargo deny check (crates.io-only allow-list) + review of new dependency entries",
+    "category": "architecture"
+  },
+  {
+    "invariant": "Every detector, policy, transformer, and vault implementation stays replaceable behind plugin-api traits",
+    "rationale": "Capabilities must remain swappable and testable in isolation",
+    "sensor": "cargo check --workspace (implementations compile against plugin-api) + review of new capability crates",
+    "category": "architecture"
+  },
+  {
+    "invariant": "Secrets are redacted, never pseudonymized; personal identifiers are pseudonymized",
+    "rationale": "A reversible token for a secret would defeat the redaction guarantee",
+    "sensor": "cargo test --workspace (privacy-core pipeline tests)",
+    "category": "security"
+  },
+  {
+    "invariant": "Raw sensitive input, vault mappings, and restored secrets are never logged or echoed outside the sanitized/blob contract",
+    "rationale": "Logs and error messages are context that can leave the machine",
+    "sensor": "review (no automated check yet; add one before relying on it)",
+    "category": "security"
+  },
+  {
+    "invariant": "Mappings are scoped by an explicit session id; restore resolves only tokens of the same scope and vault",
+    "rationale": "Prevents cross-task placeholder resolution and leaks between concurrent agents",
+    "sensor": "cargo test --workspace (scope-isolation tests in privacy-core, plugin-process, mcp-server)",
+    "category": "contracts"
+  },
+  {
+    "invariant": "Process plugins fail closed: malformed response, invalid span, undecided entity, leftover value, unresolvable placeholder, or non-zero exit stops the call instead of passing text through",
+    "rationale": "A permissive plugin turns the privacy boundary into a passthrough",
+    "sensor": "cargo test -p do-context-shield-plugin-process",
+    "category": "security"
+  },
+  {
+    "invariant": "MCP stdio tools/list stays in fixed order with ttlMs/cacheScope metadata, and the server/discover and initialize paths resolve to identical tool behavior",
+    "rationale": "Clients cache tool lists; order and metadata drift breaks that contract silently",
+    "sensor": "cargo test -p do-context-shield-mcp-server",
+    "category": "contracts"
+  },
+  {
+    "invariant": "GLiNER2 stays behind the opt-in gliner2 feature, requires a local model directory, and fails closed without one",
+    "rationale": "Heavy ONNX dependencies must not burden the default build, and models are never fetched automatically",
+    "sensor": "cargo check -p do-context-shield-detector-gliner2 --features gliner2 (feature build; not part of the default suite)",
+    "category": "architecture"
+  },
+  {
+    "invariant": "Conventional commits with a type prefix; PR titles stay conventional because squash merges reuse them as the commit subject",
+    "rationale": "Machine-parseable history for release drafting and commitlint",
+    "sensor": "bash scripts/check-commitlint.sh (commitlint sensor) + CI action-semantic-pull-request",
+    "category": "workflow"
+  },
+  {
+    "invariant": "Agent skills pass the structure gate and carry graded eval fixtures",
+    "rationale": "Skills are load-bearing feedforward guides; unvalidated guidance drifts silently",
+    "sensor": "bash scripts/check-skills.sh (skills sensor) + do-harness eval --strict-fixtures",
+    "category": "skills"
+  },
+  {
+    "invariant": "A change is complete only when verification evidence for its signal set is green",
+    "rationale": "Exit codes and recorded evidence, not self-assessment, prove completion",
+    "sensor": "do-harness verify --set verification --record + do-harness status --set verification",
+    "category": "verification"
+  },
+  {
+    "invariant": "A sensor failing 3 consecutive times on the same subtask halts the loop and records its error signature",
+    "rationale": "Blind re-runs of a broken sensor waste the loop and hide the defect",
+    "sensor": "do-harness verify --record (strike counters) + do-harness errors list",
+    "category": "workflow"
+  },
+  {
+    "invariant": "Hooks come from .githooks via core.hooksPath; do-harness hook install into .git/hooks is the per-developer alternative, never both at once",
+    "rationale": "A core.hooksPath pointing at .githooks makes git ignore .git/hooks entirely",
+    "sensor": "review + do-harness doctor (reports managed-hook presence and state-db skew)",
+    "category": "workflow"
+  }
+]
