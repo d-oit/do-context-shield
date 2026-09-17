@@ -41,9 +41,9 @@ tokenizers = "0.23"
 do-context-shield-core = { path = "crates/privacy-core", version = "0.1.0" }
 do-context-shield-detector-regex = { path = "crates/detector-regex", version = "0.1.0" }
 do-context-shield-detector-gliner2 = { path = "crates/detector-gliner2", version = "0.1.0" }
-do-context-shield-detector-process = { path = "crates/detector-process", version = "0.1.0" }
 do-context-shield-mcp-server = { path = "crates/mcp-server", version = "0.1.0" }
 do-context-shield-plugin-api = { path = "crates/plugin-api", version = "0.1.0" }
+do-context-shield-plugin-process = { path = "crates/plugin-process", version = "0.1.0" }
 do-context-shield-plugin-registry = { path = "crates/plugin-registry", version = "0.1.0" }
 do-context-shield-policy-default = { path = "crates/policy-default", version = "0.1.0" }
 do-context-shield-transformer-pseudonymize = { path = "crates/transformer-pseudonymize", version = "0.1.0" }

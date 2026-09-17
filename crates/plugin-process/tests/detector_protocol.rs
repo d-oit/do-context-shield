@@ -1,20 +1,14 @@
 //! End-to-end tests for the process detector protocol driver.
 
-use do_context_shield_detector_process::{ProcessDetector, ProcessDetectorConfig};
+mod common;
+
+use common::command;
 use do_context_shield_plugin_api::Detector;
+use do_context_shield_plugin_process::{ProcessConfig, ProcessDetector};
 use std::time::{Duration, Instant};
 
-/// Command line invoking the fixture in `mode` (`sh` keeps the fixture
-/// executable-bit independent).
-fn command(mode: &str) -> String {
-    format!(
-        "sh {} {mode}",
-        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/detector.sh")
-    )
-}
-
 fn detector(mode: &str) -> ProcessDetector {
-    ProcessDetector::new(ProcessDetectorConfig::with_command(command(mode)))
+    ProcessDetector::new(ProcessConfig::with_command(command(mode)))
 }
 
 fn detect(detector: &ProcessDetector, input: &str) -> Vec<do_context_shield_plugin_api::Entity> {
@@ -33,7 +27,7 @@ fn error_message(detector: &ProcessDetector, input: &str) -> String {
 
 #[test]
 fn detects_entities_from_process() {
-    let entities = detect(&detector("ok"), "alice@example.com");
+    let entities = detect(&detector("detect-ok"), "alice@example.com");
     let [entity] = entities.as_slice() else {
         panic!("expected exactly one entity, got {entities:?}");
     };
@@ -45,7 +39,7 @@ fn detects_entities_from_process() {
 
 #[test]
 fn applies_defaults_and_sorts_entities() {
-    let entities = detect(&detector("two"), "alice@example.com");
+    let entities = detect(&detector("detect-two"), "alice@example.com");
     let reported: Vec<(&str, usize, usize, &str, f32)> = entities
         .iter()
         .map(|entity| {
@@ -69,7 +63,7 @@ fn applies_defaults_and_sorts_entities() {
 
 #[test]
 fn longest_span_wins_for_overlapping_spans() {
-    let entities = detect(&detector("overlap"), "alice@example.com");
+    let entities = detect(&detector("detect-overlap"), "alice@example.com");
     let [entity] = entities.as_slice() else {
         panic!("expected exactly one entity, got {entities:?}");
     };
@@ -79,13 +73,13 @@ fn longest_span_wins_for_overlapping_spans() {
 
 #[test]
 fn rejects_value_mismatch() {
-    let message = error_message(&detector("mismatch"), "alice@example.com");
+    let message = error_message(&detector("detect-mismatch"), "alice@example.com");
     assert!(message.contains("does not match input"), "got: {message}");
 }
 
 #[test]
 fn rejects_non_char_boundary_span() {
-    let message = error_message(&detector("badspan"), "grüße");
+    let message = error_message(&detector("detect-badspan"), "grüße");
     assert!(message.contains("invalid span"), "got: {message}");
 }
 
@@ -97,7 +91,7 @@ fn errors_without_command() {
 
 #[test]
 fn errors_on_spawn_failure() {
-    let detector = ProcessDetector::new(ProcessDetectorConfig::with_command(
+    let detector = ProcessDetector::new(ProcessConfig::with_command(
         "definitely-not-a-real-binary-xyz".to_owned(),
     ));
     let message = error_message(&detector, "x");
@@ -124,10 +118,9 @@ fn errors_on_empty_response() {
 
 #[test]
 fn times_out_and_kills_child() {
-    let detector = ProcessDetector::new(ProcessDetectorConfig {
-        command: Some(command("hang")),
-        timeout: Duration::from_millis(300),
-    });
+    let detector = ProcessDetector::new(
+        ProcessConfig::with_command(command("hang")).with_timeout(Duration::from_millis(300)),
+    );
     let started = Instant::now();
     let message = error_message(&detector, "alice@example.com");
     let elapsed = started.elapsed();

@@ -151,3 +151,19 @@ pub trait Vault: Send + Sync {
     /// Returns [`VaultError`] when resolution fails.
     fn resolve(&self, scope: &ScopeId, token: &str) -> Result<Option<Mapping>, VaultError>;
 }
+
+/// Whether `token` has the `__DO_PRIVATE_<INNER>__` placeholder shape that
+/// the pipeline's `restore` resolves through a vault.
+///
+/// `<INNER>` must be non-empty and ASCII alphanumeric or `_`, so
+/// `__DO_PRIVATE_EMAIL_1__` and `__DO_PRIVATE_REDACTED__` qualify.
+#[must_use]
+pub fn is_placeholder_token(token: &str) -> bool {
+    let Some(inner) = token
+        .strip_prefix("__DO_PRIVATE_")
+        .and_then(|rest| rest.strip_suffix("__"))
+    else {
+        return false;
+    };
+    !inner.is_empty() && inner.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}

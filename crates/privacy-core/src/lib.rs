@@ -2,7 +2,7 @@
 
 use do_context_shield_plugin_api::{
     Detector, DetectorError, Entity, Policy, PolicyError, ScopeId, TransformError, TransformResult,
-    Transformer, Vault, VaultError,
+    Transformer, Vault, VaultError, is_placeholder_token,
 };
 
 /// Pipeline errors.
@@ -103,7 +103,7 @@ impl PrivacyPipeline {
             };
             let end = after_prefix + end_relative + 2;
             // Byte indices land on ASCII boundaries, so slicing is safe.
-            if is_token_shape(&output[start..end]) {
+            if is_placeholder_token(&output[start..end]) {
                 positions.push((start, end));
                 index = end;
             } else {
@@ -131,18 +131,6 @@ impl PrivacyPipeline {
     pub fn inspect(&self, input: &str) -> Result<Vec<Entity>, PipelineError> {
         Ok(self.detector.detect(input)?)
     }
-}
-
-/// Check a candidate placeholder has the `__DO_PRIVATE_<KIND>_<N>__` shape
-/// (or the fixed redacted token) before vault resolution.
-fn is_token_shape(token: &str) -> bool {
-    let Some(inner) = token
-        .strip_prefix("__DO_PRIVATE_")
-        .and_then(|rest| rest.strip_suffix("__"))
-    else {
-        return false;
-    };
-    !inner.is_empty() && inner.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 #[cfg(test)]

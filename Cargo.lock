@@ -310,9 +310,9 @@ dependencies = [
  "clap",
  "do-context-shield-core",
  "do-context-shield-detector-gliner2",
- "do-context-shield-detector-process",
  "do-context-shield-mcp-server",
  "do-context-shield-plugin-api",
+ "do-context-shield-plugin-process",
  "do-context-shield-plugin-registry",
  "do-context-shield-vault-json",
  "serde",
@@ -342,15 +342,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "do-context-shield-detector-process"
-version = "0.1.0"
-dependencies = [
- "do-context-shield-plugin-api",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "do-context-shield-detector-regex"
 version = "0.1.0"
 dependencies = [
@@ -364,8 +355,8 @@ version = "0.1.0"
 dependencies = [
  "do-context-shield-core",
  "do-context-shield-detector-gliner2",
- "do-context-shield-detector-process",
  "do-context-shield-plugin-api",
+ "do-context-shield-plugin-process",
  "do-context-shield-plugin-registry",
  "do-context-shield-vault-json",
  "serde_json",
@@ -380,13 +371,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "do-context-shield-plugin-process"
+version = "0.1.0"
+dependencies = [
+ "do-context-shield-core",
+ "do-context-shield-plugin-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "do-context-shield-plugin-registry"
 version = "0.1.0"
 dependencies = [
  "do-context-shield-detector-gliner2",
- "do-context-shield-detector-process",
  "do-context-shield-detector-regex",
  "do-context-shield-plugin-api",
+ "do-context-shield-plugin-process",
  "do-context-shield-policy-default",
  "do-context-shield-transformer-pseudonymize",
  "do-context-shield-vault-memory",

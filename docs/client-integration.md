@@ -23,7 +23,7 @@ Tool selection and caching contract:
 
 - `tools/list` returns `private.sanitize`, `private.restore`, `private.inspect` in a fixed order with `ttlMs: 300000` and `cacheScope: private` (session-scoped results must not sit in shared caches).
 - `sanitize` and `restore` schemas require `text` and `session`. The server still accepts a missing `session` as `default` for older clients, but always send an explicit per-task session.
-- Detector selection: `mcp-stdio --detector regex` (default), `mcp-stdio --detector gliner2 --model-dir <dir>` for local ONNX NER (requires a binary built with `--features gliner2`), or `mcp-stdio --detector process --detector-command "<program> [args...]"` for a local executable speaking the process protocol (`docs/process-plugin.md`).
+- Plugin selection: `--detector regex|gliner2|process`, `--policy default|process`, `--transformer pseudonymize|process`, `--vault memory|json|process`, plus `--detector-command`, `--policy-command`, `--transformer-command`, `--vault-command`, and `--process-timeout-ms` for process plugins (`docs/process-plugin.md`). `--detector gliner2` also needs `--model-dir <dir>` and a binary built with `--features gliner2`; `--vault json` needs `--vault-file <path>` and cannot be combined with `--vault process`.
 
 ## Skill-only clients
 

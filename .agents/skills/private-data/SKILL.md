@@ -49,7 +49,7 @@ printf '%s' 'Email Alice at alice@example.com' \
 - With the `load-dynamic` ONNX backend, point `ORT_DYLIB_PATH` at a local ONNX Runtime 1.23+ library when the session fails to load.
 - Without a configured model the detector fails closed (non-zero exit, no entities) rather than passing text through unsanitized. Fall back to `--detector regex` explicitly if no model is available.
 
-## Process detector (any language)
+## Process plugins (any language)
 
 ```bash
 printf '%s' 'Email Alice at alice@example.com' \
@@ -57,8 +57,9 @@ printf '%s' 'Email Alice at alice@example.com' \
       --detector process --detector-command "python3 ~/.local/share/do-context-shield/detector.py"
 ```
 
-- The executable reads one JSON request line on stdin and writes one JSON response line to stdout; the command is split on whitespace, so quoting and shell expansion are not supported (`docs/process-plugin.md`). One process is started per detection call.
-- Fails closed: a malformed response, an invalid span, a value that does not match the input, an out-of-range confidence, or a non-zero exit stops the call instead of passing text through unsanitized. `--detector-timeout-ms` (default 30000) bounds each call.
+- Any capability can run in another language: `--policy process --policy-command ...`, `--transformer process --transformer-command ...`, and `--vault process --vault-command ...` follow the same pattern; each executable reads one JSON request line on stdin and writes one JSON response line to stdout (`docs/process-plugin.md`). One process is started per operation, and command lines are split on whitespace, so quoting and shell expansion are not supported.
+- Fails closed: a malformed response, an invalid span, a plan that leaves an entity undecided, text that keeps a value it should have replaced, a placeholder the configured vault cannot resolve, or a non-zero exit stops the call instead of passing text through unsanitized. `--process-timeout-ms` (default 30000) bounds each call.
+- A process transformer only stays reversible when the configured vault can resolve the placeholders it emits (typically `--vault process` over the same store). Otherwise keep the built-in `--transformer pseudonymize`.
 
 ## Example
 

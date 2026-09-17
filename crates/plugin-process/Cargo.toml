@@ -1,10 +1,10 @@
 [package]
-name = "do-context-shield-detector-process"
+name = "do-context-shield-plugin-process"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Process detector plugin: local executables over newline-delimited JSON for do-context-shield"
+description = "Process plugins (detector, policy, transformer, vault) over newline-delimited JSON for do-context-shield"
 homepage.workspace = true
 repository.workspace = true
 include = ["src/**/*", "tests/**/*", "Cargo.toml"]
@@ -16,3 +16,6 @@ workspace = true
 do-context-shield-plugin-api.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+do-context-shield-core.workspace = true
