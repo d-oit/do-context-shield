@@ -11,5 +11,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial privacy boundary: regex detector, default policy, pseudonymize transformer, memory/JSON vaults.
 - CLI (`sanitize`, `restore`, `inspect`, `mcp-stdio`) and MCP JSON-RPC stdio adapter.
-- Agent skill (`skills/private-data/SKILL.md`).
+- Agent skills (`.agents/skills/private-data`, `.agents/skills/plugin-development`, indexed in `.agents/SKILLS.md`).
 - GitHub best-practice governance: CI, security scan, Dependabot, issue/PR templates.

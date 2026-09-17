@@ -56,7 +56,7 @@ do-context-shield mcp-stdio --vault-file ~/.local/share/do-context-shield/vault.
 
 ## Agent skill
 
-Install `skills/private-data/SKILL.md` into a coding client skill directory (for example `.agents/skills/private-data/SKILL.md`). The skill tells the agent when to sanitize sensitive context and how to restore placeholders after tool/model output.
+Install `.agents/skills/private-data/SKILL.md` into a coding client skill directory (for example `.agents/skills/private-data/SKILL.md`). The skill tells the agent when to sanitize sensitive context and how to restore placeholders after tool/model output.
 
 ## Security boundary
 

@@ -21,7 +21,7 @@ Modern MCP 2026-07-28 clients discover the server with `server/discover` and the
 
 ## Skill-only clients
 
-Install `skills/private-data/SKILL.md` in the client's skills directory. Use the CLI for local sanitization. For reversible cross-process workflows, pass the same explicit `--vault-file` to `sanitize` and `restore`.
+Install `.agents/skills/private-data/SKILL.md` in the client's skills directory. Use the CLI for local sanitization. For reversible cross-process workflows, pass the same explicit `--vault-file` to `sanitize` and `restore`.
 
 ## Provider selection
 
