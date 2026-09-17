@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Vault kind-aliasing: dedup keys now include entity kind, so the same value under different kinds yields distinct kind-tagged tokens (memory and JSON vaults).
+- `detector-regex` compiles patterns once per process (`OnceLock`) instead of per call; added longest-span-wins regression coverage.
+- Transformer rejects non-char-boundary ranges instead of panicking; `restore` skips malformed placeholders and keeps scanning (recovers nested valid tokens) instead of aborting.
+- JSON vault: owner-only file permissions on Unix plus reload-on-insert so sequential CLI processes share counters and mappings.
 - Detector overlap resolution: longest-span-wins dedup so `api_key` matches are no longer double-counted as `phone`.
 - Zero clippy warnings under `-D warnings` (error docs, lint migration, envelope construction without macro-hidden moves).
 - Wired root `tests/` invariants into `crates/privacy-core/tests/privacy_invariants.rs` as real end-to-end tests (PII absence, stable placeholders, secret redaction, scope-limited restore).

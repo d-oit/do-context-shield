@@ -392,6 +392,7 @@ name = "do-context-shield-transformer-pseudonymize"
 version = "0.1.0"
 dependencies = [
  "do-context-shield-plugin-api",
+ "do-context-shield-vault-memory",
 ]
 
 [[package]]

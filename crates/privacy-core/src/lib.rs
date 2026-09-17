@@ -86,20 +86,32 @@ impl PrivacyPipeline {
     ///
     /// Returns [`PipelineError`] when vault resolution fails.
     pub fn restore(&self, scope: &ScopeId, input: &str) -> Result<String, PipelineError> {
+        const PREFIX: &str = "__DO_PRIVATE_";
         let mut output = input.to_owned();
         let mut positions = Vec::new();
         let mut index = 0usize;
-        while let Some(relative) = output[index..].find("__DO_PRIVATE_") {
+        while let Some(relative) = output[index..].find(PREFIX) {
             let start = index + relative;
-            if start + 2 >= output.len() {
-                break;
-            }
-            let Some(end_relative) = output[start + 2..].find("__") else {
+            let after_prefix = start + PREFIX.len();
+            let Some(rest) = output.get(after_prefix..) else {
                 break;
             };
-            let end = start + 2 + end_relative + 2;
-            positions.push((start, end));
-            index = end;
+            let Some(end_relative) = rest.find("__") else {
+                // No closing delimiter for this occurrence; skip past it.
+                index = after_prefix;
+                continue;
+            };
+            let end = after_prefix + end_relative + 2;
+            // Byte indices land on ASCII boundaries, so slicing is safe.
+            if is_token_shape(&output[start..end]) {
+                positions.push((start, end));
+                index = end;
+            } else {
+                // Malformed placeholder: advance by one so a nested valid
+                // token (e.g. `__DO_PRIVATE_ __DO_PRIVATE_EMAIL_1__`)
+                // is still found on rescan.
+                index = start + 1;
+            }
         }
 
         for (start, end) in positions.into_iter().rev() {
@@ -119,6 +131,18 @@ impl PrivacyPipeline {
     pub fn inspect(&self, input: &str) -> Result<Vec<Entity>, PipelineError> {
         Ok(self.detector.detect(input)?)
     }
+}
+
+/// Check a candidate placeholder has the `__DO_PRIVATE_<KIND>_<N>__` shape
+/// (or the fixed redacted token) before vault resolution.
+fn is_token_shape(token: &str) -> bool {
+    let Some(inner) = token
+        .strip_prefix("__DO_PRIVATE_")
+        .and_then(|rest| rest.strip_suffix("__"))
+    else {
+        return false;
+    };
+    !inner.is_empty() && inner.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 #[cfg(test)]
@@ -170,5 +194,38 @@ mod tests {
         };
         assert_eq!(restored, "alice@example.com");
         assert_eq!(blocked, result.text);
+    }
+
+    #[test]
+    fn restore_skips_malformed_placeholders_and_keeps_scanning() {
+        let mut pipeline = pipeline();
+        let scope = ScopeId("test".to_owned());
+        let result = match pipeline.sanitize(&scope, "alice@example.com") {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        let adversarial = format!("__DO_PRIVATE_ junk __DO_PRIVATE_ {}", result.text);
+        let restored = match pipeline.restore(&scope, &adversarial) {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert!(restored.contains("alice@example.com"));
+        assert!(restored.contains("__DO_PRIVATE_ junk __DO_PRIVATE_ "));
+    }
+
+    #[test]
+    fn restore_leaves_redacted_and_truncated_tokens_untouched() {
+        let pipeline = pipeline();
+        let scope = ScopeId("test".to_owned());
+        for input in [
+            "__DO_PRIVATE_REDACTED__",
+            "prefix __DO_PRIVATE_",
+            "__DO_PRIVATE___",
+        ] {
+            match pipeline.restore(&scope, input) {
+                Ok(output) => assert_eq!(output, input),
+                Err(error) => panic!("unexpected error: {error}"),
+            }
+        }
     }
 }
