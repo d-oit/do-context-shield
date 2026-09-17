@@ -1,6 +1,17 @@
 ---
 name: private-data
-description: Sanitize sensitive coding context locally before sending it to an external model or tool, then restore placeholders only after the response returns.
+description: >
+  Sanitize sensitive coding context locally before sending it to an external model or tool,
+  then restore placeholders only after the response returns. Use when context may contain
+  personal data, credentials, secrets, customer data, or private URLs, or when asked to
+  "sanitize context", "redact PII", "inspect sensitivity", or "restore placeholders".
+category: security
+license: MIT
+compatibility: Works with any coding client that can execute shell tools or MCP stdio servers. Requires the do-context-shield binary. No network access.
+metadata:
+  author: d-oit
+  version: "2.0"
+  tags: privacy sanitization pii secrets mcp local-first
 ---
 
 # Private Data Skill
@@ -10,7 +21,7 @@ Use `do-context-shield` as a local privacy boundary when coding context may cont
 ## Default workflow
 
 1. Keep source text local.
-2. Prefer the `private.inspect`, `private.sanitize`, and `private.restore` MCP tools when the coding client supports MCP.
+2. Prefer the `private.inspect`, `private.sanitize`, and `private.restore` MCP tools when the coding client supports MCP (register `do-context-shield mcp-stdio` as a local stdio server, see `docs/client-integration.md`).
 3. Otherwise call `do-context-shield inspect` when sensitivity is unclear.
 4. Call `do-context-shield sanitize --session <stable-session-id>` before sending context to an external model/tool.
 5. Send **only the sanitized text** to the model/tool.
@@ -23,7 +34,7 @@ Use `do-context-shield` as a local privacy boundary when coding context may cont
 - Never log raw input, mappings, or restored secrets.
 - Treat secrets as redacted data, not reversible pseudonyms.
 - Keep one stable session id per agent task so repeated entities get stable pseudonyms.
-- Do not assume regex detection is complete. For names, addresses, source-code secrets, or domain-specific entities, install a stronger detector plugin.
+- Do not assume regex detection is complete. For names, addresses, source-code secrets, or domain-specific entities, install a stronger detector plugin (see `plugin-development` skill).
 - The skill does not choose an LLM provider. The coding client remains responsible for model selection.
 
 ## Example
