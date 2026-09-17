@@ -49,6 +49,17 @@ printf '%s' 'Email Alice at alice@example.com' \
 - With the `load-dynamic` ONNX backend, point `ORT_DYLIB_PATH` at a local ONNX Runtime 1.23+ library when the session fails to load.
 - Without a configured model the detector fails closed (non-zero exit, no entities) rather than passing text through unsanitized. Fall back to `--detector regex` explicitly if no model is available.
 
+## Process detector (any language)
+
+```bash
+printf '%s' 'Email Alice at alice@example.com' \
+  | do-context-shield sanitize --session issue-123 \
+      --detector process --detector-command "python3 ~/.local/share/do-context-shield/detector.py"
+```
+
+- The executable reads one JSON request line on stdin and writes one JSON response line to stdout; the command is split on whitespace, so quoting and shell expansion are not supported (`docs/process-plugin.md`). One process is started per detection call.
+- Fails closed: a malformed response, an invalid span, a value that does not match the input, an out-of-range confidence, or a non-zero exit stops the call instead of passing text through unsanitized. `--detector-timeout-ms` (default 30000) bounds each call.
+
 ## Example
 
 ```bash

@@ -11,6 +11,7 @@ required = [
     "docs/architecture.md",
     "crates/plugin-api/src/lib.rs", "crates/privacy-core/src/lib.rs",
     "crates/detector-regex/src/lib.rs", "crates/detector-gliner2/src/lib.rs",
+    "crates/detector-process/src/lib.rs",
     "crates/policy-default/src/lib.rs",
     "crates/transformer-pseudonymize/src/lib.rs", "crates/vault-memory/src/lib.rs",
     "crates/vault-json/src/lib.rs", "crates/mcp-server/src/lib.rs",

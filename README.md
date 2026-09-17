@@ -25,6 +25,7 @@ Claude Code / OpenCode / Codex / Gemini CLI / custom agent
 ## First vertical slice
 
 - Regex detector for email, phone, IBAN, IPv4 and common API-key shapes.
+- Process detector plugin: any local executable over newline-delimited JSON (`--detector process --detector-command "<program> [args...]"`, see `docs/process-plugin.md`).
 - Default policy: pseudonymize personal identifiers; redact secrets.
 - In-memory vault with session scoping.
 - CLI over stdin/stdout.

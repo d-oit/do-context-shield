@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release readiness: per-crate descriptions and `include` whitelists, CI publish-surface check, ordered publish script (`scripts/publish-crates.sh`), automated release-note drafts.
 - PR auto-labeling by changed paths (feeds release-drafter categories); label definitions in `.github/labels.yml`.
 - GLiNER2 detector plugin (`detector-gliner2`): Rust-only local NER behind the `Detector` trait, 42-type PII taxonomy, fail-closed without a model, ONNX backend behind the `gliner2` Cargo feature; selectable via `--detector gliner2 --model-dir <dir>` and registry name `gliner2`.
+- Process detector plugin (`detector-process`): local executables over a newline-delimited JSON protocol, fail-closed validation (spans, value equality, confidence range, exit status), 8 MiB response cap and `--detector-timeout-ms` (default 30 000); selectable via `--detector process --detector-command "<program> [args...]"` and registry name `process` (`docs/process-plugin.md`).
 - Harness wiring: `harness` agent skill (sensor map, response protocol), `.githooks/pre-commit` hook matching `do-harness.toml` sensors, structure validation enforced in CI, expanded `AGENTS.md`/`CONTRIBUTING.md` setup and workflow docs.
 
 ### Fixed

@@ -1,6 +1,7 @@
 //! Built-in plugin registry.
 
 use do_context_shield_detector_gliner2::Gliner2Detector;
+use do_context_shield_detector_process::ProcessDetector;
 use do_context_shield_detector_regex::RegexDetector;
 use do_context_shield_plugin_api::{Detector, Policy, Transformer, Vault};
 use do_context_shield_policy_default::DefaultPolicy;
@@ -30,6 +31,7 @@ pub fn detector(name: &str) -> Result<Box<dyn Detector>, RegistryError> {
     match name {
         "regex" => Ok(Box::new(RegexDetector)),
         "gliner2" => Ok(Box::new(Gliner2Detector::default())),
+        "process" => Ok(Box::new(ProcessDetector::default())),
         _ => Err(RegistryError::Unknown {
             kind: "detector",
             name: name.to_owned(),

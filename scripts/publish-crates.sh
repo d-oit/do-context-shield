@@ -12,6 +12,7 @@ ORDER=(
     do-context-shield-plugin-api
     do-context-shield-detector-regex
     do-context-shield-detector-gliner2
+    do-context-shield-detector-process
     do-context-shield-policy-default
     do-context-shield-transformer-pseudonymize
     do-context-shield-vault-memory

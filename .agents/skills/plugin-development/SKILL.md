@@ -22,7 +22,7 @@ Follow this skill to add a new implementation without breaking the privacy bound
 
 | Capability | Trait (`crates/plugin-api/src/lib.rs`) | Built-in | Future direction |
 |---|---|---|---|
-| detection | `Detector::detect` | `detector-regex`, `detector-gliner2` (local ONNX NER, `gliner2` feature) | custom local NER, rules (`docs/plugins.md`) |
+| detection | `Detector::detect` | `detector-regex`, `detector-gliner2` (local ONNX NER, `gliner2` feature), `detector-process` (local executable over NDJSON) | custom local NER, rules (`docs/plugins.md`) |
 | policy | `Policy::plan` | `policy-default` | project / enterprise DLP policy |
 | transformation | `Transformer::transform` | `transformer-pseudonymize` | redact, generalize, encrypt |
 | storage | `Vault::get_or_insert`, `Vault::resolve` | `vault-memory`, `vault-json` | SQLite, OS keychain |
@@ -32,7 +32,7 @@ Follow this skill to add a new implementation without breaking the privacy bound
 1. Read the trait contract in `crates/plugin-api/src/lib.rs` first. Do not change the trait unless the change is genuinely cross-plugin.
 2. Create `crates/<name>/` with `Cargo.toml` (workspace inheritance: `version.workspace`, `edition.workspace`, `license.workspace`, `[lints] workspace = true`) and `src/lib.rs`.
 3. Register the plugin by logical name in `crates/plugin-registry/src/lib.rs` (`detector()`, `policy()`, `transformer()`, or `vault()`).
-4. Select it via `do-context-shield.toml` (`detector = "<name>"`, etc.) or the CLI `--detector` flag. The pipeline composes as `Detector -> Policy -> Transformer -> Vault`.
+4. Select it at the CLI: `--detector <name>`, plus `--model-dir <dir>` for `gliner2` or `--detector-command "<program> [args...]"` for `process` (`--detector-timeout-ms` bounds one process call). The pipeline composes as `Detector -> Policy -> Transformer -> Vault`.
 5. Add unit tests in the new crate and extend `crates/privacy-core/tests/` invariants if behavior changes.
 6. Run `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets`, `cargo test --workspace`. If the crate has an opt-in feature, also run `cargo check -p <crate> --features <feature>` and `cargo clippy -p <crate> --all-targets --features <feature> -- -D warnings`.
 
@@ -51,7 +51,7 @@ Follow this skill to add a new implementation without breaking the privacy bound
 
 ## Cross-language plugins
 
-For non-Rust replacements, do not use a dynamic-library ABI. Implement the process protocol in `docs/process-plugin.md` (newline-delimited JSON on stdin/stdout, e.g. `{"method":"detect","input":"..."}`).
+For non-Rust replacements, do not use a dynamic-library ABI. Implement the process protocol in `docs/process-plugin.md` (newline-delimited JSON on stdin/stdout, e.g. `{"method":"detect","input":"..."}`); `crates/detector-process` already drives detectors that way (`--detector process --detector-command "<program> [args...]"`).
 
 ## Red flags
 

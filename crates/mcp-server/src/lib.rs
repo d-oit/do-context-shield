@@ -1,10 +1,14 @@
 //! MCP stdio adapter. The privacy engine itself remains transport-agnostic.
 
 use do_context_shield_core::PrivacyPipeline;
+use do_context_shield_detector_process::{
+    DEFAULT_TIMEOUT_MS, ProcessDetector, ProcessDetectorConfig,
+};
 use do_context_shield_plugin_api::ScopeId;
 use serde_json::{Value, json};
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
+use std::time::Duration;
 
 const MODERN_VERSION: &str = "2026-07-28";
 const LEGACY_VERSION: &str = "2025-11-25";
@@ -13,10 +17,16 @@ const LEGACY_VERSION: &str = "2025-11-25";
 pub struct ServerConfig {
     /// Optional local file for persistence across MCP process restarts.
     pub vault_file: Option<PathBuf>,
-    /// Detector plugin name: `regex` (built-in) or `gliner2` (local ONNX NER).
+    /// Detector plugin name: `regex` (built-in), `gliner2` (local ONNX NER), or `process`
+    /// (local executable over newline-delimited JSON).
     pub detector: String,
     /// Local directory holding the `GLiNER2` ONNX export; only used with `gliner2`.
     pub model_dir: Option<PathBuf>,
+    /// Command line of a local detector executable; required with `process`.
+    /// Split on whitespace; quoting and shell expansion are not supported.
+    pub detector_command: Option<String>,
+    /// Milliseconds to wait for one process-detector response; only used with `process`.
+    pub detector_timeout_ms: u64,
 }
 
 impl Default for ServerConfig {
@@ -25,6 +35,8 @@ impl Default for ServerConfig {
             vault_file: None,
             detector: "regex".to_owned(),
             model_dir: None,
+            detector_command: None,
+            detector_timeout_ms: DEFAULT_TIMEOUT_MS,
         }
     }
 }
@@ -47,6 +59,17 @@ pub fn run_stdio(config: ServerConfig) -> Result<(), Box<dyn std::error::Error>>
                 None => Gliner2Config::default(),
             };
             Box::new(Gliner2Detector::new(detector_config))
+        }
+        "process" => {
+            let command = config
+                .detector_command
+                .as_deref()
+                .filter(|command| !command.trim().is_empty())
+                .ok_or("`--detector process` requires `--detector-command <program> [args...]`")?;
+            Box::new(ProcessDetector::new(ProcessDetectorConfig {
+                command: Some(command.to_owned()),
+                timeout: Duration::from_millis(config.detector_timeout_ms),
+            }))
         }
         name => do_context_shield_plugin_registry::detector(name)?,
     };
