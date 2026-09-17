@@ -13,9 +13,9 @@ No provider SDK belongs in the runtime core.
 
 ## Replacement model
 
-A plugin is selected by logical name in `plugin-registry`. The first release uses compiled-in plugins because this keeps the ABI surface small and portable.
+A plugin is selected by logical name in `plugin-registry`. Detection, policy, transformation, and storage all ship compiled-in because that keeps the ABI surface small and portable.
 
-Future external plugins should use a process protocol (JSON Lines over stdin/stdout) rather than a Rust dynamic-library ABI. That makes plugins replaceable across Rust/compiler/libc versions.
+Detectors can already be replaced through a process protocol (newline-delimited JSON over stdin/stdout, `docs/process-plugin.md`) instead of a Rust dynamic-library ABI, so a detector stays replaceable across Rust/compiler/libc versions. Policy, transformer, and vault remain compiled-in; the same protocol is their intended boundary.
 
 ## Agent integration
 
