@@ -12,27 +12,34 @@ Thank you for considering contributing!
 
 ### Prerequisites
 
-- Rust 1.88 (see `rust-toolchain.toml`)
+- Rust via [rustup](https://rustup.rs/) — the toolchain in `rust-toolchain.toml` installs automatically on first cargo invocation.
+- Python 3 (for `scripts/validate-structure.py`).
+- Optional but recommended for full gates: `cargo install cargo-deny cargo-audit`.
 
 ### Clone and Build
 
 ```bash
 git clone https://github.com/d-oit/do-context-shield.git
 cd do-context-shield
+git config core.hooksPath .githooks  # install the pre-commit hook (see do-harness.toml)
 cargo build
 cargo test --workspace
 ```
 
 ### Quality Gates
 
-Always run before pushing:
+Always run before pushing (see the `harness` skill for the sensor map and fix procedures):
 
 ```bash
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo deny check
+cargo audit
+python3 scripts/validate-structure.py
 ```
+
+Local hooks are declared in `do-harness.toml` (`pre-commit`: fmt, check; `pre-push`: fmt, check, clippy, test) and implemented in `.githooks/`. CI enforces the same sensors plus audit, deny, structure validation, secret scanning, and publish-surface checks.
 
 ## Project Rules
 

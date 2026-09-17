@@ -14,3 +14,6 @@ workspace = true
 
 [dependencies]
 do-context-shield-plugin-api.workspace = true
+
+[dev-dependencies]
+do-context-shield-vault-memory.workspace = true

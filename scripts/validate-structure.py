@@ -4,9 +4,15 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 required = [
     "AGENTS.md", "README.md", "Cargo.toml", "do-harness.toml",
-    "skills/private-data/SKILL.md", "docs/architecture.md",
+    ".agents/SKILLS.md",
+    ".agents/skills/private-data/SKILL.md",
+    ".agents/skills/plugin-development/SKILL.md",
+    ".agents/skills/harness/SKILL.md",
+    "docs/architecture.md",
     "crates/plugin-api/src/lib.rs", "crates/privacy-core/src/lib.rs",
-    "crates/detector-regex/src/lib.rs", "crates/policy-default/src/lib.rs",
+    "crates/detector-regex/src/lib.rs", "crates/detector-gliner2/src/lib.rs",
+    "crates/plugin-process/src/lib.rs",
+    "crates/policy-default/src/lib.rs",
     "crates/transformer-pseudonymize/src/lib.rs", "crates/vault-memory/src/lib.rs",
     "crates/vault-json/src/lib.rs", "crates/mcp-server/src/lib.rs",
 ]

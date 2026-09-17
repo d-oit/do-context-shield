@@ -1,0 +1,7 @@
+# cargo-audit configuration (read from .cargo/audit.toml).
+#
+# Same reviewed exception as deny.toml: RUSTSEC-2024-0436 is `paste`,
+# unmaintained with no vulnerability, pulled in by tokenizers 0.23.2 behind the
+# optional `gliner2` feature. Revisit when tokenizers ships without it.
+[advisories]
+ignore = ["RUSTSEC-2024-0436"]

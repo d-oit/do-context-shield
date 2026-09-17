@@ -11,12 +11,15 @@ set -euo pipefail
 ORDER=(
     do-context-shield-plugin-api
     do-context-shield-detector-regex
+    do-context-shield-detector-gliner2
     do-context-shield-policy-default
     do-context-shield-transformer-pseudonymize
     do-context-shield-vault-memory
     do-context-shield-vault-json
     do-context-shield-plugin-registry
     do-context-shield-core
+    # Dev-dependency on core for the end-to-end protocol test.
+    do-context-shield-plugin-process
     do-context-shield-mcp-server
     do-context-shield
 )

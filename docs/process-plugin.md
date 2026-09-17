@@ -1,19 +1,124 @@
 # Process plugin protocol
 
-The compiled-in plugin registry is the first implementation. For cross-language replacement, use a process boundary rather than a Rust ABI.
+Status: implemented for all four capabilities (`crates/plugin-process`, registry name `process` per capability, CLI/MCP flags `--detector process`, `--policy process`, `--transformer process`, `--vault process`).
 
-Transport: newline-delimited JSON on stdin/stdout.
+Transport: newline-delimited JSON on the child's stdin/stdout. One child process is started per operation: the request is written as a single line, exactly one response line is read, and the child is terminated as soon as its answer has been read. A long-lived server mode is not part of this version.
 
-Detector request:
+Every method shares the same driver:
+
+- One response line, capped at 8 MiB.
+- `--process-timeout-ms` (default 30 000) bounds the wait for that line; the child is killed and reaped on timeout, on every other error path, and after it has answered.
+- A non-zero exit fails even when a response line was printed.
+- stderr is discarded and never logged, and error messages never echo input values.
+- A command line is split on whitespace; quoting and shell expansion are not supported. Point the flag at a wrapper script for anything more elaborate. A missing or blank command fails at startup, not on the first call.
+
+Common rules:
+
+- `scope` is the caller's session scope string.
+- `start` / `end` are UTF-8 byte offsets into the exact input named in the request; `start < end` is required and both offsets must fall on character boundaries.
+- Kind labels are trimmed, lowercased, and have spaces replaced by underscores (`API Key` becomes `api_key`); the default policy matches kinds by lowercase substring.
+- Placeholders must have the pipeline shape `__DO_PRIVATE_<INNER>__` with a non-empty ASCII alphanumeric/underscore `<INNER>`; anything else cannot be resolved by `restore`.
+
+## detect
+
+Request:
 
 ```json
 {"method":"detect","input":"email alice@example.com"}
 ```
 
-Detector response:
+Response:
 
 ```json
 {"entities":[{"kind":"email","start":6,"end":23,"value":"alice@example.com","confidence":0.99}]}
 ```
 
-The same contract can later carry policy, transformer, or vault operations. A Python CPU model, a Rust model, or another executable can therefore replace an implementation without changing `do-context-shield-core`.
+- `value` is optional and must equal `input[start..end]`; the pipeline always takes the value from the input, never from the child.
+- `confidence` is optional, defaults to `1.0`, and must be within `0..=1`.
+- Fails closed on an empty kind, an invalid span, a value mismatch, or an out-of-range confidence.
+- Overlaps are resolved longest-span-wins; the first reported entity wins on identical spans.
+
+## plan
+
+Request:
+
+```json
+{"method":"plan","entities":[{"kind":"email","start":0,"end":5,"value":"alice","confidence":0.99}]}
+```
+
+Response:
+
+```json
+{"plan":[{"index":0,"action":"pseudonymize"}]}
+```
+
+- `action` is `keep`, `pseudonymize`, or `redact`. `pseudonymize` must stay reversible through the vault; `redact` means irreversible removal (a mask or any other literal is a redact).
+- Fails closed on an index that is repeated, out of range, or missing for any entity, and on an unknown action.
+
+## transform
+
+Request:
+
+```json
+{"method":"transform","scope":"s1","input":"alice@example.com","plan":[{"index":0,"kind":"email","start":0,"end":17,"value":"alice@example.com","action":"pseudonymize"}]}
+```
+
+Response:
+
+```json
+{"text":"__DO_PRIVATE_EMAIL_1__","mappings":[{"kind":"email","original":"alice@example.com","token":"__DO_PRIVATE_EMAIL_1__"}]}
+```
+
+The child may rewrite the text, but the pipeline enforces the plan and fails closed on any violation:
+
+- every `keep` value must still appear in the returned `text`;
+- every `pseudonymize` value must be gone and covered by exactly one mapping per distinct `(kind, value)`, and the mapping's token must appear in the `text`;
+- every `redact` value must be gone and must not have a mapping;
+- tokens must be unique and have the placeholder shape;
+- every mapping must resolve through the configured vault (`vault_resolve`) to the same kind and original.
+
+Text outside the planned entities is trusted: the checks above cover planned values and emitted placeholders, not the child's other edits. Placeholder tokens are matched by substring, not by offset.
+
+Reversibility therefore depends on the configured vault: a process transformer must be paired with a vault that can resolve the tokens it emits — typically a process vault over the same store. The memory and JSON vaults can only resolve tokens they issued themselves, so those combinations fail with `which the configured vault cannot resolve`. `restore` works exactly for tokens the configured vault resolves.
+
+## vault
+
+Requests and responses:
+
+```json
+{"method":"vault_get_or_insert","scope":"s1","kind":"email","original":"alice"}
+```
+
+```json
+{"token":"__DO_PRIVATE_EMAIL_1__"}
+```
+
+```json
+{"method":"vault_resolve","scope":"s1","token":"__DO_PRIVATE_EMAIL_1__"}
+```
+
+```json
+{"mapping":{"kind":"email","original":"alice","token":"__DO_PRIVATE_EMAIL_1__"}}
+```
+
+A miss is `{"mapping":null}`.
+
+- The child owns the mapping store. The pipeline keeps no vault state and starts one child per operation, so token stability across calls is whatever that store provides; a stateless child re-issues tokens per call and breaks `restore`.
+- `get_or_insert` must return a token `restore` can resolve, and `vault_resolve` hits must echo the requested token and carry kind and original.
+
+## Selection
+
+```bash
+FIX="python3 detector.py"
+printf '%s' 'email alice@example.com' \
+  | do-context-shield sanitize --session s1 \
+      --detector process --detector-command "$FIX" \
+      --policy process --policy-command "python3 policy.py" \
+      --transformer process --transformer-command "python3 transformer.py" \
+      --vault process --vault-command "python3 vault.py" \
+      --process-timeout-ms 60000
+```
+
+`mcp-stdio` takes the same flags. Each capability is selected independently, so a process detector can run next to the built-in policy, transformer, and vault, and `restore` accepts the same `--vault`/`--vault-command` flags as `sanitize`.
+
+The same contract can carry future capabilities. A Python CPU model, a Rust model, or another executable can therefore replace an implementation without changing `do-context-shield-core`.

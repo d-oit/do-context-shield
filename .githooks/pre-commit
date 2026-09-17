@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# Pre-commit hook: mirrors the `pre-commit` sensors in do-harness.toml
+# (fmt + check) plus fast file hygiene (LOC limit, unwrap/expect ban,
+# TOML syntax). Install with: git config core.hooksPath .githooks
+set -uo pipefail
+
+if [[ -f "$HOME/.cargo/env" ]]; then
+  # shellcheck disable=SC1091
+  source "$HOME/.cargo/env"
+fi
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT" || exit 1
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+FAILED=0
+
+STAGED_RS=$(git diff --cached --name-only --diff-filter=ACM -- '*.rs' 2>/dev/null)
+STAGED_TOML=$(git diff --cached --name-only --diff-filter=ACM -- '*.toml' 2>/dev/null)
+
+if [[ -z "$STAGED_RS" && -z "$STAGED_TOML" ]]; then
+  printf "${GREEN}No staged .rs or .toml files — skipping checks.${NC}\n"
+  exit 0
+fi
+
+if [[ -n "$STAGED_RS" ]]; then
+  printf "Checking line counts (max 500)...\n"
+  for f in $STAGED_RS; do
+    if [[ -f "$f" ]]; then
+      lines=$(wc -l < "$f" 2>/dev/null || echo 0)
+      if [[ "$lines" -gt 500 ]]; then
+        printf "  ${RED}✗ %s: %d lines (max 500)${NC}\n" "$f" "$lines"
+        FAILED=1
+      fi
+    fi
+  done
+  printf "Checking for forbidden unwrap/expect...\n"
+  if echo "$STAGED_RS" | xargs grep -nE "\.unwrap\(|\.expect\(" 2>/dev/null; then
+    printf "  ${RED}✗ unwrap()/expect() forbidden by AGENTS.md${NC}\n"
+    FAILED=1
+  else
+    printf "  ${GREEN}✓ No unwrap/expect${NC}\n"
+  fi
+  printf "Checking formatting...\n"
+  if ! echo "$STAGED_RS" | xargs rustfmt --check 2>/dev/null; then
+    printf "  ${RED}✗ Formatting issues. Run: cargo fmt --all${NC}\n"
+    FAILED=1
+  else
+    printf "  ${GREEN}✓ Format OK${NC}\n"
+  fi
+fi
+
+if [[ -n "$STAGED_TOML" ]]; then
+  printf "Checking TOML syntax...\n"
+  for f in $STAGED_TOML; do
+    if ! python3 -c "import sys, tomllib; tomllib.load(open(sys.argv[1], 'rb'))" "$f" 2>/dev/null; then
+      printf "  ${RED}✗ TOML syntax error in: %s${NC}\n" "$f"
+      FAILED=1
+    fi
+  done
+fi
+
+printf "Running cargo check (do-harness.toml pre-commit sensor)...\n"
+if ! cargo check --workspace --all-targets >/dev/null 2>&1; then
+  printf "  ${RED}✗ cargo check failed${NC}\n"
+  FAILED=1
+else
+  printf "  ${GREEN}✓ check OK${NC}\n"
+fi
+
+printf "\n"
+if [[ $FAILED -ne 0 ]]; then
+  printf "${RED}Pre-commit checks FAILED. Fix issues above before committing.${NC}\n"
+  printf "To bypass (not recommended): git commit --no-verify\n"
+  exit 1
+fi
+
+printf "${GREEN}All pre-commit checks passed.${NC}\n"
+printf "${YELLOW}Reminder: pre-push runs fmt, check, clippy, test (see do-harness.toml).${NC}\n"
+exit 0

@@ -12,6 +12,11 @@ feature-depth = 1
 # Vulnerabilities: deny crates with known advisories.
 [advisories]
 version = 2
+# RUSTSEC-2024-0436 (`paste` unmaintained, no vulnerability) reaches the
+# `gliner2` feature through tokenizers 0.23.2, the newest release, which has no
+# replacement for that dependency. Reviewed 2026-09-17: build-time macro crate
+# only, no runtime exposure. Drop this ignore once tokenizers ships without it.
+ignore = ["RUSTSEC-2024-0436"]
 
 # Only OSI-approved permissive licenses plus explicit exceptions below.
 # This list matches the exact encountered set (see `cargo deny list`).
@@ -22,6 +27,8 @@ version = 2
 allow = [
     "MIT",
     "Apache-2.0",
+    # libloading, pulled in by ort's load-dynamic backend (gliner2 feature).
+    "ISC",
     "Unicode-3.0",
     "Unlicense",
 ]
