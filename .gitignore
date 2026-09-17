@@ -1,6 +1,9 @@
 # Rust build artifacts
 /target/
 
+# do-harness local state and evidence artifacts
+.do-harness/
+
 # Cargo.lock is committed for this repo because it ships a binary (CLI).
 # Do not ignore it.
 

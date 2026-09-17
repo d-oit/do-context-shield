@@ -29,6 +29,24 @@ Agent = Model + Harness. Feedforward guides (this skill, `AGENTS.md`, `CONTRIBUT
 4. Re-run that sensor only.
 5. Commit only when green.
 
+## Harness CLI
+
+The same sensors run through the compiled `do-harness` CLI when it is installed
+(`curl -fsSL https://raw.githubusercontent.com/d-o-hub/do-harness/main/scripts/install.sh | sh -s -- --version v0.1.1`):
+
+```bash
+do-harness verify --set verification            # fmt, check, clippy, test, loc, deps, audit, commitlint
+do-harness verify --only clippy                # one sensor
+do-harness verify --changed --set verification  # only sensors whose inputs changed
+do-harness explain --set verification --changed # selection without running
+do-harness verify --format json --evidence .do-harness/evidence.json --strict
+do-harness doctor                               # binary resolution, hooks, state DB
+```
+
+`loc`, `deps`, `audit`, and `commitlint` execute the `scripts/check-*.sh` shell
+sensors declared in `do-harness.toml`; exit codes are 0 (pass), 1 (sensor
+failed), 2 (usage/config error, e.g. not inside a harness workspace).
+
 ## Sensor Quick Reference
 
 | Sensor | Command | Config | Stage |
