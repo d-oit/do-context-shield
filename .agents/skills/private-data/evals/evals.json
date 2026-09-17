@@ -1,0 +1,54 @@
+{
+  "skill_name": "private-data",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Sanitize this text for session issue-123 before sending it to a hosted model:\n\nEmail Alice at alice@example.com",
+      "expected_output": "Run do-context-shield sanitize --session issue-123 locally, send only the sanitized text, and expect an __DO_PRIVATE_EMAIL_1__ placeholder instead of the address.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "explicit",
+      "assertions": [
+        "contains:.agents/skills/private-data/SKILL.md|sanitize --session issue-123",
+        "contains:.agents/skills/private-data/SKILL.md|__DO_PRIVATE_EMAIL_1__",
+        "contains:.agents/skills/private-data/SKILL.md|Expected shape"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The model echoed back \"Email Alice at __DO_PRIVATE_EMAIL_1__\" and you need the original address in the final answer.",
+      "expected_output": "Call restore (MCP private.restore or do-context-shield restore --session <same-session-id>) only after the response returns; the same local vault must hold the mapping.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "implicit",
+      "assertions": [
+        "contains:.agents/skills/private-data/SKILL.md|restore --session <same-session-id>",
+        "contains:.agents/skills/private-data/SKILL.md|Never send the raw input to a remote model before sanitization"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "A teammate wants detection implemented in Python instead of Rust. What does the skill say?",
+      "expected_output": "Process plugins run any capability in another language over stdin/stdout JSON with --detector-command (and --policy-command/--transformer-command/--vault-command) per docs/process-plugin.md.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "contextual",
+      "assertions": [
+        "contains:.agents/skills/private-data/SKILL.md|detector-command",
+        "contains:.agents/skills/private-data/SKILL.md|docs/process-plugin.md"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Explain what a REST API is. No sensitive data and no coding context involved.",
+      "expected_output": "No sanitization action: the skill stays unloaded and its guidance is untouched for an out-of-scope question.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "negative",
+      "assertions": [
+        "absent:.do-context-shield-vault.json",
+        "not-contains:.agents/skills/private-data/SKILL.md|REST API"
+      ]
+    }
+  ]
+}

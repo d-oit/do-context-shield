@@ -39,9 +39,12 @@ curl -fsSL https://raw.githubusercontent.com/d-o-hub/do-harness/main/scripts/ins
 Then run the whole local gate with one command, or the sensors directly:
 
 ```bash
-do-harness verify --set verification          # fmt, check, clippy, test, loc, deps, audit, commitlint
+do-harness verify --set verification          # fmt, check, clippy, test, loc, skills, deps, audit, commitlint
 do-harness verify --changed --set verification   # only sensors whose inputs changed
 do-harness explain --set verification --changed  # show the selection without running it
+do-harness status --set verification          # evidence freshness without running sensors
+do-harness eval --strict-fixtures             # skill structure + hermetic walkthroughs
+bash scripts/check-skills.sh                  # skill gate + planning-catalog check
 
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
@@ -51,9 +54,13 @@ cargo audit
 python3 scripts/validate-structure.py
 ```
 
-Local sensors are declared in `do-harness.toml` (`pre-commit`: fmt, check, loc; `pre-push`: the full verification set) with shell implementations in `scripts/check-*.sh`; CI enforces the same sensors plus structure validation, secret scanning, and publish-surface checks.
+Local sensors are declared in `do-harness.toml` (`pre-commit`: fmt, check, loc; `pre-push`: the full verification set) with shell implementations in `scripts/check-*.sh`; CI enforces the same sensors plus structure validation, secret scanning, and publish-surface checks. The `Harness` CI job installs the pinned `do-harness` and runs the `ci` signal set (`verification` minus `commitlint`, since PR titles are the enforced commit contract) with `--format json --strict`, verifies evidence freshness (`status --set ci`), and runs `do-harness eval --strict-fixtures` for the skill corpus.
 
 Git hooks: `.githooks/` is this repository's hook source of truth — versioned and reviewed alongside the code (`git config core.hooksPath .githooks`). `do-harness hook install` is a per-developer alternative that writes managed hooks into `.git/hooks/`; the two do not combine, because a `core.hooksPath` pointing at `.githooks` makes git ignore `.git/hooks/` entirely — pick one. (Upstream: `hook install`/`hook status` do not yet detect that conflict — [d-o-hub/do-harness#108](https://github.com/d-o-hub/do-harness/issues/108).)
+
+## Agent workflow
+
+Work follows the harness phases in `AGENTS.md`: recon -> plan (`plans/methods.json`: `vertical-plugin-slice`, `spike-and-resolve`, `decision`, persisted with `do-harness task add --method`) -> spike when uncertain (throwaway under `target/spikes/`) -> failing contract test first -> implementation -> sensors -> distillation back into `.agents/skills/`. Durable rules live in `plans/invariants.json` with the sensor that enforces each one (`do-harness seed`). Three consecutive sensor failures on one subtask halt the loop (fail-fast); `.agents/skills/harness/SKILL.md` carries the response protocol, and `htn-planner`, `spike-runner`, `skill-distiller`, `skill-creator` carry the rest of the runbooks.
 
 ## Project Rules
 

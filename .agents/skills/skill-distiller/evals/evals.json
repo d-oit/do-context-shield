@@ -1,0 +1,56 @@
+{
+  "skill_name": "skill-distiller",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "A clippy recovery took three attempts last task. What should come out of that, and through which command?",
+      "expected_output": "Distill the generalized rule from the recorded trace: do-harness distill --skill <name> --pattern <rule> --from-trace <id>, then update the matching guide and benchmark it.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "explicit",
+      "assertions": [
+        "walk:",
+        "contains:distill_receipt.txt|trace recorded and distill plan produced",
+        "contains:distill_out.txt|would distill heuristic for skill-distiller",
+        "db:traces:session_id=distill-walkthrough:min=1",
+        "contains:.agents/skills/skill-distiller/SKILL.md|--from-trace"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The same test sensor fired four times in one task. Is that a code problem or something else?",
+      "expected_output": "A sensor firing more than twice in one task is a feedforward-guide defect: update the matching guide via the steering loop instead of patching the symptom.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "implicit",
+      "assertions": [
+        "contains:.agents/skills/skill-distiller/SKILL.md|more than twice in one task",
+        "contains:.agents/skills/skill-distiller/SKILL.md|patch the guide"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "How do you record a trap that was hit but never solved?",
+      "expected_output": "As a kind: gotchas eval case with negative assertions (absent:/not-contains:) naming the wrong action; strict-fixtures rejects a gotchas case without one.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "contextual",
+      "assertions": [
+        "contains:.agents/skills/skill-distiller/SKILL.md|kind: gotchas",
+        "contains:.agents/skills/skill-distiller/SKILL.md|assertions are negative"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Summarize the plot of a novel. Literature question; no coding involved.",
+      "expected_output": "No distillation: no traces, skills, or fixtures are touched for an out-of-scope question.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "negative",
+      "assertions": [
+        "absent:distilled-novel-heuristic.md",
+        "not-contains:distill_receipt.txt|novel"
+      ]
+    }
+  ]
+}

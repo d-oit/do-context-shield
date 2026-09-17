@@ -1,0 +1,54 @@
+{
+  "skill_name": "plugin-development",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Add a new vault backend that stores mappings in SQLite.",
+      "expected_output": "Read the plugin-api trait first, create crates/<name> with workspace inheritance, implement Vault, register the logical name in plugin-registry, add tests, and run the sensors.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "explicit",
+      "assertions": [
+        "contains:.agents/skills/plugin-development/SKILL.md|crates/plugin-registry/src/lib.rs",
+        "contains:.agents/skills/plugin-development/SKILL.md|Vault::get_or_insert",
+        "contains:.agents/skills/plugin-development/SKILL.md|`[lints] workspace = true`"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "You need richer name detection. A teammate suggests calling a hosted NER API from the new detector crate.",
+      "expected_output": "Rejected: the core stays provider-agnostic with no cloud LLM SDKs or network clients in runtime crates; use a local detector (regex, GLiNER2 behind the gliner2 feature, or a process plugin).",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "implicit",
+      "assertions": [
+        "contains:.agents/skills/plugin-development/SKILL.md|Never add cloud LLM SDKs to runtime crates",
+        "contains:.agents/skills/plugin-development/SKILL.md|Prefer local/CPU implementations"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "How do you implement a policy in a language other than Rust without a dynamic-library ABI?",
+      "expected_output": "Use the process protocol: newline-delimited JSON on stdin/stdout, selected with --policy process --policy-command, per docs/process-plugin.md.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "contextual",
+      "assertions": [
+        "contains:.agents/skills/plugin-development/SKILL.md|docs/process-plugin.md",
+        "contains:.agents/skills/plugin-development/SKILL.md|newline-delimited JSON"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Add a spreadsheet export feature to the CLI. Nothing to do with detectors, policy, transformation, or storage.",
+      "expected_output": "No plugin work: the out-of-scope request neither loads the plugin workflow nor adds a capability crate.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "negative",
+      "assertions": [
+        "absent:crates/spreadsheet-export/Cargo.toml",
+        "not-contains:.agents/skills/plugin-development/SKILL.md|spreadsheet"
+      ]
+    }
+  ]
+}

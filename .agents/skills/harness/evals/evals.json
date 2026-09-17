@@ -1,0 +1,56 @@
+{
+  "skill_name": "harness",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "A clippy failure blocks the pre-push gate on a crate you just edited. What is the response protocol?",
+      "expected_output": "Classify the failure, apply the minimal fix, re-run that sensor only, commit only when green, and never weaken the sensor.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "explicit",
+      "assertions": [
+        "walk:",
+        "contains:harness_receipt.txt|sensor contract",
+        "contains:.agents/skills/harness/SKILL.md|minimal fix",
+        "contains:.agents/skills/harness/SKILL.md|Re-run that sensor only"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The same test has failed 3 consecutive times for one subtask. What now?",
+      "expected_output": "Fail-fast: halt the loop, record the error signature with do-harness verify --record, inspect it with errors list, and resolve the defect before re-running.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "implicit",
+      "assertions": [
+        "contains:.agents/skills/harness/SKILL.md|3 consecutive times",
+        "contains:.agents/skills/harness/SKILL.md|halts"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Which command runs only the sensors a change selects, and how do you preview that selection without running anything?",
+      "expected_output": "do-harness verify --changed --set verification runs the selection; do-harness explain --set verification --changed previews it.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "contextual",
+      "assertions": [
+        "contains:.agents/skills/harness/SKILL.md|verify --changed --set verification",
+        "contains:.agents/skills/harness/SKILL.md|explain --set verification --changed"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Explain what a Rust lifetime is. General knowledge question; no repository work is involved.",
+      "expected_output": "No harness action: no workspace, sensors, spikes, or state are touched for a general-knowledge question.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "negative",
+      "assertions": [
+        "absent:target/spikes",
+        "contains:harness_negative.txt|no workspace touched",
+        "contains:.agents/skills/harness/SKILL.md|Never trust LLM self-assessment"
+      ]
+    }
+  ]
+}

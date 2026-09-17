@@ -59,6 +59,8 @@ do-context-shield mcp-stdio --vault-file ~/.local/share/do-context-shield/vault.
 
 Install `.agents/skills/private-data/SKILL.md` into a coding client skill directory (for example `.agents/skills/private-data/SKILL.md`). The skill tells the agent when to sanitize sensitive context and how to restore placeholders after tool/model output.
 
+MCP registration is verified end-to-end with OpenCode 1.18.31 and omp 18.2.4 (`opencode.json` / `.omp/mcp.json`); see `docs/client-integration.md` for the exact configs and the other clients' shapes.
+
 ## Security boundary
 
 This first slice is intentionally conservative:
