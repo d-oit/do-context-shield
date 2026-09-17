@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Harness wiring: `harness` agent skill (sensor map, response protocol), `.githooks/pre-commit` hook matching `do-harness.toml` sensors, structure validation enforced in CI, expanded `AGENTS.md`/`CONTRIBUTING.md` setup and workflow docs.
 - Harness workflow adaptation (do-hub/do-harness model): machine-readable `plans/methods.json` (vertical-plugin-slice, spike-and-resolve, decision) and `plans/invariants.json` decision headers seeded with `do-harness seed`; development-methodology skills `htn-planner`, `spike-runner`, `skill-distiller`, and `skill-creator` (dependency-free structure gate at `.agents/skills/skill-creator/scripts/quick_validate.py`, no PyYAML); graded eval fixtures with hermetic walkthroughs for all seven skills (`do-harness eval --strict-fixtures` is green); new `skills` sensor (`scripts/check-skills.sh`) validating skill structure, fixture shape, method-to-sensor wiring, and repo paths named by skills, wired into the `verification`/`release` signal sets; `AGENTS.md` now carries the 6-phase workflow, fail-fast, steering loop, and evidence gates.
 
+- Client integration docs: the verified OpenCode setup (project `opencode.json` with a `type: local` command array, `<server>_<tool>` tool naming, non-interactive `opencode run`, restart-safe `--vault-file` configuration) is documented end-to-end against the MCP stdio server.
+
 ### Fixed
 
 - Dependency policy: `cargo-deny` and `cargo-audit` now pass on the all-features graph — the reviewed `paste` exception (RUSTSEC-2024-0436, via `tokenizers` behind the `gliner2` feature) is documented in `deny.toml` and `.cargo/audit.toml`, and ISC joins the license allow-list for `libloading` (`ort` load-dynamic).
