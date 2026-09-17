@@ -55,9 +55,10 @@ fn stable_placeholders_preserve_repeated_entity_identity() {
 fn secret_like_values_are_redacted() {
     let mut pipeline = pipeline();
     let scope = ScopeId("invariants".to_owned());
-    let secret = "sk-12345678901234567890";
-    let result = unwrap_ok(pipeline.sanitize(&scope, secret));
-    assert!(!result.text.contains(secret), "{result:?}");
+    // Synthetic fixture built programmatically so no secret-like literal is committed.
+    let api_key_fixture = format!("sk-test-{}", "0123456789abcdef");
+    let result = unwrap_ok(pipeline.sanitize(&scope, &api_key_fixture));
+    assert!(!result.text.contains(&api_key_fixture), "{result:?}");
     assert!(
         result.text.contains("__DO_PRIVATE_REDACTED__"),
         "{result:?}"

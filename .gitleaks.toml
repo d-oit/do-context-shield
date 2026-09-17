@@ -1,0 +1,12 @@
+# .gitleaks.toml
+# Gitleaks configuration: default rules plus allowlists for synthetic fixtures.
+# See https://github.com/gitleaks/gitleaks
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic fixtures in privacy invariant tests (no real secrets)"
+paths = [
+    '''crates/privacy-core/tests/privacy_invariants\.rs''',
+]
