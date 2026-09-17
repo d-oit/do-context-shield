@@ -1,3 +1,5 @@
+//! Local privacy boundary CLI: sanitize, restore, and inspect over stdin/stdout.
+
 use clap::{Args, Parser, Subcommand};
 use do_context_shield_core::PrivacyPipeline;
 use do_context_shield_plugin_api::ScopeId;
@@ -78,7 +80,7 @@ fn run_simple(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             let pipeline = build_pipeline(args.vault_file)?;
             let input = read_stdin()?;
             let result = pipeline.restore(&ScopeId(args.session), &input)?;
-            print!("{}", result);
+            print!("{result}");
         }
         Command::Inspect => {
             let pipeline = build_pipeline(None)?;

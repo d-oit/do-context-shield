@@ -59,6 +59,10 @@ impl PrivacyPipeline {
     }
 
     /// Detect and sanitize text in a session scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PipelineError`] when detection, planning, transformation, or storage fails.
     pub fn sanitize(
         &mut self,
         scope: &ScopeId,
@@ -77,6 +81,10 @@ impl PrivacyPipeline {
     }
 
     /// Restore known placeholders in text.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PipelineError`] when vault resolution fails.
     pub fn restore(&self, scope: &ScopeId, input: &str) -> Result<String, PipelineError> {
         let mut output = input.to_owned();
         let mut positions = Vec::new();
@@ -104,6 +112,10 @@ impl PrivacyPipeline {
     }
 
     /// Get the detector's current findings without transforming.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PipelineError`] when detection fails.
     pub fn inspect(&self, input: &str) -> Result<Vec<Entity>, PipelineError> {
         Ok(self.detector.detect(input)?)
     }

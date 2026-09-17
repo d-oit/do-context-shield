@@ -25,7 +25,7 @@
 ## Testing
 
 - [ ] `cargo test --workspace` passes
-- [ ] `cargo clippy --workspace --all-targets` passes
+- [ ] `cargo clippy --workspace --all-targets -- -D warnings` passes
 - [ ] `cargo fmt --all -- --check` passes
 - [ ] New tests added for new functionality
 

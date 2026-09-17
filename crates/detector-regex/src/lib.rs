@@ -56,7 +56,10 @@ mod tests {
     #[test]
     fn detects_email_and_key() {
         let detector = RegexDetector;
-        let entities = match detector.detect("alice@example.com sk-12345678901234567890") {
+        // Synthetic fixture built programmatically so no secret-like literal is committed.
+        let api_key = format!("sk-test-{}", "0123456789abcdef");
+        let input = format!("alice@example.com {api_key}");
+        let entities = match detector.detect(&input) {
             Ok(value) => value,
             Err(error) => panic!("unexpected error: {error}"),
         };

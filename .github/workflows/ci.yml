@@ -5,7 +5,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -39,9 +38,7 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      # Workspace lints are `warn` today; strict `-D warnings` is a
-      # follow-up once pedantic docs are complete.
-      - run: cargo clippy --workspace --all-targets
+      - run: cargo clippy --workspace --all-targets -- -D warnings
 
   test:
     name: Test

@@ -10,6 +10,10 @@ const MODERN_VERSION: &str = "2026-07-28";
 const LEGACY_VERSION: &str = "2025-11-25";
 
 /// Run the MCP server over newline-delimited JSON-RPC on stdio.
+///
+/// # Errors
+///
+/// Returns an error when stdio I/O fails, a request cannot be answered, or a plugin cannot be constructed.
 pub fn run_stdio(vault_file: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>> {
     let vault: Box<dyn do_context_shield_plugin_api::Vault> = match vault_file {
         Some(path) => Box::new(do_context_shield_vault_json::JsonVault::open(path)?),
@@ -52,11 +56,19 @@ fn response(id: Value, mut result: Value) -> Value {
             json!({"io.modelcontextprotocol/serverInfo":{"name":"do-context-shield","version":"0.1.0"}}),
         );
     }
-    json!({"jsonrpc":"2.0","id":id,"result":result})
+    let mut envelope = json!({"jsonrpc":"2.0","result":result});
+    if let Value::Object(map) = &mut envelope {
+        map.insert("id".to_owned(), id);
+    }
+    envelope
 }
 
 fn error_response(id: Value, message: &str) -> Value {
-    json!({"jsonrpc":"2.0","id":id,"error":{"code":-32000,"message":message}})
+    let mut envelope = json!({"jsonrpc":"2.0","error":{"code":-32000,"message":message}});
+    if let Value::Object(map) = &mut envelope {
+        map.insert("id".to_owned(), id);
+    }
+    envelope
 }
 
 fn handle_request(
@@ -99,7 +111,7 @@ fn handle_request(
                     {"name":"private.restore","description":"Restore locally stored placeholders in a session.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"}},"required":["text"]}},
                     {"name":"private.inspect","description":"Inspect detected sensitive entities without transforming them.","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}}
                 ],
-                "ttlMs":300000,
+                "ttlMs":300_000,
                 "cacheScope":"process"
             }),
         ),

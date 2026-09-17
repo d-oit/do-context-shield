@@ -12,13 +12,22 @@ use thiserror::Error;
 pub enum RegistryError {
     /// Unknown plugin name.
     #[error("unknown {kind} plugin `{name}`")]
-    Unknown { kind: &'static str, name: String },
+    Unknown {
+        /// Plugin capability, e.g. `detector`.
+        kind: &'static str,
+        /// Requested logical plugin name.
+        name: String,
+    },
 }
 
 /// Construct a detector by logical name.
+///
+/// # Errors
+///
+/// Returns [`RegistryError::Unknown`] for an unregistered name.
 pub fn detector(name: &str) -> Result<Box<dyn Detector>, RegistryError> {
     match name {
-        "regex" => Ok(Box::new(RegexDetector::default())),
+        "regex" => Ok(Box::new(RegexDetector)),
         _ => Err(RegistryError::Unknown {
             kind: "detector",
             name: name.to_owned(),
@@ -27,9 +36,13 @@ pub fn detector(name: &str) -> Result<Box<dyn Detector>, RegistryError> {
 }
 
 /// Construct a policy by logical name.
+///
+/// # Errors
+///
+/// Returns [`RegistryError::Unknown`] for an unregistered name.
 pub fn policy(name: &str) -> Result<Box<dyn Policy>, RegistryError> {
     match name {
-        "default" => Ok(Box::new(DefaultPolicy::default())),
+        "default" => Ok(Box::new(DefaultPolicy)),
         _ => Err(RegistryError::Unknown {
             kind: "policy",
             name: name.to_owned(),
@@ -38,6 +51,10 @@ pub fn policy(name: &str) -> Result<Box<dyn Policy>, RegistryError> {
 }
 
 /// Construct a transformer by logical name.
+///
+/// # Errors
+///
+/// Returns [`RegistryError::Unknown`] for an unregistered name.
 pub fn transformer(name: &str) -> Result<Box<dyn Transformer>, RegistryError> {
     match name {
         "pseudonymize" => Ok(Box::new(PseudonymizingTransformer)),
@@ -49,6 +66,10 @@ pub fn transformer(name: &str) -> Result<Box<dyn Transformer>, RegistryError> {
 }
 
 /// Construct a vault by logical name.
+///
+/// # Errors
+///
+/// Returns [`RegistryError::Unknown`] for an unregistered name.
 pub fn vault(name: &str) -> Result<Box<dyn Vault>, RegistryError> {
     match name {
         "memory" => Ok(Box::new(MemoryVault::default())),
