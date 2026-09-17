@@ -9,5 +9,5 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-do-context-shield-plugin-api = { path = "../plugin-api" }
+do-context-shield-plugin-api.workspace = true
 regex.workspace = true

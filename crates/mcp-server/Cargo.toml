@@ -9,8 +9,8 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-do-context-shield-core = { path = "../privacy-core" }
-do-context-shield-plugin-api = { path = "../plugin-api" }
-do-context-shield-plugin-registry = { path = "../plugin-registry" }
-do-context-shield-vault-json = { path = "../vault-json" }
+do-context-shield-core.workspace = true
+do-context-shield-plugin-api.workspace = true
+do-context-shield-plugin-registry.workspace = true
+do-context-shield-vault-json.workspace = true
 serde_json.workspace = true

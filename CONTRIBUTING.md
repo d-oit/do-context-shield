@@ -31,6 +31,7 @@ Always run before pushing:
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+cargo deny check
 ```
 
 ## Project Rules

@@ -31,3 +31,15 @@ regex = "1.11"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
+# Intra-workspace crates. Versions are duplicated from [workspace.package]
+# so path dependencies carry an explicit requirement (cargo-deny bans
+# wildcards; publishing also requires it).
+do-context-shield-core = { path = "crates/privacy-core", version = "0.1.0" }
+do-context-shield-detector-regex = { path = "crates/detector-regex", version = "0.1.0" }
+do-context-shield-mcp-server = { path = "crates/mcp-server", version = "0.1.0" }
+do-context-shield-plugin-api = { path = "crates/plugin-api", version = "0.1.0" }
+do-context-shield-plugin-registry = { path = "crates/plugin-registry", version = "0.1.0" }
+do-context-shield-policy-default = { path = "crates/policy-default", version = "0.1.0" }
+do-context-shield-transformer-pseudonymize = { path = "crates/transformer-pseudonymize", version = "0.1.0" }
+do-context-shield-vault-json = { path = "crates/vault-json", version = "0.1.0" }
+do-context-shield-vault-memory = { path = "crates/vault-memory", version = "0.1.0" }

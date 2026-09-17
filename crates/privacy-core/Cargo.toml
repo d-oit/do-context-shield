@@ -9,11 +9,11 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-do-context-shield-plugin-api = { path = "../plugin-api" }
+do-context-shield-plugin-api.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-do-context-shield-detector-regex = { path = "../detector-regex" }
-do-context-shield-policy-default = { path = "../policy-default" }
-do-context-shield-transformer-pseudonymize = { path = "../transformer-pseudonymize" }
-do-context-shield-vault-memory = { path = "../vault-memory" }
+do-context-shield-detector-regex.workspace = true
+do-context-shield-policy-default.workspace = true
+do-context-shield-transformer-pseudonymize.workspace = true
+do-context-shield-vault-memory.workspace = true
