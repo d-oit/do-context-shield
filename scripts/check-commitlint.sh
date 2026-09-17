@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
-# check-commitlint.sh — enforces conventional commits with lowercase subjects.
+# check-commitlint.sh — enforces conventional commit subjects.
 #
 # Sensor: scripts/check-commitlint.sh
 # Fails if any inspected commit messages do not match:
-#   type(optional scope): lowercase subject
-# where type is one of feat/fix/docs/chore/refactor/test/build/ci/perf/revert.
+#   type(optional scope): subject
+# where type is one of feat/fix/docs/style/refactor/perf/test/build/ci/chore/revert.
+#
+# Local adaptation of the do-harness rust pack sensor: the pack additionally
+# requires lowercase subjects, but this repository's policy constrains only the
+# type prefix (CI: action-semantic-pull-request on PR titles), and squash-merge
+# subjects are PR titles — a lowercase rule would fail on main for titles such
+# as "refactor: split the files near the LOC ceiling".
 #
 # Modes:
 #   (no args)             lint the last COUNT commit subjects (sensor default).
@@ -19,21 +25,15 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Lints a single subject line against the conventional-commit + lowercase rules.
+# Lints a single subject line against the conventional-commit rules.
 # Returns nonzero (and prints a FAIL line) when the subject is invalid.
 lint_subject() {
     local subject="$1"
     if [[ "$subject" =~ ^Merge[[:space:]] ]]; then
         return 0
     fi
-    if ! [[ "$subject" =~ ^(feat|fix|docs|chore|refactor|test|build|ci|perf|revert)(\([a-z0-9._/-]+\))?:\ ?.+$ ]]; then
+    if ! [[ "$subject" =~ ^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?:\ ?.+$ ]]; then
         echo "FAIL: non-conventional commit subject: $subject"
-        return 1
-    fi
-    # Drop the "type(scope): " prefix, then require the subject to be lowercase.
-    local body="${subject#*: }"
-    if [[ "$body" != "${body,,}" ]]; then
-        echo "FAIL: commit subject is not lowercase: $subject"
         return 1
     fi
 }
@@ -54,10 +54,10 @@ if [[ "${1:-}" == "--message" ]]; then
     fi
     if ! lint_subject "$subject"; then
         echo "Conventional-commit invariant violated."
-        echo "Use: 'type(scope): lowercase subject' e.g. 'fix: typo'"
+        echo "Use: 'type(scope): subject' e.g. 'fix: correct the threshold'"
         exit 1
     fi
-    echo "check-commitlint OK: subject is conventional and lowercase."
+    echo "check-commitlint OK: subject is conventional."
     exit 0
 fi
 
@@ -144,8 +144,8 @@ fi
 
 if (( FAIL )); then
     echo "Conventional-commit invariant violated in the $LOG_SOURCE."
-    echo "Use: 'type(scope): lowercase subject' e.g. 'feat(workflow): gate advance on beats'"
+    echo "Use: 'type(scope): subject' e.g. 'feat(workflow): gate advance on beats'"
     exit 1
 fi
 
-echo "check-commitlint OK: $LINTED subject(s) in the $LOG_SOURCE use conventional lowercase subjects."
+echo "check-commitlint OK: $LINTED subject(s) in the $LOG_SOURCE use conventional subjects."
