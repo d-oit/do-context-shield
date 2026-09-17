@@ -29,7 +29,7 @@ Always run before pushing:
 
 ```bash
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets
+cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
