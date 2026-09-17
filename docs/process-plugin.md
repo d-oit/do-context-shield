@@ -77,6 +77,8 @@ The child may rewrite the text, but the pipeline enforces the plan and fails clo
 - tokens must be unique and have the placeholder shape;
 - every mapping must resolve through the configured vault (`vault_resolve`) to the same kind and original.
 
+Text outside the planned entities is trusted: the checks above cover planned values and emitted placeholders, not the child's other edits. Placeholder tokens are matched by substring, not by offset.
+
 Reversibility therefore depends on the configured vault: a process transformer must be paired with a vault that can resolve the tokens it emits — typically a process vault over the same store. The memory and JSON vaults can only resolve tokens they issued themselves, so those combinations fail with `which the configured vault cannot resolve`. `restore` works exactly for tokens the configured vault resolves.
 
 ## vault

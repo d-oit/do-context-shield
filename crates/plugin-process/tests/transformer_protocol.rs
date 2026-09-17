@@ -138,6 +138,24 @@ fn rejects_dropped_keep_value() {
 }
 
 #[test]
+fn rejects_duplicate_token() {
+    let message = match transform(INPUT, "transform-duplicate-token", &[sensitive()]) {
+        Ok(result) => panic!("expected an error, got text: {}", result.text),
+        Err(error) => error,
+    };
+    assert!(message.contains("duplicate token"), "got: {message}");
+}
+
+#[test]
+fn rejects_duplicate_mappings_for_one_value() {
+    let message = match transform(INPUT, "transform-duplicate-mapping", &[sensitive()]) {
+        Ok(result) => panic!("expected an error, got text: {}", result.text),
+        Err(error) => error,
+    };
+    assert!(message.contains("duplicate mappings"), "got: {message}");
+}
+
+#[test]
 fn errors_without_command() {
     let mut vault = vault("vault-ok");
     let message = match ProcessTransformer::default().transform(

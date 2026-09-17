@@ -161,13 +161,28 @@ fn action_name(action: &Action) -> &'static str {
 
 /// Check the child's text and mappings against the plan and the vault.
 ///
-/// Messages name kinds, indices, and placeholder tokens; never an original value.
+/// Order: structural checks (tokens, planned pairs, coverage, tokens present in
+/// the text), then plan semantics (kept values present, every other planned
+/// value gone), then vault resolvability. Messages name kinds, indices, and
+/// placeholder tokens; never an original value.
 fn validate(
     plan: &[PlannedEntity],
     scope: &ScopeId,
     response: Response,
     vault: &mut dyn Vault,
 ) -> Result<TransformResult, TransformError> {
+    let (pseudonymized, kept) = planned_values(plan);
+    let mappings = validate_mappings(&response.mappings, &response.text, &pseudonymized)?;
+    validate_text(plan, &response.text, &kept)?;
+    validate_vault(scope, &mappings, vault)?;
+    Ok(TransformResult {
+        text: response.text,
+        mappings,
+    })
+}
+
+/// Split planned values into pseudonymized `(kind, value)` pairs and kept values.
+fn planned_values(plan: &[PlannedEntity]) -> (HashSet<(&str, &str)>, HashSet<&str>) {
     let mut pseudonymized: HashSet<(&str, &str)> = HashSet::new();
     let mut kept: HashSet<&str> = HashSet::new();
     for planned in plan {
@@ -181,11 +196,23 @@ fn validate(
             }
         }
     }
+    (pseudonymized, kept)
+}
 
+/// Structural checks on the reported mappings, returning the verified list.
+///
+/// Tokens must be unique placeholders that appear in the text and correspond to
+/// planned pseudonymizations, with exactly one mapping per distinct
+/// `(kind, value)` and no mapping for anything else.
+fn validate_mappings(
+    reported: &[WireMapping],
+    text: &str,
+    pseudonymized: &HashSet<(&str, &str)>,
+) -> Result<Vec<Mapping>, TransformError> {
     let mut tokens: HashSet<&str> = HashSet::new();
     let mut covered: HashSet<(&str, &str)> = HashSet::new();
-    let mut mappings = Vec::with_capacity(response.mappings.len());
-    for mapping in &response.mappings {
+    let mut mappings = Vec::with_capacity(reported.len());
+    for mapping in reported {
         if !is_placeholder_token(&mapping.token) {
             return Err(TransformError::Message(format!(
                 "process transformer returned the malformed placeholder `{}`",
@@ -210,26 +237,11 @@ fn validate(
                 mapping.kind
             )));
         }
-        if !response.text.contains(&mapping.token) {
+        if !text.contains(&mapping.token) {
             return Err(TransformError::Message(format!(
                 "process transformer returned text without its token `{}`",
                 mapping.token
             )));
-        }
-        match vault.resolve(scope, &mapping.token) {
-            Ok(Some(stored))
-                if stored.kind == mapping.kind && stored.original == mapping.original => {}
-            Ok(_) => {
-                return Err(TransformError::Message(format!(
-                    "process transformer emitted the token `{}`, which the configured vault cannot resolve",
-                    mapping.token
-                )));
-            }
-            Err(error) => {
-                return Err(TransformError::Message(format!(
-                    "process transformer vault lookup failed: {error}"
-                )));
-            }
         }
         mappings.push(Mapping {
             kind: mapping.kind.clone(),
@@ -237,17 +249,25 @@ fn validate(
             token: mapping.token.clone(),
         });
     }
-
-    for (kind, value) in &pseudonymized {
+    for (kind, value) in pseudonymized {
         if !covered.contains(&(*kind, *value)) {
             return Err(TransformError::Message(format!(
                 "process transformer returned no mapping for the pseudonymized kind `{kind}`"
             )));
         }
     }
+    Ok(mappings)
+}
 
+/// Plan semantics on the returned text: kept values stay, every other planned
+/// value is gone unless the same value is also planned to be kept.
+fn validate_text(
+    plan: &[PlannedEntity],
+    text: &str,
+    kept: &HashSet<&str>,
+) -> Result<(), TransformError> {
     for planned in plan {
-        let present = response.text.contains(&planned.entity.value);
+        let present = text.contains(&planned.entity.value);
         match planned.action {
             Action::Keep => {
                 if !present {
@@ -267,9 +287,31 @@ fn validate(
             }
         }
     }
+    Ok(())
+}
 
-    Ok(TransformResult {
-        text: response.text,
-        mappings,
-    })
+/// Every emitted placeholder must resolve back through the configured vault.
+fn validate_vault(
+    scope: &ScopeId,
+    mappings: &[Mapping],
+    vault: &mut dyn Vault,
+) -> Result<(), TransformError> {
+    for mapping in mappings {
+        match vault.resolve(scope, &mapping.token) {
+            Ok(Some(stored))
+                if stored.kind == mapping.kind && stored.original == mapping.original => {}
+            Ok(_) => {
+                return Err(TransformError::Message(format!(
+                    "process transformer emitted the token `{}`, which the configured vault cannot resolve",
+                    mapping.token
+                )));
+            }
+            Err(error) => {
+                return Err(TransformError::Message(format!(
+                    "process transformer vault lookup failed: {error}"
+                )));
+            }
+        }
+    }
+    Ok(())
 }

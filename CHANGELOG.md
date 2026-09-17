@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Dependency policy: `cargo-deny` and `cargo-audit` now pass on the all-features graph — the reviewed `paste` exception (RUSTSEC-2024-0436, via `tokenizers` behind the `gliner2` feature) is documented in `deny.toml` and `.cargo/audit.toml`, and ISC joins the license allow-list for `libloading` (`ort` load-dynamic).
+- `--vault-file` combined with `--vault memory` or `--vault process` is rejected instead of silently ignored, and a process transformer's text-consistency errors (leftover or dropped values) are reported ahead of vault lookup failures.
 - Vault kind-aliasing: dedup keys now include entity kind, so the same value under different kinds yields distinct kind-tagged tokens (memory and JSON vaults).
 - `detector-regex` compiles patterns once per process (`OnceLock`) instead of per call; added longest-span-wins regression coverage.
 - Transformer rejects non-char-boundary ranges instead of panicking; `restore` skips malformed placeholders and keeps scanning (recovers nested valid tokens) instead of aborting.

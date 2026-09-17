@@ -206,7 +206,12 @@ fn build_pipeline(
             Some("json") => Box::new(do_context_shield_vault_json::JsonVault::open(
                 json_vault_file(vault_file)?,
             )?),
-            Some("memory") => do_context_shield_plugin_registry::vault("memory")?,
+            Some("memory") => {
+                if vault_file.is_some() {
+                    return Err("`--vault-file` cannot be combined with `--vault memory`".into());
+                }
+                do_context_shield_plugin_registry::vault("memory")?
+            }
             Some(other) => return Err(format!("unknown vault plugin `{other}`").into()),
             None => match vault_file {
                 Some(path) => Box::new(do_context_shield_vault_json::JsonVault::open(path)?),

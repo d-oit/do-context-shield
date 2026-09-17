@@ -26,6 +26,8 @@ case "$mode" in
   transform-unplanned) printf '%s\n' '{"text":"__DO_PRIVATE_PHONE_1__","mappings":[{"kind":"phone","original":"example.com","token":"__DO_PRIVATE_PHONE_1__"}]}' ;;
   transform-foreign)  printf '%s\n' '{"text":"__DO_PRIVATE_EMAIL_9__","mappings":[{"kind":"email","original":"alice@example.com","token":"__DO_PRIVATE_EMAIL_9__"}]}' ;;
   transform-dropkeep) printf '%s\n' '{"text":"__DO_PRIVATE_REDACTED__"}' ;;
+  transform-duplicate-token)   printf '%s\n' '{"text":"__DO_PRIVATE_EMAIL_1__ __DO_PRIVATE_EMAIL_1__","mappings":[{"kind":"email","original":"alice@example.com","token":"__DO_PRIVATE_EMAIL_1__"},{"kind":"email","original":"alice@example.com","token":"__DO_PRIVATE_EMAIL_1__"}]}' ;;
+  transform-duplicate-mapping) printf '%s\n' '{"text":"__DO_PRIVATE_EMAIL_1__ __DO_PRIVATE_EMAIL_2__","mappings":[{"kind":"email","original":"alice@example.com","token":"__DO_PRIVATE_EMAIL_1__"},{"kind":"email","original":"alice@example.com","token":"__DO_PRIVATE_EMAIL_2__"}]}' ;;
   # vault: a hit requires scope s1 and the fixture's one known token
   vault-ok)
     case "$request" in

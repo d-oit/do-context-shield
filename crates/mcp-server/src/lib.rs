@@ -86,7 +86,12 @@ pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Err
                 .ok_or("`--vault json` requires `--vault-file <path>`")?;
             Box::new(do_context_shield_vault_json::JsonVault::open(path)?)
         }
-        Some("memory") => do_context_shield_plugin_registry::vault("memory")?,
+        Some("memory") => {
+            if config.vault_file.is_some() {
+                return Err("`--vault-file` cannot be combined with `--vault memory`".into());
+            }
+            do_context_shield_plugin_registry::vault("memory")?
+        }
         Some(other) => return Err(format!("unknown vault plugin `{other}`").into()),
         None => match config.vault_file.take() {
             Some(path) => Box::new(do_context_shield_vault_json::JsonVault::open(path)?),
