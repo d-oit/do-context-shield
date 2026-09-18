@@ -80,9 +80,9 @@ impl Default for ServerConfig {
 ///
 /// # Errors
 ///
-/// Returns an error for an unknown vault name, a missing `--vault-file`, an
-/// incompatible `--vault-file`/`--vault` combination, or a
-/// `--vault-ttl-seconds` that does not apply to the selected vault.
+/// Returns an error for an unknown vault name, a missing vault file, an
+/// incompatible `vault_file`/`vault` combination, or a `vault_ttl_seconds`
+/// that does not apply to the selected vault.
 fn build_vault(
     config: &mut ServerConfig,
     timeout: Duration,
@@ -91,7 +91,10 @@ fn build_vault(
     let vault: Box<dyn do_context_shield_plugin_api::Vault> = match config.vault.as_deref() {
         Some("process") => {
             if config.vault_file.is_some() {
-                return Err("`--vault-file` cannot be combined with `--vault process`".into());
+                return Err(
+                    "vault `process` cannot be combined with a vault file (`vault_file` or `--vault-file`)"
+                        .into(),
+                );
             }
             reject_ttl(ttl, "process")?;
             Box::new(ProcessVault::from_selection(
@@ -101,15 +104,17 @@ fn build_vault(
         }
         Some("json") => {
             reject_ttl(ttl, "json")?;
-            let path = config
-                .vault_file
-                .take()
-                .ok_or("`--vault json` requires `--vault-file <path>`")?;
+            let path = config.vault_file.take().ok_or(
+                "vault `json` requires a vault file (`vault_file` or `--vault-file <path>`)",
+            )?;
             Box::new(do_context_shield_vault_json::JsonVault::open(path)?)
         }
         Some("memory") => {
             if config.vault_file.is_some() {
-                return Err("`--vault-file` cannot be combined with `--vault memory`".into());
+                return Err(
+                    "vault `memory` cannot be combined with a vault file (`vault_file` or `--vault-file`)"
+                        .into(),
+                );
             }
             memory_vault(ttl)
         }
@@ -129,7 +134,7 @@ fn build_vault(
 fn reject_ttl(ttl: Option<u64>, name: &str) -> Result<(), Box<dyn std::error::Error>> {
     if ttl.is_some() {
         return Err(format!(
-            "`--vault-ttl-seconds` requires the memory vault (selected: `{name}`)"
+            "`vault_ttl_seconds` (`--vault-ttl-seconds`) requires the memory vault (selected: `{name}`)"
         )
         .into());
     }

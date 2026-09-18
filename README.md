@@ -56,7 +56,7 @@ do-context-shield mcp-stdio --vault-file ~/.local/share/do-context-shield/vault.
 
 `restore` only resolves tokens held by the same local vault/session. Nothing leaves the process unless a caller explicitly sends sanitized text onward. The optional JSON vault contains original values by design; protect that local file and use it only when cross-process restoration is required.
 
-A `do-context-shield.toml` in the working directory, `$HOME/.config/do-context-shield/config.toml`, or the path passed with `--config` supplies defaults for plugin selection, vault, enforcement context, and the process timeout; explicitly passed CLI flags override it. Unknown fields and unknown plugin names are rejected at startup. Start from `do-context-shield.toml.example`.
+A `do-context-shield.toml` in the working directory, `$HOME/.config/do-context-shield/config.toml`, or the path passed with `--config` supplies defaults for plugin selection, vault, enforcement context, and the process timeout; explicitly passed CLI flags override it. Unknown fields and unknown plugin names are rejected at startup. See `docs/configuration.md` for the reference and `do-context-shield.toml.example` for a starting point.
 
 ## Agent skill
 
