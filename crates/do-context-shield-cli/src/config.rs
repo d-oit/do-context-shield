@@ -129,11 +129,12 @@ fn home_config_path() -> Option<PathBuf> {
         .map(|home| PathBuf::from(home).join(".config/do-context-shield/config.toml"))
 }
 
-/// Reject unknown plugin and context names in the file.
+/// Reject unknown plugin and context names, and contradictory vault
+/// combinations, in the file.
 ///
 /// # Errors
 ///
-/// Returns an error naming the field and the accepted values.
+/// Returns an error naming the offending field and the accepted values.
 pub(crate) fn validate(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
     let plugins = &config.plugins;
     let vault = &config.vault;
@@ -168,7 +169,61 @@ pub(crate) fn validate(config: &Config) -> Result<(), Box<dyn std::error::Error>
             validate_choice(value, field, allowed)?;
         }
     }
+    validate_vault(&config.vault)
+}
+
+/// Reject vault combinations that cannot select one consistent vault.
+///
+/// # Errors
+///
+/// Returns an error naming both contradictory fields, or the TTL with a
+/// non-memory vault.
+fn validate_vault(vault: &VaultConfig) -> Result<(), Box<dyn std::error::Error>> {
+    let file = vault.vault_file.is_some();
+    let ttl = vault.vault_ttl_seconds.is_some();
+    match vault.vault.as_deref() {
+        Some("process") => {
+            if file {
+                return Err(vault_file_conflict("process"));
+            }
+            if ttl {
+                return Err(ttl_requires_memory("process"));
+            }
+        }
+        Some("memory") => {
+            if file {
+                return Err(vault_file_conflict("memory"));
+            }
+        }
+        Some("json") => {
+            if !file {
+                return Err("config: vault `json` requires `vault_file`".into());
+            }
+            if ttl {
+                return Err(ttl_requires_memory("json"));
+            }
+        }
+        // No explicit vault name: a `vault_file` selects the JSON vault.
+        _ => {
+            if file && ttl {
+                return Err(ttl_requires_memory("json"));
+            }
+        }
+    }
     Ok(())
+}
+
+/// A `vault_file` alongside an explicit non-JSON vault name.
+fn vault_file_conflict(name: &str) -> Box<dyn std::error::Error> {
+    format!(
+        "config: vault `{name}` cannot be combined with `vault_file` (a vault file selects the JSON vault)"
+    )
+    .into()
+}
+
+/// A TTL that only the memory vault implements.
+fn ttl_requires_memory(name: &str) -> Box<dyn std::error::Error> {
+    format!("config: `vault_ttl_seconds` requires the memory vault (selected: `{name}`)").into()
 }
 
 /// Reject a value that is not one of the accepted names.
@@ -313,116 +368,4 @@ fn pick(cli: Option<String>, file: Option<&str>, default: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{
-        CliSelection, Config, ContextConfig, Plugins, ProcessConfig, VaultConfig, resolve, validate,
-    };
-    use crate::DetectorSelection;
-    use do_context_shield_plugin_process::DEFAULT_TIMEOUT_MS;
-    use std::path::PathBuf;
-
-    #[test]
-    fn empty_config_is_default() -> Result<(), Box<dyn std::error::Error>> {
-        let config: Config = toml::from_str("")?;
-        assert_eq!(config, Config::default());
-        Ok(())
-    }
-
-    #[test]
-    fn full_config_round_trips() -> Result<(), Box<dyn std::error::Error>> {
-        let text = r#"
-[plugins]
-detector = "gliner2"
-policy = "process"
-transformer = "process"
-judge = "heuristics"
-model_dir = "/models/gliner2"
-detector_command = "detect-detector"
-policy_command = "detect-policy"
-transformer_command = "detect-transformer"
-judge_command = "detect-judge"
-
-[vault]
-vault = "json"
-vault_file = "vault.json"
-vault_command = "detect-vault"
-vault_ttl_seconds = 3600
-
-[context]
-recipient = "trusted"
-data_category = "special_category"
-purpose = "code assistance"
-jurisdiction = "DE"
-
-[process]
-timeout_ms = 1500
-"#;
-        let config: Config = toml::from_str(text)?;
-        let expected = Config {
-            plugins: Plugins {
-                detector: Some("gliner2".to_owned()),
-                policy: Some("process".to_owned()),
-                transformer: Some("process".to_owned()),
-                judge: Some("heuristics".to_owned()),
-                model_dir: Some(PathBuf::from("/models/gliner2")),
-                detector_command: Some("detect-detector".to_owned()),
-                policy_command: Some("detect-policy".to_owned()),
-                transformer_command: Some("detect-transformer".to_owned()),
-                judge_command: Some("detect-judge".to_owned()),
-            },
-            vault: VaultConfig {
-                vault: Some("json".to_owned()),
-                vault_file: Some(PathBuf::from("vault.json")),
-                vault_command: Some("detect-vault".to_owned()),
-                vault_ttl_seconds: Some(3600),
-            },
-            context: ContextConfig {
-                recipient: Some("trusted".to_owned()),
-                data_category: Some("special_category".to_owned()),
-                purpose: Some("code assistance".to_owned()),
-                jurisdiction: Some("DE".to_owned()),
-            },
-            process: ProcessConfig {
-                timeout_ms: Some(1500),
-            },
-        };
-        assert_eq!(config, expected);
-        Ok(())
-    }
-
-    #[test]
-    fn unknown_field_rejected() {
-        assert!(toml::from_str::<Config>("[plugins]\nbogus = 1").is_err());
-    }
-
-    #[test]
-    fn invalid_value_rejected() -> Result<(), Box<dyn std::error::Error>> {
-        let detector: Config = toml::from_str("[plugins]\ndetector = \"bogus\"")?;
-        assert!(validate(&detector).is_err());
-        let recipient: Config = toml::from_str("[context]\nrecipient = \"nope\"")?;
-        assert!(validate(&recipient).is_err());
-        Ok(())
-    }
-
-    #[test]
-    fn cli_overrides_config_and_defaults_fill_gaps() -> Result<(), Box<dyn std::error::Error>> {
-        let config: Config = toml::from_str(
-            "[plugins]\npolicy = \"process\"\n\n[context]\nrecipient = \"local\"\n",
-        )?;
-        let cli = CliSelection {
-            detector: DetectorSelection {
-                detector: Some("gliner2".to_owned()),
-                ..DetectorSelection::default()
-            },
-            ..CliSelection::default()
-        };
-        let resolved = resolve(cli, &config);
-        assert_eq!(resolved.detector, "gliner2");
-        assert_eq!(resolved.policy, "process");
-        assert_eq!(resolved.transformer, "pseudonymize");
-        assert_eq!(resolved.recipient, "local");
-        assert_eq!(resolved.data_category, "personal");
-        assert_eq!(resolved.process_timeout_ms, DEFAULT_TIMEOUT_MS);
-        Ok(())
-    }
-}
+mod tests;

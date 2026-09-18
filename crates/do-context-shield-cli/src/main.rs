@@ -203,7 +203,10 @@ fn build_pipeline(
     let vault: Box<dyn do_context_shield_plugin_api::Vault> = match resolved.vault.as_deref() {
         Some("process") => {
             if vault_file.is_some() {
-                return Err("`--vault-file` cannot be combined with `--vault process`".into());
+                return Err(
+                    "vault `process` cannot be combined with a vault file (`vault_file` or `--vault-file`)"
+                        .into(),
+                );
             }
             Box::new(ProcessVault::from_selection(
                 resolved.vault_command.as_deref(),
@@ -215,7 +218,10 @@ fn build_pipeline(
         )?),
         Some("memory") => {
             if vault_file.is_some() {
-                return Err("`--vault-file` cannot be combined with `--vault memory`".into());
+                return Err(
+                    "vault `memory` cannot be combined with a vault file (`vault_file` or `--vault-file`)"
+                        .into(),
+                );
             }
             do_context_shield_plugin_registry::vault("memory")?
         }
@@ -274,7 +280,9 @@ fn build_pipeline(
 
 /// Resolve the JSON vault path or explain what is missing.
 fn json_vault_file(vault_file: Option<&Path>) -> Result<&Path, Box<dyn std::error::Error>> {
-    vault_file.ok_or_else(|| "`--vault json` requires `--vault-file <path>`".into())
+    vault_file.ok_or_else(|| {
+        "vault `json` requires a vault file (`vault_file` or `--vault-file <path>`)".into()
+    })
 }
 
 fn read_stdin() -> Result<String, Box<dyn std::error::Error>> {
