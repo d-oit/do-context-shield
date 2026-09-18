@@ -8,6 +8,16 @@ Thank you for considering contributing!
 - [Pull Requests](https://github.com/d-oit/do-context-shield/pulls)
 - [Security Policy](SECURITY.md)
 
+## Contributor License Agreement
+
+All contributions require agreement to the [Contributor License Agreement](CLA.md).
+Every pull request includes a checkbox confirming that you have read and agree to the
+CLA; marking it and submitting the pull request is your acceptance.
+
+The CLA grants the project owner the rights needed to relicense contributions
+(including for the commercial license offered alongside PolyForm Noncommercial
+1.0.0), while contributions remain the contributor's own copyright.
+
 ## Development Setup
 
 ### Prerequisites

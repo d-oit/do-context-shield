@@ -31,6 +31,11 @@ allow = [
     "ISC",
     "Unicode-3.0",
     "Unlicense",
+    # The workspace crates themselves are licensed PolyForm Noncommercial
+    # 1.0.0 (source-available, noncommercial — see LICENSE). cargo-deny
+    # evaluates workspace members too, so the project's own license ID must be
+    # listed here; dependency policy is otherwise unchanged.
+    "PolyForm-Noncommercial-1.0.0",
 ]
 
 # Dependency bans.
