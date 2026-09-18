@@ -28,7 +28,7 @@ Agent = Model + Harness: feedforward guides prevent errors before coding, feedba
 
 ## Workflow
 
-1. **Recon** — read `crates/plugin-api/src/lib.rs` (trait contract) and the matching skill (`plugin-development`, `private-data`, `harness`) before touching code. Preview the sensor selection with `do-harness explain --set verification --changed`.
+1. **Recon** — read `crates/plugin-api/src/lib.rs` (trait contract) and the matching skill (`plugin-development`, `fail-closed-boundary`, `private-data`, `harness`) before touching code. Preview the sensor selection with `do-harness explain --set verification --changed`.
 2. **Plan** — decompose compound work with the HTN methods in `plans/methods.json` (`vertical-plugin-slice`, `spike-and-resolve`, `decision`) and record it: `do-harness task add "<title>" --method <name>`. Advance the pointer only when the named sensor is green.
 3. **Spike (only when uncertain)** — third-party APIs, model artifacts, wire protocols, coding-client integrations, and performance boundaries go to `target/spikes/<name>/` first (gitignored, throwaway). Record findings with `do-harness trace add`, then delete the spike. Never advance production code through a spike.
 4. **Contract and failing tests first** — define the typed contract (trait implementation, error enum, request/response shape) and a test that fails for the expected reason before implementing. Privacy invariants get explicit assertions: no raw value in output, scope isolation, secrets stay redacted, plugin failures fail closed.
@@ -50,7 +50,7 @@ Every durable rule is recorded in `plans/invariants.json` as `{invariant, ration
 ## Project rules
 
 - Keep the core provider-agnostic. Do not add cloud LLM SDKs to runtime crates.
-- Every detector, policy, transformer, and vault implementation must remain replaceable behind `plugin-api` traits.
+- Every detector, judge, policy, transformer, and vault implementation must remain replaceable behind `plugin-api` traits.
 - Prefer local/CPU implementations. Heavy native dependencies stay behind opt-in Cargo features.
 - Never log raw sensitive input or vault mappings.
 - Use explicit session scopes for mappings.

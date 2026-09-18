@@ -67,7 +67,7 @@ Work follows the harness phases in `AGENTS.md`: recon -> plan (`plans/methods.js
 See [AGENTS.md](AGENTS.md):
 
 - Keep the core provider-agnostic. No cloud LLM SDKs in runtime crates.
-- Every detector, policy, transformer, and vault stays behind `plugin-api` traits.
+- Every detector, judge, policy, transformer, and vault stays behind `plugin-api` traits.
 - Prefer local/CPU implementations.
 - Never log raw sensitive input or vault mappings.
 - Secrets are redacted by default.
