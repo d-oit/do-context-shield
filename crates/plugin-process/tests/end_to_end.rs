@@ -5,7 +5,7 @@ mod common;
 
 use common::command;
 use do_context_shield_core::PrivacyPipeline;
-use do_context_shield_plugin_api::ScopeId;
+use do_context_shield_plugin_api::{ProcessingContext, ScopeId};
 use do_context_shield_plugin_process::{
     ProcessConfig, ProcessDetector, ProcessPolicy, ProcessTransformer, ProcessVault,
 };
@@ -34,7 +34,11 @@ fn scope(name: &str) -> ScopeId {
 #[test]
 fn sanitizes_and_restores_across_process_plugins() {
     let mut pipeline = pipeline();
-    let result = match pipeline.sanitize(&scope("s1"), "alice@example.com") {
+    let result = match pipeline.sanitize(
+        &scope("s1"),
+        "alice@example.com",
+        &ProcessingContext::default(),
+    ) {
         Ok(result) => result,
         Err(error) => panic!("sanitize failed: {error}"),
     };
@@ -49,7 +53,11 @@ fn sanitizes_and_restores_across_process_plugins() {
 #[test]
 fn restore_is_limited_to_the_vault_scope() {
     let mut pipeline = pipeline();
-    let result = match pipeline.sanitize(&scope("s1"), "alice@example.com") {
+    let result = match pipeline.sanitize(
+        &scope("s1"),
+        "alice@example.com",
+        &ProcessingContext::default(),
+    ) {
         Ok(result) => result,
         Err(error) => panic!("sanitize failed: {error}"),
     };

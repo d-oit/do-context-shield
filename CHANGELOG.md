@@ -27,6 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Semantic judge stage: an optional `SemanticJudge` (plugin-api) between detection and policy classifies candidates as personal/business/test/secret or abstains — it returns labels and confidence, never spans or text, and can never weaken secret redaction. Selected with `--judge heuristics` (new `judge-heuristics` crate: reserved-domain and role-address rules) or `--judge process --judge-command "…"` (new `judge` method in the process protocol, `docs/process-plugin.md`); the default policy keeps values labeled `test`/`business` at ≥ 0.90 confidence and pseudonymizes everything else, and judge failures, out-of-range or duplicated indices, and confidences outside `0..=1` fail the call closed.
 
+- `ProcessingContext` and recipient-aware policy: `ProcessingContext` (purpose, `RecipientClass`: `Local`/`Trusted`/`External`/`Unknown`, jurisdiction, `DataCategory`: `NonPersonal`/`Personal`/`SpecialCategory`) is threaded through `Policy::plan` and `PrivacyPipeline::sanitize`. `DefaultPolicy` blocks special-category data to external or unknown recipients and blocks personal data to unknown recipients, while local recipients keep non-secret values.
+- Policy `Action::Block` and `Action::Review`: pipeline fails closed (`PipelineError::Policy`) when policy returns either action, before transformation. Process policy and transformer plugins support wire actions `block` and `review`.
+- Central span validation: `PrivacyPipeline::sanitize` validates detector spans (character boundaries, bounds, input value matching, longest-span-wins overlap resolution) before judging and planning.
+- Vault lifecycle and locking: `Vault::delete_scope` and `Vault::expire` trait methods with default no-ops; `MemoryVault` supports configurable TTL expiry (`with_ttl`), eager/lazy expiration, and scope deletion; `JsonVault` serializes concurrent multi-process writers via advisory file locking (`fs2`) over `<path>.lock` and supports `delete_scope`.
+
+### Changed
+
+- MCP tool namespace rename: tools are now `context.sanitize`, `context.restore`, and `context.inspect` (formerly `private.*`). `context.restore` strictly requires an explicit `session` parameter with no fallback scope, preventing accidental shared-scope raw value restoration.
+
 ### Fixed
 
 - Raw-value egress: `SanitizeResult` and CLI/MCP `private.inspect` output now report entities as `EntitySummary` (kind, byte span, confidence) instead of `Entity`, so no pipeline result, CLI output, or MCP tool response repeats the matched text back to the caller; `SanitizeResult.mappings` (whose only payload was `Mapping.original`) was removed. The no-raw-values invariant is now machine-checked by the privacy-invariants and MCP tests.

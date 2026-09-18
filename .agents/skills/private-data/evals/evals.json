@@ -17,7 +17,7 @@
     {
       "id": 2,
       "prompt": "The model echoed back \"Email Alice at __DO_PRIVATE_EMAIL_1__\" and you need the original address in the final answer.",
-      "expected_output": "Call restore (MCP private.restore or do-context-shield restore --session <same-session-id>) only after the response returns; the same local vault must hold the mapping.",
+      "expected_output": "Call restore (MCP context.restore or do-context-shield restore --session <same-session-id>) only after the response returns; the same local vault must hold the mapping.",
       "files": [],
       "dim": "effectiveness",
       "kind": "implicit",

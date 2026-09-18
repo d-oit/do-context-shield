@@ -2,14 +2,40 @@
 
 use do_context_shield_plugin_api::{Mapping, ScopeId, Vault, VaultError};
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 /// Memory-only vault.
 #[derive(Default)]
 pub struct MemoryVault {
     // Keyed by (scope, kind, original): the same value detected under
     // different kinds must yield distinct kind-tagged tokens.
-    mappings: HashMap<(String, String, String), Mapping>,
+    mappings: HashMap<(String, String, String), Entry>,
     counters: HashMap<(String, String), usize>,
+    /// Optional lifetime after which a mapping stops resolving.
+    ttl: Option<Duration>,
+}
+
+/// One stored mapping with its insertion time.
+struct Entry {
+    mapping: Mapping,
+    created_at: Instant,
+}
+
+impl MemoryVault {
+    /// Build a vault whose mappings stop resolving `ttl` after insertion.
+    #[must_use]
+    pub fn with_ttl(ttl: Duration) -> Self {
+        Self {
+            ttl: Some(ttl),
+            ..Self::default()
+        }
+    }
+
+    /// Whether `entry` has outlived the configured TTL.
+    fn expired(&self, entry: &Entry) -> bool {
+        self.ttl
+            .is_some_and(|ttl| entry.created_at.elapsed() >= ttl)
+    }
 }
 
 impl Vault for MemoryVault {
@@ -20,9 +46,13 @@ impl Vault for MemoryVault {
         original: &str,
     ) -> Result<Mapping, VaultError> {
         let key = (scope.0.clone(), kind.to_owned(), original.to_owned());
-        if let Some(mapping) = self.mappings.get(&key) {
-            return Ok(mapping.clone());
+        if let Some(entry) = self.mappings.get(&key) {
+            if !self.expired(entry) {
+                return Ok(entry.mapping.clone());
+            }
         }
+        // Remove a stale entry before re-inserting it under the same key.
+        self.mappings.remove(&key);
 
         let counter_key = (scope.0.clone(), kind.to_owned());
         let next = self
@@ -36,7 +66,13 @@ impl Vault for MemoryVault {
             original: original.to_owned(),
             token,
         };
-        self.mappings.insert(key, mapping.clone());
+        self.mappings.insert(
+            key,
+            Entry {
+                mapping: mapping.clone(),
+                created_at: Instant::now(),
+            },
+        );
         Ok(mapping)
     }
 
@@ -44,10 +80,25 @@ impl Vault for MemoryVault {
         Ok(self
             .mappings
             .iter()
-            .find(|((saved_scope, _, _), mapping)| {
-                saved_scope == &scope.0 && mapping.token == token
+            .find(|((saved_scope, _, _), entry)| {
+                saved_scope == &scope.0 && entry.mapping.token == token && !self.expired(entry)
             })
-            .map(|(_, mapping)| mapping.clone()))
+            .map(|(_, entry)| entry.mapping.clone()))
+    }
+
+    fn delete_scope(&mut self, scope: &ScopeId) -> Result<(), VaultError> {
+        self.mappings
+            .retain(|(saved_scope, _, _), _| saved_scope != &scope.0);
+        self.counters
+            .retain(|(saved_scope, _), _| saved_scope != &scope.0);
+        Ok(())
+    }
+
+    fn expire(&mut self) -> Result<(), VaultError> {
+        let ttl = self.ttl;
+        self.mappings
+            .retain(|_, entry| ttl.is_none_or(|ttl| entry.created_at.elapsed() < ttl));
+        Ok(())
     }
 }
 
@@ -61,6 +112,13 @@ mod tests {
 
     fn stored(vault: &mut MemoryVault, scope: &ScopeId, kind: &str, original: &str) -> Mapping {
         match vault.get_or_insert(scope, kind, original) {
+            Ok(mapping) => mapping,
+            Err(error) => panic!("unexpected error: {error}"),
+        }
+    }
+
+    fn resolved(vault: &MemoryVault, scope: &ScopeId, token: &str) -> Option<Mapping> {
+        match vault.resolve(scope, token) {
             Ok(mapping) => mapping,
             Err(error) => panic!("unexpected error: {error}"),
         }
@@ -97,14 +155,63 @@ mod tests {
             (&scope("two"), &email.token),
             (&scope("one"), &person.token),
         ] {
-            match vault.resolve(scope, token) {
-                Ok(resolved) => assert_eq!(resolved, None),
-                Err(error) => panic!("unexpected error: {error}"),
-            }
+            assert_eq!(resolved(&vault, scope, token), None);
         }
-        match vault.resolve(&scope("one"), &email.token) {
-            Ok(resolved) => assert_eq!(resolved, Some(email)),
+        assert_eq!(resolved(&vault, &scope("one"), &email.token), Some(email));
+    }
+
+    #[test]
+    fn delete_scope_removes_mappings() {
+        let mut vault = MemoryVault::default();
+        let doomed = scope("doomed");
+        let kept = scope("kept");
+        let gone = stored(&mut vault, &doomed, "email", "alice@example.com");
+        let kept_mapping = stored(&mut vault, &kept, "email", "bob@example.com");
+        match vault.delete_scope(&doomed) {
+            Ok(()) => {}
             Err(error) => panic!("unexpected error: {error}"),
         }
+        assert_eq!(resolved(&vault, &doomed, &gone.token), None);
+        assert_eq!(
+            resolved(&vault, &kept, &kept_mapping.token),
+            Some(kept_mapping)
+        );
+        // The deleted scope starts from a fresh counter.
+        let recreated = stored(&mut vault, &doomed, "email", "alice@example.com");
+        assert_eq!(recreated.token, "__DO_PRIVATE_EMAIL_1__");
+    }
+
+    #[test]
+    fn ttl_expires_old_mappings() {
+        let mut vault = MemoryVault::with_ttl(Duration::from_millis(1));
+        let scope = scope("s");
+        let mapping = stored(&mut vault, &scope, "email", "alice@example.com");
+        std::thread::sleep(Duration::from_millis(5));
+        match vault.expire() {
+            Ok(()) => {}
+            Err(error) => panic!("unexpected error: {error}"),
+        }
+        assert_eq!(resolved(&vault, &scope, &mapping.token), None);
+    }
+
+    #[test]
+    fn ttl_expires_without_an_expire_tick() {
+        let mut vault = MemoryVault::with_ttl(Duration::from_millis(1));
+        let scope = scope("s");
+        let stale = stored(&mut vault, &scope, "email", "alice@example.com");
+        std::thread::sleep(Duration::from_millis(5));
+        // `resolve` must not resurrect an expired mapping even before `expire`.
+        assert_eq!(resolved(&vault, &scope, &stale.token), None);
+        // A fresh insert under the same key gets a new token.
+        let reissued = stored(&mut vault, &scope, "email", "alice@example.com");
+        assert_eq!(resolved(&vault, &scope, &reissued.token), Some(reissued));
+    }
+
+    #[test]
+    fn ttl_preserves_fresh_mappings() {
+        let mut vault = MemoryVault::with_ttl(Duration::from_secs(60));
+        let scope = scope("s");
+        let mapping = stored(&mut vault, &scope, "email", "alice@example.com");
+        assert_eq!(resolved(&vault, &scope, &mapping.token), Some(mapping));
     }
 }

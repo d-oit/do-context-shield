@@ -26,7 +26,7 @@ Follow this skill to add a new implementation without breaking the privacy bound
 | judging | `SemanticJudge::judge` | `judge-heuristics` (reserved-domain and role-address rules), `plugin-process` (`judge`) | local model, hosted judge via process |
 | policy | `Policy::plan` | `policy-default`, `plugin-process` (`plan`) | project / enterprise DLP policy |
 | transformation | `Transformer::transform` | `transformer-pseudonymize`, `plugin-process` (`transform`) | redact, generalize, encrypt |
-| storage | `Vault::get_or_insert`, `Vault::resolve` | `vault-memory`, `vault-json`, `plugin-process` (`vault_get_or_insert`, `vault_resolve`) | SQLite, OS keychain |
+| storage | `Vault::get_or_insert`, `Vault::resolve`, `Vault::delete_scope`, `Vault::expire` | `vault-memory`, `vault-json`, `plugin-process` (`vault_get_or_insert`, `vault_resolve`) | SQLite, OS keychain |
 
 ## Workflow
 
@@ -46,6 +46,8 @@ Follow this skill to add a new implementation without breaking the privacy bound
 - Use explicit session scopes (`ScopeId`) for mappings.
 - Preserve semantic relationships when transforming entities (repeated entity → stable token; see overlap handling in `detector-regex`).
 - Secrets are redacted (`Action::Redact`), never pseudonymized.
+- Policies receive `ProcessingContext` and may block requests via `Action::Block` or `Action::Review`.
+- Vaults support `delete_scope` and `expire` for lifecycle cleanup.
 - `unwrap()` and `expect()` are forbidden; propagate typed errors (`DetectorError`, `PolicyError`, `TransformError`, `VaultError`).
 - Document every `Result`-returning function with an `# Errors` section.
 - Keep files under 500 LOC where practical.

@@ -2,7 +2,7 @@
 
 use clap::{Args, Parser, Subcommand};
 use do_context_shield_core::PrivacyPipeline;
-use do_context_shield_plugin_api::ScopeId;
+use do_context_shield_plugin_api::{ProcessingContext, ScopeId};
 use do_context_shield_plugin_process::{
     DEFAULT_TIMEOUT_MS, ProcessDetector, ProcessJudge, ProcessPolicy, ProcessTransformer,
     ProcessVault,
@@ -294,7 +294,11 @@ fn run_simple(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             let mut pipeline =
                 build_pipeline(&args.vault, &args.detector, &args.pipeline, &args.process)?;
             let input = read_stdin()?;
-            let result = pipeline.sanitize(&ScopeId(args.vault.session), &input)?;
+            let result = pipeline.sanitize(
+                &ScopeId(args.vault.session),
+                &input,
+                &ProcessingContext::default(),
+            )?;
             print!("{}", result.text);
         }
         Command::Restore(args) => {

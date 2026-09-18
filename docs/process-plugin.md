@@ -37,6 +37,7 @@ Response:
 - `confidence` is optional, defaults to `1.0`, and must be within `0..=1`.
 - Fails closed on an empty kind, an invalid span, a value mismatch, or an out-of-range confidence.
 - Overlaps are resolved longest-span-wins; the first reported entity wins on identical spans.
+- The pipeline re-validates every report (character boundaries, bounds, value equality) and resolves overlaps before the judge, policy, and transformer run, so a misbehaving detector fails the call either way.
 
 ## judge
 
@@ -63,8 +64,10 @@ Response:
 Request:
 
 ```json
-{"method":"plan","entities":[{"kind":"email","start":0,"end":5,"value":"alice","confidence":0.99}],"judgments":[{"index":0,"label":"business","confidence":0.95}]}
+{"method":"plan","recipient":"external","data_category":"personal","entities":[{"kind":"email","start":0,"end":5,"value":"alice","confidence":0.99}],"judgments":[{"index":0,"label":"business","confidence":0.95}]}
 ```
+
+`recipient` is `local`, `trusted`, `external`, or `unknown`; `data_category` is `non_personal`, `personal`, or `special_category`. `purpose` and `jurisdiction` are top-level fields too and are omitted when unset. The pipeline defaults to `recipient: external` and `data_category: personal`, the same behavior as a policy that ignores the context.
 
 `judgments` carries the semantic judge's decisions (empty when no judge is configured); an abstention appears as `{"index":0,"label":null}`.
 
@@ -74,7 +77,7 @@ Response:
 {"plan":[{"index":0,"action":"pseudonymize"}]}
 ```
 
-- `action` is `keep`, `pseudonymize`, or `redact`. `pseudonymize` must stay reversible through the vault; `redact` means irreversible removal (a mask or any other literal is a redact).
+- `action` is `keep`, `pseudonymize`, `redact`, `block`, or `review`. `pseudonymize` must stay reversible through the vault; `redact` means irreversible removal (a mask or any other literal is a redact). `block` rejects the entire input and `review` flags it for a human; the pipeline fails the call for either, before any transformation, until a review flow exists.
 - Fails closed on an index that is repeated, out of range, or missing for any entity, and on an unknown action.
 
 ## transform

@@ -156,6 +156,8 @@ fn action_name(action: &Action) -> &'static str {
         Action::Keep => "keep",
         Action::Pseudonymize => "pseudonymize",
         Action::Redact => "redact",
+        Action::Block => "block",
+        Action::Review => "review",
     }
 }
 
@@ -190,7 +192,7 @@ fn planned_values(plan: &[PlannedEntity]) -> (HashSet<(&str, &str)>, HashSet<&st
             Action::Pseudonymize => {
                 pseudonymized.insert((planned.entity.kind.as_str(), planned.entity.value.as_str()));
             }
-            Action::Redact => {}
+            Action::Redact | Action::Block | Action::Review => {}
             Action::Keep => {
                 kept.insert(planned.entity.value.as_str());
             }
@@ -277,7 +279,7 @@ fn validate_text(
                     )));
                 }
             }
-            Action::Pseudonymize | Action::Redact => {
+            Action::Pseudonymize | Action::Redact | Action::Block | Action::Review => {
                 if present && !kept.contains(planned.entity.value.as_str()) {
                     return Err(TransformError::Message(format!(
                         "process transformer returned text that still contains the value of kind `{}`",

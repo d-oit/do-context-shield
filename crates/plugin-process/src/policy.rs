@@ -1,7 +1,10 @@
 //! `Policy` over the newline-delimited JSON protocol.
 //!
-//! Request: `{"method":"plan","entities":[{"kind","start","end","value","confidence"}],"judgments":[{"index":0,"label":"business","confidence":0.95}]}`.
-//! Response: `{"plan":[{"index":0,"action":"keep|pseudonymize|redact"}]}`.
+//! Request: `{"method":"plan","recipient":"external","data_category":"personal","entities":[{"kind","start","end","value","confidence"}],"judgments":[{"index":0,"label":"business","confidence":0.95}]}`.
+//! Response: `{"plan":[{"index":0,"action":"keep|pseudonymize|redact|block|review"}]}`.
+//!
+//! `recipient` and `data_category` carry the enforcement context; `purpose`
+//! and `jurisdiction` are omitted when unset.
 //!
 //! `judgments` carries the semantic judge's decisions and is empty when no
 //! judge is configured. An abstention serializes as `{"index":0,"label":null}`,
@@ -10,7 +13,9 @@
 use crate::ProcessConfig;
 use crate::protocol;
 use crate::wire::WireEntity;
-use do_context_shield_plugin_api::{Action, Entity, Judgment, PlannedEntity, Policy, PolicyError};
+use do_context_shield_plugin_api::{
+    Action, Entity, Judgment, PlannedEntity, Policy, PolicyError, ProcessingContext,
+};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -69,6 +74,7 @@ impl Policy for ProcessPolicy {
         &self,
         entities: &[Entity],
         judgments: &[Judgment],
+        context: &ProcessingContext,
     ) -> Result<Vec<PlannedEntity>, PolicyError> {
         let Some((program, args)) = protocol::split_command(self.config.command.as_deref()) else {
             return Err(PolicyError::Message(NO_COMMAND.to_owned()));
@@ -87,6 +93,10 @@ impl Policy for ProcessPolicy {
             "policy",
             &Request {
                 method: "plan",
+                purpose: context.purpose.as_deref(),
+                recipient: context.recipient.as_str(),
+                jurisdiction: context.jurisdiction.as_deref(),
+                data_category: context.data_category.as_str(),
                 entities: wire_entities,
                 judgments: wire_judgments(judgments),
             },
@@ -103,6 +113,12 @@ impl Policy for ProcessPolicy {
 #[derive(Serialize)]
 struct Request<'a> {
     method: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    purpose: Option<&'a str>,
+    recipient: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    jurisdiction: Option<&'a str>,
+    data_category: &'static str,
     entities: Vec<WireEntity<'a>>,
     judgments: Vec<WireJudgment>,
 }
@@ -207,6 +223,8 @@ fn parse_action(action: &str) -> Option<Action> {
         "keep" => Some(Action::Keep),
         "pseudonymize" => Some(Action::Pseudonymize),
         "redact" => Some(Action::Redact),
+        "block" => Some(Action::Block),
+        "review" => Some(Action::Review),
         _ => None,
     }
 }
