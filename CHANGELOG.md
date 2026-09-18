@@ -25,8 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - CI harness job: pinned `do-harness` v0.1.1 runs the new `ci` signal set (`verification` minus `commitlint`, because pull-request checkouts are merge refs while this repository enforces conventional PR titles) with `--format json --strict`, checks `do-harness status --set ci` evidence freshness, and runs `do-harness eval --strict-fixtures`; the job is required by `ci-success`.
 
+- Semantic judge stage: an optional `SemanticJudge` (plugin-api) between detection and policy classifies candidates as personal/business/test/secret or abstains — it returns labels and confidence, never spans or text, and can never weaken secret redaction. Selected with `--judge heuristics` (new `judge-heuristics` crate: reserved-domain and role-address rules) or `--judge process --judge-command "…"` (new `judge` method in the process protocol, `docs/process-plugin.md`); the default policy keeps values labeled `test`/`business` at ≥ 0.90 confidence and pseudonymizes everything else, and judge failures, out-of-range or duplicated indices, and confidences outside `0..=1` fail the call closed.
+
 ### Fixed
 
+- Raw-value egress: `SanitizeResult` and CLI/MCP `private.inspect` output now report entities as `EntitySummary` (kind, byte span, confidence) instead of `Entity`, so no pipeline result, CLI output, or MCP tool response repeats the matched text back to the caller; `SanitizeResult.mappings` (whose only payload was `Mapping.original`) was removed. The no-raw-values invariant is now machine-checked by the privacy-invariants and MCP tests.
 - Dependency policy: `cargo-deny` and `cargo-audit` now pass on the all-features graph — the reviewed `paste` exception (RUSTSEC-2024-0436, via `tokenizers` behind the `gliner2` feature) is documented in `deny.toml` and `.cargo/audit.toml`, and ISC joins the license allow-list for `libloading` (`ort` load-dynamic).
 - `--vault-file` combined with `--vault memory` or `--vault process` is rejected instead of silently ignored, and a process transformer's text-consistency errors (leftover or dropped values) are reported ahead of vault lookup failures.
 - Vault kind-aliasing: dedup keys now include entity kind, so the same value under different kinds yields distinct kind-tagged tokens (memory and JSON vaults).
@@ -37,3 +40,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Detector overlap resolution: longest-span-wins dedup so `api_key` matches are no longer double-counted as `phone`.
 - Zero clippy warnings under `-D warnings` (error docs, lint migration, envelope construction without macro-hidden moves).
 - Wired root `tests/` invariants into `crates/privacy-core/tests/privacy_invariants.rs` as real end-to-end tests (PII absence, stable placeholders, secret redaction, scope-limited restore).
+- Pre-commit hook: the formatting sensor now runs the do-harness command (`cargo fmt --all -- --check`) instead of bare `rustfmt --check`, which cannot resolve `edition.workspace = true` and false-failed on edition-2024 files.
+- CI/CD: `actions/labeler`, `amannn/action-semantic-pull-request`, and `gitleaks/gitleaks-action` updated to their Node 24 releases (GitHub removes the Node 20 runtime from hosted runners on 2026-09-16); the secret-scan workflow grants `pull-requests: write` so gitleaks can post its findings comment instead of warning `Resource not accessible by integration`.

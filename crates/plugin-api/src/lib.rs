@@ -108,10 +108,31 @@ pub trait Detector: Send + Sync {
 pub trait Policy: Send + Sync {
     /// Build transformation decisions.
     ///
+    /// `judgments` is empty when no semantic judge is configured; every index
+    /// has already been validated against `entities`.
+    ///
     /// # Errors
     ///
     /// Returns [`PolicyError`] when planning fails.
-    fn plan(&self, entities: &[Entity]) -> Result<Vec<PlannedEntity>, PolicyError>;
+    fn plan(
+        &self,
+        entities: &[Entity],
+        judgments: &[Judgment],
+    ) -> Result<Vec<PlannedEntity>, PolicyError>;
+}
+
+/// Classify detected candidates semantically without producing text or spans.
+///
+/// A judge may abstain per candidate; it can never invent spans, rewrite text,
+/// or weaken secret redaction (the policy redacts secret-like kinds first).
+pub trait SemanticJudge: Send + Sync {
+    /// Return one decision per candidate the judge is willing to label.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`JudgeError`] when judging fails; the pipeline then fails the
+    /// call instead of passing text through.
+    fn judge(&self, input: &str, entities: &[Entity]) -> Result<Vec<Judgment>, JudgeError>;
 }
 
 /// Transform planned entities.
@@ -166,4 +187,142 @@ pub fn is_placeholder_token(token: &str) -> bool {
         return false;
     };
     !inner.is_empty() && inner.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Whether `kind` names a credential that must be redacted, never pseudonymized.
+#[must_use]
+pub fn is_secret_kind(kind: &str) -> bool {
+    kind.contains("key") || kind.contains("secret") || kind == "password" || kind == "github_token"
+}
+
+/// Semantic role assigned by a judge to one detected candidate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SemanticLabel {
+    /// Private individual data.
+    Personal,
+    /// A service or role address behind a business function, e.g. `support@`.
+    Business,
+    /// A documentation, fixture, or reserved-domain value, e.g. `example.com`.
+    Test,
+    /// A credential or secret-like value.
+    Secret,
+}
+
+impl SemanticLabel {
+    /// Lowercase name used by the process protocol.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Personal => "personal",
+            Self::Business => "business",
+            Self::Test => "test",
+            Self::Secret => "secret",
+        }
+    }
+
+    /// Parse a process-protocol label name.
+    #[must_use]
+    pub fn parse(name: &str) -> Option<Self> {
+        match name {
+            "personal" => Some(Self::Personal),
+            "business" => Some(Self::Business),
+            "test" => Some(Self::Test),
+            "secret" => Some(Self::Secret),
+            _ => None,
+        }
+    }
+}
+
+/// One judge decision for one detected candidate.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub enum Judgment {
+    /// The judge selected `label` for the candidate at `index`.
+    Labeled {
+        /// Position of the candidate in the entity list handed to the judge.
+        index: usize,
+        /// Selected semantic label.
+        label: SemanticLabel,
+        /// Judge confidence for the label, in `0..=1`.
+        confidence: f32,
+    },
+    /// The judge declined to classify the candidate at `index`.
+    Abstain {
+        /// Position of the candidate in the entity list handed to the judge.
+        index: usize,
+    },
+}
+
+impl Judgment {
+    /// Candidate index this judgment refers to.
+    #[must_use]
+    pub fn index(&self) -> usize {
+        match self {
+            Self::Labeled { index, .. } | Self::Abstain { index } => *index,
+        }
+    }
+}
+
+/// Judge failures.
+#[derive(Debug, Error)]
+pub enum JudgeError {
+    /// Judge configuration or runtime error.
+    #[error("judge error: {0}")]
+    Message(String),
+    /// A judgment referenced a candidate index outside the candidate list.
+    #[error("judge index {index} is out of range for {len} candidates")]
+    IndexOutOfRange {
+        /// Reported index.
+        index: usize,
+        /// Number of candidates the judge was given.
+        len: usize,
+    },
+    /// A judgment repeated a candidate index.
+    #[error("judge repeated candidate index {index}")]
+    DuplicateIndex {
+        /// Repeated index.
+        index: usize,
+    },
+    /// A judgment carried a confidence outside `0..=1`.
+    #[error("judge confidence {confidence} for index {index} is outside 0..=1")]
+    ConfidenceOutOfRange {
+        /// Reported index.
+        index: usize,
+        /// Reported confidence.
+        confidence: f32,
+    },
+}
+
+/// Validate a judge's output against the candidate list it was given.
+///
+/// Candidates without a judgment are abstentions and are allowed; indices must
+/// be in range and unique, and a label's confidence must be in `0..=1`.
+///
+/// # Errors
+///
+/// Returns [`JudgeError::IndexOutOfRange`], [`JudgeError::DuplicateIndex`], or
+/// [`JudgeError::ConfidenceOutOfRange`] for a malformed response.
+pub fn validate_judgments(len: usize, judgments: &[Judgment]) -> Result<(), JudgeError> {
+    for (position, judgment) in judgments.iter().enumerate() {
+        let index = judgment.index();
+        if index >= len {
+            return Err(JudgeError::IndexOutOfRange { index, len });
+        }
+        if judgments[..position]
+            .iter()
+            .any(|earlier| earlier.index() == index)
+        {
+            return Err(JudgeError::DuplicateIndex { index });
+        }
+        if let Judgment::Labeled {
+            index, confidence, ..
+        } = judgment
+            && !(0.0..=1.0).contains(confidence)
+        {
+            return Err(JudgeError::ConfidenceOutOfRange {
+                index: *index,
+                confidence: *confidence,
+            });
+        }
+    }
+    Ok(())
 }

@@ -32,6 +32,7 @@ Agent = Model + Harness. Feedforward guides (this skill, `AGENTS.md`, `CONTRIBUT
 | Distillation | `.agents/skills/skill-distiller/SKILL.md` | Turning recoveries into guides |
 | Skill authoring | `.agents/skills/skill-creator/SKILL.md` | Structure gate and eval fixtures |
 | Product skills | `.agents/skills/private-data/SKILL.md`, `.agents/skills/plugin-development/SKILL.md` | Agent-facing usage and plugin development |
+| Privacy boundary | `.agents/skills/fail-closed-boundary/SKILL.md` | Stage ownership, validation, and fail-closed tests |
 
 ## Feedback sensors
 

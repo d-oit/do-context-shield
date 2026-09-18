@@ -3,7 +3,7 @@
 mod common;
 
 use common::command;
-use do_context_shield_plugin_api::{Action, Entity, Policy};
+use do_context_shield_plugin_api::{Action, Entity, Judgment, Policy, SemanticLabel};
 use do_context_shield_plugin_process::{ProcessConfig, ProcessPolicy};
 
 fn policy(mode: &str) -> ProcessPolicy {
@@ -28,14 +28,14 @@ fn entities() -> Vec<Entity> {
 }
 
 fn plan(policy: &ProcessPolicy, entities: &[Entity]) -> Vec<Action> {
-    match policy.plan(entities) {
+    match policy.plan(entities, &[]) {
         Ok(planned) => planned.iter().map(|entry| entry.action.clone()).collect(),
         Err(error) => panic!("expected a plan, got error: {error}"),
     }
 }
 
 fn error_message(policy: &ProcessPolicy, entities: &[Entity]) -> String {
-    match policy.plan(entities) {
+    match policy.plan(entities, &[]) {
         Ok(planned) => panic!("expected an error, got plan: {planned:?}"),
         Err(error) => error.to_string(),
     }
@@ -51,7 +51,7 @@ fn plans_one_action_per_entity() {
 #[test]
 fn plans_a_single_entity() {
     let entities = [entity("email", 0, 17, "alice@example.com")];
-    let planned = match policy("plan-ok").plan(&entities) {
+    let planned = match policy("plan-ok").plan(&entities, &[]) {
         Ok(planned) => planned,
         Err(error) => panic!("expected a plan, got error: {error}"),
     };
@@ -109,4 +109,19 @@ fn errors_on_non_zero_exit() {
         message.contains("process policy exited with status"),
         "got: {message}"
     );
+}
+
+#[test]
+fn forwards_judgments_to_the_child() {
+    let entities = [entity("email", 0, 17, "alice@example.com")];
+    let judgments = [Judgment::Labeled {
+        index: 0,
+        label: SemanticLabel::Business,
+        confidence: 0.95,
+    }];
+    let planned = match policy("plan-judged").plan(&entities, &judgments) {
+        Ok(planned) => planned,
+        Err(error) => panic!("expected a plan, got error: {error}"),
+    };
+    assert_eq!(planned[0].action, Action::Keep, "{planned:?}");
 }

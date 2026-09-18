@@ -1,0 +1,16 @@
+[package]
+name = "do-context-shield-judge-heuristics"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Deterministic local semantic judge (kind and value heuristics) for do-context-shield"
+homepage.workspace = true
+repository.workspace = true
+include = ["src/**/*", "Cargo.toml"]
+
+[lints]
+workspace = true
+
+[dependencies]
+do-context-shield-plugin-api.workspace = true

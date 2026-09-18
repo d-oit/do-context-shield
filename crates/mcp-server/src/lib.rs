@@ -2,7 +2,8 @@
 
 use do_context_shield_core::PrivacyPipeline;
 use do_context_shield_plugin_process::{
-    DEFAULT_TIMEOUT_MS, ProcessDetector, ProcessPolicy, ProcessTransformer, ProcessVault,
+    DEFAULT_TIMEOUT_MS, ProcessDetector, ProcessJudge, ProcessPolicy, ProcessTransformer,
+    ProcessVault,
 };
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
@@ -34,6 +35,12 @@ pub struct ServerConfig {
     /// Command line of a local policy executable; required with `process`.
     /// Split on whitespace; quoting and shell expansion are not supported.
     pub policy_command: Option<String>,
+    /// Optional semantic judge: `heuristics` (built-in rules) or `process` (local executable
+    /// over newline-delimited JSON).
+    pub judge: Option<String>,
+    /// Command line of a local judge executable; required with `judge` set to `process`.
+    /// Split on whitespace; quoting and shell expansion are not supported.
+    pub judge_command: Option<String>,
     /// Transformer plugin name: `pseudonymize` or `process`.
     pub transformer: String,
     /// Command line of a local transformer executable; required with `process`.
@@ -54,6 +61,8 @@ impl Default for ServerConfig {
             detector_command: None,
             policy: "default".to_owned(),
             policy_command: None,
+            judge: None,
+            judge_command: None,
             transformer: "pseudonymize".to_owned(),
             transformer_command: None,
             process_timeout_ms: DEFAULT_TIMEOUT_MS,
@@ -127,7 +136,20 @@ pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Err
             )?),
             name => do_context_shield_plugin_registry::transformer(name)?,
         };
-    let mut pipeline = PrivacyPipeline::new(detector, policy, transformer, vault);
+    let judge: Option<Box<dyn do_context_shield_plugin_api::SemanticJudge>> =
+        match config.judge.as_deref() {
+            Some("process") => Some(Box::new(ProcessJudge::from_selection(
+                config.judge_command.as_deref(),
+                timeout,
+            )?)),
+            Some(name) => Some(do_context_shield_plugin_registry::judge(name)?),
+            None => None,
+        };
+    let pipeline = PrivacyPipeline::new(detector, policy, transformer, vault);
+    let mut pipeline = match judge {
+        Some(judge) => pipeline.with_judge(judge),
+        None => pipeline,
+    };
     let stdin = io::stdin();
     let mut input = stdin.lock();
     let stdout = io::stdout();

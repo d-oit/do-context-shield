@@ -8,6 +8,15 @@ work lands or the precondition expires.
 
 ## Low priority
 
+### Verify the MCP server end-to-end in Codex (harness task 2)
+
+- **Status**: deferred 2026-09-17 — low priority; client-coverage runs parked, omp 18.2.4 is the only client exercised for now.
+- **Precondition**: a Codex CLI install in the verification environment (and the omp-only testing hold lifted).
+- **Not yet verified**: the registration shape is copied from Codex's own documentation (`docs/client-integration.md` → "Other clients") and is not exercised in this repository.
+- **Remaining work**: register the server in `~/.codex/config.toml` or a project `.codex/config.toml`, run a non-interactive Codex turn that calls `private.inspect` + `private.sanitize` (session `codex-probe-1`), confirm the reply carries placeholders only, and record the exact client flags that were needed.
+- **Entry point**: `docs/client-integration.md` → "Other clients" (Codex `config.toml` shape).
+- **Exit criteria**: a transcript proving the tool invocation and the sanitized reply, or a documented client-side blocker; update `docs/client-integration.md` with the verified status.
+
 ### Verify the MCP server end-to-end in Claude Code (harness task 1)
 
 - **Status**: deferred 2026-09-17 — low priority, precondition-blocked.

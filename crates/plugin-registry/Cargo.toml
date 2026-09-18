@@ -22,6 +22,7 @@ workspace = true
 do-context-shield-plugin-api.workspace = true
 do-context-shield-detector-regex.workspace = true
 do-context-shield-detector-gliner2.workspace = true
+do-context-shield-judge-heuristics.workspace = true
 do-context-shield-plugin-process.workspace = true
 do-context-shield-policy-default.workspace = true
 do-context-shield-transformer-pseudonymize.workspace = true

@@ -63,7 +63,33 @@ fn secret_like_values_are_redacted() {
         result.text.contains("__DO_PRIVATE_REDACTED__"),
         "{result:?}"
     );
-    assert!(result.mappings.is_empty(), "{result:?}");
+    // A redacted secret has no reversible mapping: restore cannot bring it back.
+    assert_eq!(
+        unwrap_ok(pipeline.restore(&scope, &result.text)),
+        result.text
+    );
+}
+
+#[test]
+fn result_metadata_never_carries_raw_values() {
+    let mut pipeline = pipeline();
+    let scope = ScopeId("invariants".to_owned());
+    let input = "Contact alice@example.com or +1 555 123 4567 about the invoice";
+    let result = unwrap_ok(pipeline.sanitize(&scope, input));
+
+    // Spans still point at the detected regions of the original input…
+    let matched: Vec<&str> = result
+        .entities
+        .iter()
+        .map(|entity| &input[entity.start..entity.end])
+        .collect();
+    assert!(matched.contains(&"alice@example.com"), "{result:?}");
+    assert!(matched.contains(&"1 555 123 4567"), "{result:?}");
+
+    // …but the result never repeats the matched text back to a caller.
+    let rendered = format!("{result:?}");
+    assert!(!rendered.contains("alice@example.com"), "{rendered}");
+    assert!(!rendered.contains("1 555 123 4567"), "{rendered}");
 }
 
 #[test]

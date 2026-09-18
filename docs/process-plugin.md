@@ -1,6 +1,6 @@
 # Process plugin protocol
 
-Status: implemented for all four capabilities (`crates/plugin-process`, registry name `process` per capability, CLI/MCP flags `--detector process`, `--policy process`, `--transformer process`, `--vault process`).
+Status: implemented for all five capabilities (`crates/plugin-process`, registry name `process` per capability, CLI/MCP flags `--detector process`, `--judge process`, `--policy process`, `--transformer process`, `--vault process`).
 
 Transport: newline-delimited JSON on the child's stdin/stdout. One child process is started per operation: the request is written as a single line, exactly one response line is read, and the child is terminated as soon as its answer has been read. A long-lived server mode is not part of this version.
 
@@ -38,13 +38,35 @@ Response:
 - Fails closed on an empty kind, an invalid span, a value mismatch, or an out-of-range confidence.
 - Overlaps are resolved longest-span-wins; the first reported entity wins on identical spans.
 
+## judge
+
+Request:
+
+```json
+{"method":"judge","input":"email alice@example.com","entities":[{"kind":"email","start":6,"end":23,"value":"alice@example.com","confidence":0.99}]}
+```
+
+Response:
+
+```json
+{"judgments":[{"index":0,"label":"business","confidence":0.95},{"index":1,"label":null}]}
+```
+
+- `label` is `personal`, `business`, `test`, or `secret`; a null or omitted `label` is an abstention, and so is a candidate the child did not mention (`{"judgments":[]}` abstains for every candidate). The policy falls back to the kind rules for abstentions and missing judgments.
+- `confidence` must be within `0..=1` for a label and is omitted or ignored for abstentions.
+- A judge classifies existing candidates only: it cannot invent spans or rewrite text, and the policy redacts secret-like kinds before any label is consulted, so a `test` label can never weaken redaction.
+- Fails closed on an out-of-range or duplicate index, an unknown label name, a missing index, a confidence outside `0..=1`, a malformed response, or a non-zero exit.
+- A hosted judge (e.g. TypeSafe) is a local wrapper executable implementing this method; the runtime crates stay network-free.
+
 ## plan
 
 Request:
 
 ```json
-{"method":"plan","entities":[{"kind":"email","start":0,"end":5,"value":"alice","confidence":0.99}]}
+{"method":"plan","entities":[{"kind":"email","start":0,"end":5,"value":"alice","confidence":0.99}],"judgments":[{"index":0,"label":"business","confidence":0.95}]}
 ```
+
+`judgments` carries the semantic judge's decisions (empty when no judge is configured); an abstention appears as `{"index":0,"label":null}`.
 
 Response:
 
@@ -113,6 +135,7 @@ FIX="python3 detector.py"
 printf '%s' 'email alice@example.com' \
   | do-context-shield sanitize --session s1 \
       --detector process --detector-command "$FIX" \
+      --judge process --judge-command "python3 judge.py" \
       --policy process --policy-command "python3 policy.py" \
       --transformer process --transformer-command "python3 transformer.py" \
       --vault process --vault-command "python3 vault.py" \

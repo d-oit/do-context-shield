@@ -70,7 +70,7 @@ pub(crate) fn handle_request(
                 "tools":[
                     {"name":"private.sanitize","description":"Detect and sanitize sensitive coding context locally.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"}},"required":["text","session"]}},
                     {"name":"private.restore","description":"Restore locally stored placeholders in a session.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"}},"required":["text","session"]}},
-                    {"name":"private.inspect","description":"Inspect detected sensitive entities without transforming them.","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}}
+                    {"name":"private.inspect","description":"Inspect detected sensitive entities (kind, byte span, confidence) without transforming them or returning the matched text.","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}}
                 ],
                 "ttlMs":300_000,
                 "cacheScope":"private"
@@ -121,6 +121,9 @@ pub(crate) fn handle_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use do_context_shield_plugin_api::{
+        Entity, JudgeError, Judgment, SemanticJudge, SemanticLabel,
+    };
 
     fn pipeline() -> PrivacyPipeline {
         let vault = match do_context_shield_plugin_registry::vault("memory") {
@@ -287,8 +290,42 @@ mod tests {
             &mut pipeline,
             &tool_call("private.inspect", "alice@example.com", None),
         ));
-        assert!(text.contains(r#""kind":"email""#));
-        assert!(text.contains("alice@example.com"));
+        assert!(text.contains(r#""kind":"email""#), "{text}");
+        assert!(text.contains(r#""end":17"#), "{text}");
+        // The matched text must never travel back to the calling agent.
+        assert!(!text.contains("alice@example.com"), "{text}");
+    }
+
+    struct TestDomainJudge;
+
+    impl SemanticJudge for TestDomainJudge {
+        fn judge(&self, _input: &str, entities: &[Entity]) -> Result<Vec<Judgment>, JudgeError> {
+            Ok(entities
+                .iter()
+                .enumerate()
+                .map(|(index, _)| Judgment::Labeled {
+                    index,
+                    label: SemanticLabel::Test,
+                    confidence: 0.95,
+                })
+                .collect())
+        }
+    }
+
+    #[test]
+    fn judge_labels_reach_the_policy() {
+        let mut judged = pipeline().with_judge(Box::new(TestDomainJudge));
+        let kept = content_text(request(
+            &mut judged,
+            &tool_call("private.sanitize", "alice@example.com", Some("s")),
+        ));
+        assert_eq!(kept, "alice@example.com");
+        let mut plain = pipeline();
+        let replaced = content_text(request(
+            &mut plain,
+            &tool_call("private.sanitize", "alice@example.com", Some("s")),
+        ));
+        assert_eq!(replaced, "__DO_PRIVATE_EMAIL_1__");
     }
 
     #[test]

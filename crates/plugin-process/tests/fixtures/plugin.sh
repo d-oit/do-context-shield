@@ -18,6 +18,18 @@ case "$mode" in
   plan-dupe)    printf '%s\n' '{"plan":[{"index":0,"action":"keep"},{"index":0,"action":"redact"}]}' ;;
   plan-range)   printf '%s\n' '{"plan":[{"index":0,"action":"keep"},{"index":7,"action":"keep"}]}' ;;
   plan-unknown) printf '%s\n' '{"plan":[{"index":0,"action":"nope"},{"index":1,"action":"keep"}]}' ;;
+  plan-judged)
+    case "$request" in
+      *'"judgments":[{"index":0,"label":"business","confidence":0.95}]'*) printf '%s\n' '{"plan":[{"index":0,"action":"keep"}]}' ;;
+      *) printf '%s\n' '{"plan":[{"index":0,"action":"redact"}]}' ;;
+    esac ;;
+  # judge
+  judge-ok)            printf '%s\n' '{"judgments":[{"index":0,"label":"business","confidence":0.95}]}' ;;
+  judge-abstain)       printf '%s\n' '{"judgments":[]}' ;;
+  judge-range)         printf '%s\n' '{"judgments":[{"index":7,"label":"personal","confidence":0.9}]}' ;;
+  judge-dupe)          printf '%s\n' '{"judgments":[{"index":0,"label":"personal","confidence":0.9},{"index":0,"label":"business","confidence":0.9}]}' ;;
+  judge-confidence)    printf '%s\n' '{"judgments":[{"index":0,"label":"personal","confidence":1.5}]}' ;;
+  judge-unknown-label) printf '%s\n' '{"judgments":[{"index":0,"label":"banana","confidence":0.9}]}' ;;
   # transformer
   transform-ok)       printf '%s\n' '{"text":"__DO_PRIVATE_EMAIL_1__","mappings":[{"kind":"email","original":"alice@example.com","token":"__DO_PRIVATE_EMAIL_1__"}]}' ;;
   transform-redact)   printf '%s\n' '{"text":"__DO_PRIVATE_REDACTED__"}' ;;

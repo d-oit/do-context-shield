@@ -2,9 +2,10 @@
 
 use do_context_shield_detector_gliner2::Gliner2Detector;
 use do_context_shield_detector_regex::RegexDetector;
-use do_context_shield_plugin_api::{Detector, Policy, Transformer, Vault};
+use do_context_shield_judge_heuristics::HeuristicJudge;
+use do_context_shield_plugin_api::{Detector, Policy, SemanticJudge, Transformer, Vault};
 use do_context_shield_plugin_process::{
-    ProcessDetector, ProcessPolicy, ProcessTransformer, ProcessVault,
+    ProcessDetector, ProcessJudge, ProcessPolicy, ProcessTransformer, ProcessVault,
 };
 use do_context_shield_policy_default::DefaultPolicy;
 use do_context_shield_transformer_pseudonymize::PseudonymizingTransformer;
@@ -36,6 +37,22 @@ pub fn detector(name: &str) -> Result<Box<dyn Detector>, RegistryError> {
         "process" => Ok(Box::new(ProcessDetector::default())),
         _ => Err(RegistryError::Unknown {
             kind: "detector",
+            name: name.to_owned(),
+        }),
+    }
+}
+
+/// Construct a semantic judge by logical name.
+///
+/// # Errors
+///
+/// Returns [`RegistryError::Unknown`] for an unregistered name.
+pub fn judge(name: &str) -> Result<Box<dyn SemanticJudge>, RegistryError> {
+    match name {
+        "heuristics" => Ok(Box::new(HeuristicJudge)),
+        "process" => Ok(Box::new(ProcessJudge::default())),
+        _ => Err(RegistryError::Unknown {
+            kind: "judge",
             name: name.to_owned(),
         }),
     }

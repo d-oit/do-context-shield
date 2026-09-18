@@ -1,9 +1,9 @@
 ---
 name: plugin-development
 description: >
-  Implement a new detector, policy, transformer, or vault plugin for do-context-shield.
+  Implement a new detector, judge, policy, transformer, or vault plugin for do-context-shield.
   Use when asked to "add a detector", "support a new entity type", "customize the policy",
-  "add a vault backend", or change what gets detected, decided, transformed, or stored.
+  "add a vault backend", or change what gets detected, judged, decided, transformed, or stored.
 license: MIT
 metadata:
   author: d-oit
@@ -23,6 +23,7 @@ Follow this skill to add a new implementation without breaking the privacy bound
 | Capability | Trait (`crates/plugin-api/src/lib.rs`) | Built-in | Future direction |
 |---|---|---|---|
 | detection | `Detector::detect` | `detector-regex`, `detector-gliner2` (local ONNX NER, `gliner2` feature), `plugin-process` (`detect`) | custom local NER, rules (`docs/plugins.md`) |
+| judging | `SemanticJudge::judge` | `judge-heuristics` (reserved-domain and role-address rules), `plugin-process` (`judge`) | local model, hosted judge via process |
 | policy | `Policy::plan` | `policy-default`, `plugin-process` (`plan`) | project / enterprise DLP policy |
 | transformation | `Transformer::transform` | `transformer-pseudonymize`, `plugin-process` (`transform`) | redact, generalize, encrypt |
 | storage | `Vault::get_or_insert`, `Vault::resolve` | `vault-memory`, `vault-json`, `plugin-process` (`vault_get_or_insert`, `vault_resolve`) | SQLite, OS keychain |
@@ -31,8 +32,8 @@ Follow this skill to add a new implementation without breaking the privacy bound
 
 1. Read the trait contract in `crates/plugin-api/src/lib.rs` first. Do not change the trait unless the change is genuinely cross-plugin.
 2. Create `crates/<name>/` with `Cargo.toml` (workspace inheritance: `version.workspace`, `edition.workspace`, `license.workspace`, `[lints] workspace = true`) and `src/lib.rs`.
-3. Register the plugin by logical name in `crates/plugin-registry/src/lib.rs` (`detector()`, `policy()`, `transformer()`, or `vault()`).
-4. Select it at the CLI: `--detector`, `--policy`, `--transformer`, or `--vault` with the logical name. Process plugins need their command flag (`--detector-command`, `--policy-command`, `--transformer-command`, `--vault-command`) and share `--process-timeout-ms`; `gliner2` needs `--model-dir <dir>` and `--vault json` needs `--vault-file <path>`. The pipeline composes as `Detector -> Policy -> Transformer -> Vault`.
+3. Register the plugin by logical name in `crates/plugin-registry/src/lib.rs` (`detector()`, `judge()`, `policy()`, `transformer()`, or `vault()`).
+4. Select it at the CLI: `--detector`, `--judge`, `--policy`, `--transformer`, or `--vault` with the logical name. Process plugins need their command flag (`--detector-command`, `--judge-command`, `--policy-command`, `--transformer-command`, `--vault-command`) and share `--process-timeout-ms`; `gliner2` needs `--model-dir <dir>` and `--vault json` needs `--vault-file <path>`. The pipeline composes as `Detector -> SemanticJudge (optional) -> Policy -> Transformer -> Vault`.
 5. Add unit tests in the new crate and extend `crates/privacy-core/tests/` invariants if behavior changes.
 6. Run `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets`, `cargo test --workspace`. If the crate has an opt-in feature, also run `cargo check -p <crate> --features <feature>` and `cargo clippy -p <crate> --all-targets --features <feature> -- -D warnings`.
 

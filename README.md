@@ -25,8 +25,9 @@ Claude Code / OpenCode / Codex / Gemini CLI / custom agent
 ## First vertical slice
 
 - Regex detector for email, phone, IBAN, IPv4 and common API-key shapes.
-- Process plugins: a local executable can implement detection, policy, transformation, or storage over newline-delimited JSON (`--detector process --detector-command "<program> [args...]"`, likewise `--policy`, `--transformer`, and `--vault` with their own command flags; see `docs/process-plugin.md`).
+- Process plugins: a local executable can implement detection, judging, policy, transformation, or storage over newline-delimited JSON (`--detector process --detector-command "<program> [args...]"`, likewise `--judge`, `--policy`, `--transformer`, and `--vault` with their own command flags; see `docs/process-plugin.md`).
 - Default policy: pseudonymize personal identifiers; redact secrets.
+- Optional semantic judge (`--judge heuristics` or a local process judge) that labels candidates; secrets stay redacted regardless of judge output.
 - In-memory vault with session scoping.
 - CLI over stdin/stdout.
 - MCP-style JSON-RPC stdio adapter with `private.sanitize`, `private.restore`, and `private.inspect` tools.

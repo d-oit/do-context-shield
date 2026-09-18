@@ -4,7 +4,8 @@ use clap::{Args, Parser, Subcommand};
 use do_context_shield_core::PrivacyPipeline;
 use do_context_shield_plugin_api::ScopeId;
 use do_context_shield_plugin_process::{
-    DEFAULT_TIMEOUT_MS, ProcessDetector, ProcessPolicy, ProcessTransformer, ProcessVault,
+    DEFAULT_TIMEOUT_MS, ProcessDetector, ProcessJudge, ProcessPolicy, ProcessTransformer,
+    ProcessVault,
 };
 use serde::Serialize;
 use std::io::{self, Read, Write};
@@ -136,6 +137,14 @@ struct VaultSelection {
 /// Policy and transformer selection shared by sanitize and mcp-stdio.
 #[derive(Args)]
 struct PipelineSelection {
+    /// Optional semantic judge: `heuristics` (built-in rules) or `process` (local executable
+    /// over newline-delimited JSON).
+    #[arg(long, value_parser = ["heuristics", "process"])]
+    judge: Option<String>,
+    /// Command line of a local judge executable; required with `--judge process`.
+    /// Split on whitespace; quoting and shell expansion are not supported.
+    #[arg(long)]
+    judge_command: Option<String>,
     /// Policy plugin: `default` or `process` (local executable over newline-delimited JSON).
     #[arg(long, default_value = "default", value_parser = ["default", "process"])]
     policy: String,
@@ -155,6 +164,8 @@ struct PipelineSelection {
 impl Default for PipelineSelection {
     fn default() -> Self {
         Self {
+            judge: None,
+            judge_command: None,
             policy: "default".to_owned(),
             policy_command: None,
             transformer: "pseudonymize".to_owned(),
@@ -181,7 +192,7 @@ impl Default for ProcessArgs {
 
 #[derive(Serialize)]
 struct InspectOutput {
-    entities: Vec<do_context_shield_plugin_api::Entity>,
+    entities: Vec<do_context_shield_core::EntitySummary>,
 }
 
 fn build_pipeline(
@@ -250,7 +261,20 @@ fn build_pipeline(
             )?),
             name => do_context_shield_plugin_registry::transformer(name)?,
         };
-    Ok(PrivacyPipeline::new(detector, policy, transformer, vault))
+    let judge: Option<Box<dyn do_context_shield_plugin_api::SemanticJudge>> =
+        match pipeline_selection.judge.as_deref() {
+            Some("process") => Some(Box::new(ProcessJudge::from_selection(
+                pipeline_selection.judge_command.as_deref(),
+                timeout,
+            )?)),
+            Some(name) => Some(do_context_shield_plugin_registry::judge(name)?),
+            None => None,
+        };
+    let pipeline = PrivacyPipeline::new(detector, policy, transformer, vault);
+    Ok(match judge {
+        Some(judge) => pipeline.with_judge(judge),
+        None => pipeline,
+    })
 }
 
 /// Resolve the JSON vault path or explain what is missing.
@@ -306,6 +330,8 @@ fn run_simple(command: Command) -> Result<(), Box<dyn std::error::Error>> {
                 detector_command: args.detector.detector_command,
                 policy: args.pipeline.policy,
                 policy_command: args.pipeline.policy_command,
+                judge: args.pipeline.judge,
+                judge_command: args.pipeline.judge_command,
                 transformer: args.pipeline.transformer,
                 transformer_command: args.pipeline.transformer_command,
                 process_timeout_ms: args.process.process_timeout_ms,

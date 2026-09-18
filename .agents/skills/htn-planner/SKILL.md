@@ -50,7 +50,10 @@ header; feature-gated surfaces get an explicit feature build. Subtasks:
   `do-harness task advance <id>`, `do-harness task done <id>`,
   `do-harness task list`, `do-harness task export` (writes `plans/tasks.json`).
 - `task done` refuses until the method's named sensor has an ok beat recorded by
-  `do-harness verify --record --task <id>`.
+  `do-harness verify --record --task <id>`: record each gated subtask's sensor
+  with `do-harness verify --record --only <sensor> --task <id>`, advance, then
+  `do-harness task done <id>`; `--record` without `--task` only warns and is not
+  task-scoped.
 - Never advance the subtask pointer until the subtask's sensor exits 0.
 - A subtask carrying uncertainty is a spike candidate: run
   `.agents/skills/spike-runner/SKILL.md` before advancing.
