@@ -9,7 +9,8 @@ following the Agent Skills specification (frontmatter with `name`, `description`
 | Skill | Path | Description |
 |-------|------|-------------|
 | `private-data` | [skills/private-data/SKILL.md](skills/private-data/SKILL.md) | Sanitize sensitive coding context locally before sending it to an external model or tool, then restore placeholders only after the response returns. |
-| `plugin-development` | [skills/plugin-development/SKILL.md](skills/plugin-development/SKILL.md) | Implement a new detector, policy, transformer, or vault plugin behind `plugin-api` traits. |
+| `plugin-development` | [skills/plugin-development/SKILL.md](skills/plugin-development/SKILL.md) | Implement a new detector, judge, policy, transformer, or vault plugin behind `plugin-api` traits. |
+| `fail-closed-boundary` | [skills/fail-closed-boundary/SKILL.md](skills/fail-closed-boundary/SKILL.md) | Review checklist for changing the privacy boundary: stage ownership, validation, fail-closed tests. |
 | `harness` | [skills/harness/SKILL.md](skills/harness/SKILL.md) | Sensor map, self-correction protocol, fail-fast and steering loops. |
 | `htn-planner` | [skills/htn-planner/SKILL.md](skills/htn-planner/SKILL.md) | Decompose work into sensor-gated subtasks using `plans/methods.json`. |
 | `spike-runner` | [skills/spike-runner/SKILL.md](skills/spike-runner/SKILL.md) | De-risk unknown APIs, models, and protocols with throwaway spikes. |
@@ -19,7 +20,8 @@ following the Agent Skills specification (frontmatter with `name`, `description`
 ## Notes
 
 - `private-data` is the product's agent interface: it is also the file coding clients install into their own skills directory (see `README.md`).
-- `plugin-development` is the contributor workflow for extending detection, policy, transformation, or storage. It encodes the hard rules from `AGENTS.md`.
+- `plugin-development` is the contributor workflow for extending detection, judging, policy, transformation, or storage. It encodes the hard rules from `AGENTS.md`.
+- `fail-closed-boundary` is the contributor review checklist for the privacy boundary itself: who owns spans, labels, actions, and restoration, what must be validated, and which fail-closed tests a change must keep.
 - `harness`, `htn-planner`, `spike-runner`, `skill-distiller`, and `skill-creator` are the development-methodology skills: feedforward guides for the workflow in `AGENTS.md`.
 - Every skill must pass `bash scripts/check-skills.sh` (structure gate + fixture shape) and is benchmarked by `do-harness eval`; `--strict-fixtures` rejects thin datasets. Do not add a skill without graded eval fixtures.
 - Deliberately no other skills: MCP server setup is documented in `docs/client-integration.md`, and review rules live in `AGENTS.md`.

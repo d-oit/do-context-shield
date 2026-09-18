@@ -33,6 +33,7 @@ Use `do-context-shield` as a local privacy boundary when coding context may cont
 - Never send the raw input to a remote model before sanitization.
 - Never log raw input, mappings, or restored secrets.
 - Treat secrets as redacted data, not reversible pseudonyms.
+- Add `--judge heuristics` to keep high-confidence test-domain values (e.g. `alice@example.com`) and role addresses (e.g. `support@acme.com`) unchanged; secrets stay redacted regardless of judge output.
 - Keep one stable session id per agent task so repeated entities get stable pseudonyms.
 - Do not assume regex detection is complete. For names, addresses, source-code secrets, or domain-specific entities, install a stronger detector plugin (see `plugin-development` skill).
 - The skill does not choose an LLM provider. The coding client remains responsible for model selection.
