@@ -35,6 +35,7 @@
 
 ## Checklist
 
+- [ ] I have read and agree to the [Contributor License Agreement](CLA.md)
 - [ ] Code follows project rules in `AGENTS.md` (provider-agnostic, plugin-api traits, no raw sensitive logging)
 - [ ] Documentation updated if API changed
 - [ ] `CHANGELOG.md` updated

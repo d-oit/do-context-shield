@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - MCP tool namespace rename: tools are now `context.sanitize`, `context.restore`, and `context.inspect` (formerly `private.*`). `context.restore` strictly requires an explicit `session` parameter with no fallback scope, preventing accidental shared-scope raw value restoration.
+- License: changed from MIT to PolyForm Noncommercial 1.0.0; added CLA for contributors and commercial licensing contact.
 
 ### Fixed
 

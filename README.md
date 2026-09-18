@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/d-oit/do-context-shield/actions/workflows/ci.yml/badge.svg)](https://github.com/d-oit/do-context-shield/actions/workflows/ci.yml)
 [![Secret scan](https://github.com/d-oit/do-context-shield/actions/workflows/secret-scan.yml/badge.svg)](https://github.com/d-oit/do-context-shield/actions/workflows/secret-scan.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/License-PolyForm_Noncommercial_1.0.0-orange.svg)](LICENSE)
 
 A local privacy engine for coding agents.
 
@@ -79,4 +79,4 @@ This is a foundation, not a claim of complete DLP coverage. Name/entity detectio
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+PolyForm Noncommercial 1.0.0 — see [LICENSE](LICENSE). Commercial licenses available — see [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md).
