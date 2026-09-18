@@ -23,6 +23,7 @@ Tool selection and caching contract:
 
 - `tools/list` returns `context.sanitize`, `context.restore`, `context.inspect` in a fixed order with `ttlMs: 300000` and `cacheScope: private` (session-scoped results must not sit in shared caches).
 - `sanitize` and `restore` schemas require `text` and `session`. `context.sanitize` still accepts a missing `session` as `default` for older clients, but `context.restore` resolves raw values and rejects a call without an explicit `session`. Always send an explicit per-task session.
+- `context.sanitize` accepts the optional enforcement-context arguments `recipient` (`local`/`trusted`/`external`/`unknown`, default `external`), `data_category` (`non_personal`/`personal`/`special_category`, default `personal`), `purpose`, and `jurisdiction`. Omitted fields keep those conservative defaults; an unknown enum name or a wrong JSON type is an error, never a silent downgrade. The CLI exposes the same fields on `sanitize` as `--recipient`, `--data-category`, `--purpose`, and `--jurisdiction`.
 - Plugin selection: `--detector regex|gliner2|process`, `--policy default|process`, `--transformer pseudonymize|process`, `--vault memory|json|process`, plus `--detector-command`, `--policy-command`, `--transformer-command`, `--vault-command`, and `--process-timeout-ms` for process plugins (`docs/process-plugin.md`). `--detector gliner2` also needs `--model-dir <dir>` and a binary built with `--features gliner2`; `--vault json` needs `--vault-file <path>` and cannot be combined with `--vault process`.
 
 ### Client registration

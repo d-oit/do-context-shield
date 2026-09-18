@@ -73,6 +73,9 @@ checklist for changing them.
   recipients fail closed (`Action::Block`).
 - Detector spans not on character boundaries, out of bounds, or mismatched to
   the input fail the pipeline closed.
+- Adapter context surfaces (MCP arguments, CLI flags) reject unknown
+  recipient/data_category names or wrong types instead of silently downgrading
+  to a weaker enforcement context.
 - Vault `delete_scope` removes mappings and resets counters; TTL expires stale
   mappings.
 

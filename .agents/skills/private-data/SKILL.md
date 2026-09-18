@@ -35,6 +35,7 @@ Use `do-context-shield` as a local privacy boundary when coding context may cont
 - Treat secrets as redacted data, not reversible pseudonyms.
 - Add `--judge heuristics` to keep high-confidence test-domain values (e.g. `alice@example.com`) and role addresses (e.g. `support@acme.com`) unchanged; secrets stay redacted regardless of judge output.
 - Keep one stable session id per agent task so repeated entities get stable pseudonyms.
+- Set the destination explicitly on `sanitize`: `--recipient local` (or the MCP `recipient` argument) keeps non-secret values for a same-device step, and `--data-category special_category` blocks health/biometric-class data addressed to external recipients; omitting both keeps the conservative `external`/`personal` defaults.
 - Do not assume regex detection is complete. For names, addresses, source-code secrets, or domain-specific entities, install a stronger detector plugin (see `plugin-development` skill).
 - The skill does not choose an LLM provider. The coding client remains responsible for model selection.
 
