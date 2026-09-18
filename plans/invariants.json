@@ -136,5 +136,11 @@
     "rationale": "A typo in a client-supplied trust classification must fail the call, never weaken the recipient-aware policy",
     "sensor": "cargo test -p do-context-shield-mcp-server + CLI value parsers (clap value_parser + sanitize smoke)",
     "category": "security"
+  },
+  {
+    "invariant": "Session mappings are deletable through explicit forget surfaces (MCP context.forget, CLI forget) that require a session, and a process vault must confirm deletion with deleted=true or the call fails closed",
+    "rationale": "Retention must be bounded and a child that silently ignores a wipe would leave raw values resolvable",
+    "sensor": "cargo test -p do-context-shield-core -p do-context-shield-plugin-process -p do-context-shield-mcp-server",
+    "category": "security"
   }
 ]

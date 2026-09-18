@@ -5,6 +5,7 @@ use do_context_shield_plugin_process::{
     DEFAULT_TIMEOUT_MS, ProcessDetector, ProcessJudge, ProcessPolicy, ProcessTransformer,
     ProcessVault,
 };
+use do_context_shield_vault_memory::MemoryVault;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -48,6 +49,10 @@ pub struct ServerConfig {
     pub transformer_command: Option<String>,
     /// Milliseconds to wait for one process-plugin response (detector, policy, transformer, vault).
     pub process_timeout_ms: u64,
+    /// Lifetime in seconds after which in-process memory-vault mappings stop
+    /// resolving. Only valid with the memory vault; `None` keeps mappings for
+    /// the server's lifetime.
+    pub vault_ttl_seconds: Option<u64>,
 }
 
 impl Default for ServerConfig {
@@ -66,28 +71,36 @@ impl Default for ServerConfig {
             transformer: "pseudonymize".to_owned(),
             transformer_command: None,
             process_timeout_ms: DEFAULT_TIMEOUT_MS,
+            vault_ttl_seconds: None,
         }
     }
 }
 
-/// Run the MCP server over newline-delimited JSON-RPC on stdio.
+/// Build the mapping vault from the server configuration.
 ///
 /// # Errors
 ///
-/// Returns an error when stdio I/O fails, a request cannot be answered, or a plugin cannot be constructed.
-pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Error>> {
-    let timeout = Duration::from_millis(config.process_timeout_ms);
+/// Returns an error for an unknown vault name, a missing `--vault-file`, an
+/// incompatible `--vault-file`/`--vault` combination, or a
+/// `--vault-ttl-seconds` that does not apply to the selected vault.
+fn build_vault(
+    config: &mut ServerConfig,
+    timeout: Duration,
+) -> Result<Box<dyn do_context_shield_plugin_api::Vault>, Box<dyn std::error::Error>> {
+    let ttl = config.vault_ttl_seconds;
     let vault: Box<dyn do_context_shield_plugin_api::Vault> = match config.vault.as_deref() {
         Some("process") => {
             if config.vault_file.is_some() {
                 return Err("`--vault-file` cannot be combined with `--vault process`".into());
             }
+            reject_ttl(ttl, "process")?;
             Box::new(ProcessVault::from_selection(
                 config.vault_command.as_deref(),
                 timeout,
             )?)
         }
         Some("json") => {
+            reject_ttl(ttl, "json")?;
             let path = config
                 .vault_file
                 .take()
@@ -98,14 +111,47 @@ pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Err
             if config.vault_file.is_some() {
                 return Err("`--vault-file` cannot be combined with `--vault memory`".into());
             }
-            do_context_shield_plugin_registry::vault("memory")?
+            memory_vault(ttl)
         }
         Some(other) => return Err(format!("unknown vault plugin `{other}`").into()),
         None => match config.vault_file.take() {
-            Some(path) => Box::new(do_context_shield_vault_json::JsonVault::open(path)?),
-            None => do_context_shield_plugin_registry::vault("memory")?,
+            Some(path) => {
+                reject_ttl(ttl, "json")?;
+                Box::new(do_context_shield_vault_json::JsonVault::open(path)?)
+            }
+            None => memory_vault(ttl),
         },
     };
+    Ok(vault)
+}
+
+/// Reject a TTL that the selected vault has no lifetime policy for.
+fn reject_ttl(ttl: Option<u64>, name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    if ttl.is_some() {
+        return Err(format!(
+            "`--vault-ttl-seconds` requires the memory vault (selected: `{name}`)"
+        )
+        .into());
+    }
+    Ok(())
+}
+
+/// In-process memory vault; with a TTL, mappings stop resolving after it.
+fn memory_vault(ttl_seconds: Option<u64>) -> Box<dyn do_context_shield_plugin_api::Vault> {
+    match ttl_seconds {
+        Some(seconds) => Box::new(MemoryVault::with_ttl(Duration::from_secs(seconds))),
+        None => Box::new(MemoryVault::default()),
+    }
+}
+
+/// Run the MCP server over newline-delimited JSON-RPC on stdio.
+///
+/// # Errors
+///
+/// Returns an error when stdio I/O fails, a request cannot be answered, or a plugin cannot be constructed.
+pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Error>> {
+    let timeout = Duration::from_millis(config.process_timeout_ms);
+    let vault = build_vault(&mut config, timeout)?;
     let detector: Box<dyn do_context_shield_plugin_api::Detector> = match config.detector.as_str() {
         "gliner2" => {
             use do_context_shield_detector_gliner2::{Gliner2Config, Gliner2Detector};

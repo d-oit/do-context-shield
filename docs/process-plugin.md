@@ -128,8 +128,17 @@ Requests and responses:
 
 A miss is `{"mapping":null}`.
 
+```json
+{"method":"vault_delete_scope","scope":"s1"}
+```
+
+```json
+{"deleted":true}
+```
+
 - The child owns the mapping store. The pipeline keeps no vault state and starts one child per operation, so token stability across calls is whatever that store provides; a stateless child re-issues tokens per call and breaks `restore`.
 - `get_or_insert` must return a token `restore` can resolve, and `vault_resolve` hits must echo the requested token and carry kind and original.
+- `vault_delete_scope` backs `forget` (MCP `context.forget`, CLI `forget`) and must answer `{"deleted":true}` after removing every mapping and counter for that scope; any other answer (including `{"deleted":false}`) fails the call closed. `expire` stays a no-op for a process vault — retention is the child's policy.
 
 ## Selection
 

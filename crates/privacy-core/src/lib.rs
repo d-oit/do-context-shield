@@ -200,6 +200,27 @@ impl PrivacyPipeline {
             .map(EntitySummary::from)
             .collect())
     }
+
+    /// Delete every mapping stored for a session scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PipelineError::Vault`] when the vault cannot delete the scope.
+    pub fn forget(&mut self, scope: &ScopeId) -> Result<(), PipelineError> {
+        self.vault.delete_scope(scope)?;
+        Ok(())
+    }
+
+    /// Drop expired vault mappings. Vaults without a lifetime policy no-op, so
+    /// a long-running caller can invoke this on every request.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PipelineError::Vault`] when cleanup fails.
+    pub fn expire_vault(&mut self) -> Result<(), PipelineError> {
+        self.vault.expire()?;
+        Ok(())
+    }
 }
 
 /// Validate detector output before the judge and policy see it.
