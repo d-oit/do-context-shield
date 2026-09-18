@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Policy `Action::Block` and `Action::Review`: pipeline fails closed (`PipelineError::Policy`) when policy returns either action, before transformation. Process policy and transformer plugins support wire actions `block` and `review`.
 - Central span validation: `PrivacyPipeline::sanitize` validates detector spans (character boundaries, bounds, input value matching, longest-span-wins overlap resolution) before judging and planning.
 - Vault lifecycle and locking: `Vault::delete_scope` and `Vault::expire` trait methods with default no-ops; `MemoryVault` supports configurable TTL expiry (`with_ttl`), eager/lazy expiration, and scope deletion; `JsonVault` serializes concurrent multi-process writers via advisory file locking (`fs2`) over `<path>.lock` and supports `delete_scope`.
+- Client-facing enforcement context: MCP `context.sanitize` accepts optional `recipient`, `data_category`, `purpose`, and `jurisdiction` arguments, and CLI `sanitize` gains `--recipient`, `--data-category`, `--purpose`, and `--jurisdiction` flags. Omitted fields keep the conservative `external`/`personal` defaults; unknown enum names or wrong JSON types are rejected instead of silently downgraded. MCP tests moved to `crates/mcp-server/src/handle/tests.rs`.
 
 ### Changed
 

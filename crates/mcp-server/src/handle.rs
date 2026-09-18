@@ -1,7 +1,7 @@
 //! JSON-RPC request handling for the MCP stdio adapter.
 
 use do_context_shield_core::PrivacyPipeline;
-use do_context_shield_plugin_api::{ProcessingContext, ScopeId};
+use do_context_shield_plugin_api::{DataCategory, ProcessingContext, RecipientClass, ScopeId};
 use serde_json::{Value, json};
 
 const MODERN_VERSION: &str = "2026-07-28";
@@ -27,6 +27,46 @@ fn error_response(id: Value, message: &str) -> Value {
         map.insert("id".to_owned(), id);
     }
     envelope
+}
+
+/// Parse the optional enforcement-context arguments of `context.sanitize`.
+///
+/// Omitted fields fall back to the most restrictive defaults (external
+/// recipient, personal data, no purpose or jurisdiction). An unknown enum name
+/// or a wrong JSON type is an error, never a silent downgrade to a weaker
+/// context.
+fn processing_context(args: &Value) -> Result<ProcessingContext, String> {
+    let recipient = match args.get("recipient") {
+        None | Some(Value::Null) => RecipientClass::default(),
+        Some(Value::String(name)) => RecipientClass::parse(name).ok_or_else(|| {
+            format!("recipient must be one of local, trusted, external, unknown; got `{name}`")
+        })?,
+        Some(_) => return Err("recipient must be a string".to_owned()),
+    };
+    let data_category = match args.get("data_category") {
+        None | Some(Value::Null) => DataCategory::default(),
+        Some(Value::String(name)) => DataCategory::parse(name).ok_or_else(|| {
+            format!(
+                "data_category must be one of non_personal, personal, special_category; got `{name}`"
+            )
+        })?,
+        Some(_) => return Err("data_category must be a string".to_owned()),
+    };
+    Ok(ProcessingContext {
+        purpose: optional_string(args, "purpose")?,
+        recipient,
+        jurisdiction: optional_string(args, "jurisdiction")?,
+        data_category,
+    })
+}
+
+/// Read an optional string argument, rejecting a present non-string value.
+fn optional_string(args: &Value, key: &str) -> Result<Option<String>, String> {
+    match args.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(value)) => Ok(Some(value.clone())),
+        Some(_) => Err(format!("{key} must be a string")),
+    }
 }
 
 pub(crate) fn handle_request(
@@ -68,7 +108,7 @@ pub(crate) fn handle_request(
             id,
             json!({
                 "tools":[
-                    {"name":"context.sanitize","description":"Detect and sanitize sensitive coding context locally.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"}},"required":["text","session"]}},
+                    {"name":"context.sanitize","description":"Detect and sanitize sensitive coding context locally. Optional recipient/data_category/purpose/jurisdiction arguments select the enforcement context; unknown values are rejected.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"},"recipient":{"type":"string","enum":["local","trusted","external","unknown"],"default":"external"},"data_category":{"type":"string","enum":["non_personal","personal","special_category"],"default":"personal"},"purpose":{"type":"string"},"jurisdiction":{"type":"string"}},"required":["text","session"]}},
                     {"name":"context.restore","description":"Restore locally stored placeholders in an explicit session. Requires `session`; there is no fallback scope for restore.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"}},"required":["text","session"]}},
                     {"name":"context.inspect","description":"Inspect detected sensitive entities (kind, byte span, confidence) without transforming them or returning the matched text.","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}}
                 ],
@@ -92,8 +132,12 @@ pub(crate) fn handle_request(
             let session = args.get("session").and_then(Value::as_str);
             match name {
                 "context.sanitize" => {
+                    let context = match processing_context(&args) {
+                        Ok(context) => context,
+                        Err(message) => return Ok(Some(error_response(id, &message))),
+                    };
                     let scope = ScopeId(session.unwrap_or("default").to_owned());
-                    match pipeline.sanitize(&scope, text, &ProcessingContext::default()) {
+                    match pipeline.sanitize(&scope, text, &context) {
                         Ok(result) => {
                             response(id, json!({"content":[{"type":"text","text":result.text}]}))
                         }
@@ -130,237 +174,4 @@ pub(crate) fn handle_request(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use do_context_shield_plugin_api::{
-        Entity, JudgeError, Judgment, SemanticJudge, SemanticLabel,
-    };
-
-    fn pipeline() -> PrivacyPipeline {
-        let vault = match do_context_shield_plugin_registry::vault("memory") {
-            Ok(vault) => vault,
-            Err(error) => panic!("unexpected error: {error}"),
-        };
-        let detector = match do_context_shield_plugin_registry::detector("regex") {
-            Ok(detector) => detector,
-            Err(error) => panic!("unexpected error: {error}"),
-        };
-        let policy = match do_context_shield_plugin_registry::policy("default") {
-            Ok(policy) => policy,
-            Err(error) => panic!("unexpected error: {error}"),
-        };
-        let transformer = match do_context_shield_plugin_registry::transformer("pseudonymize") {
-            Ok(transformer) => transformer,
-            Err(error) => panic!("unexpected error: {error}"),
-        };
-        PrivacyPipeline::new(detector, policy, transformer, vault)
-    }
-
-    fn request(pipeline: &mut PrivacyPipeline, body: &str) -> Option<Value> {
-        match handle_request(pipeline, body) {
-            Ok(response) => response,
-            Err(error) => panic!("unexpected error: {error}"),
-        }
-    }
-
-    fn tool_call(name: &str, text: &str, session: Option<&str>) -> String {
-        let session_arg = match session {
-            Some(session) => format!(r#","session":"{session}""#),
-            None => String::new(),
-        };
-        format!(
-            r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"{name}","arguments":{{"text":{text:?}{session_arg}}}}}}}"#
-        )
-    }
-
-    fn content_text(response: Option<Value>) -> String {
-        let Some(value) = response else {
-            panic!("expected a response");
-        };
-        value
-            .pointer("/result/content/0/text")
-            .and_then(Value::as_str)
-            .unwrap_or_else(|| panic!("missing content text in {value}"))
-            .to_owned()
-    }
-
-    #[test]
-    fn discover_advertises_modern_and_legacy() {
-        let mut pipeline = pipeline();
-        let response = request(
-            &mut pipeline,
-            r#"{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{}}"#,
-        );
-        let Some(value) = response else {
-            panic!("expected a response");
-        };
-        let versions = value
-            .pointer("/result/supportedVersions")
-            .and_then(Value::as_array)
-            .unwrap_or_else(|| panic!("missing supportedVersions in {value}"));
-        assert!(versions.iter().any(|version| version == MODERN_VERSION));
-        assert!(versions.iter().any(|version| version == LEGACY_VERSION));
-    }
-
-    #[test]
-    fn legacy_initialize_and_notification() {
-        let mut pipeline = pipeline();
-        let response = request(
-            &mut pipeline,
-            r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#,
-        );
-        let Some(value) = response else {
-            panic!("expected a response");
-        };
-        assert_eq!(
-            value
-                .pointer("/result/protocolVersion")
-                .and_then(Value::as_str),
-            Some(LEGACY_VERSION)
-        );
-        let notified = request(
-            &mut pipeline,
-            r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
-        );
-        assert_eq!(notified, None);
-    }
-
-    #[test]
-    fn tools_list_is_deterministic_and_cacheable() {
-        let mut pipeline = pipeline();
-        let response = request(
-            &mut pipeline,
-            r#"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}"#,
-        );
-        let Some(value) = response else {
-            panic!("expected a response");
-        };
-        let names: Vec<&str> = value
-            .pointer("/result/tools")
-            .and_then(Value::as_array)
-            .unwrap_or_else(|| panic!("missing tools in {value}"))
-            .iter()
-            .map(|tool| {
-                tool.get("name")
-                    .and_then(Value::as_str)
-                    .unwrap_or_else(|| panic!("tool without name in {tool}"))
-            })
-            .collect();
-        assert_eq!(
-            names,
-            vec!["context.sanitize", "context.restore", "context.inspect"]
-        );
-        assert_eq!(
-            value.pointer("/result/ttlMs").and_then(Value::as_u64),
-            Some(300_000)
-        );
-        assert_eq!(
-            value.pointer("/result/cacheScope").and_then(Value::as_str),
-            Some("private")
-        );
-    }
-
-    #[test]
-    fn sanitize_restore_round_trip_is_scope_limited() {
-        let mut pipeline = pipeline();
-        let sanitized = content_text(request(
-            &mut pipeline,
-            &tool_call("context.sanitize", "alice@example.com", Some("s")),
-        ));
-        assert!(!sanitized.contains("alice@example.com"));
-        let restored = content_text(request(
-            &mut pipeline,
-            &tool_call("context.restore", &sanitized, Some("s")),
-        ));
-        assert_eq!(restored, "alice@example.com");
-        let blocked = content_text(request(
-            &mut pipeline,
-            &tool_call("context.restore", &sanitized, Some("other")),
-        ));
-        assert_eq!(blocked, sanitized);
-    }
-
-    #[test]
-    fn sanitize_without_session_falls_back_to_default_scope() {
-        let mut pipeline = pipeline();
-        let sanitized = content_text(request(
-            &mut pipeline,
-            &tool_call("context.sanitize", "alice@example.com", None),
-        ));
-        assert!(sanitized.contains("__DO_PRIVATE_EMAIL_1__"), "{sanitized}");
-    }
-
-    #[test]
-    fn restore_without_session_is_rejected() {
-        let mut pipeline = pipeline();
-        let response = request(
-            &mut pipeline,
-            &tool_call("context.restore", "__DO_PRIVATE_EMAIL_1__", None),
-        );
-        let Some(value) = response else {
-            panic!("expected an error response");
-        };
-        assert!(value.get("error").is_some(), "expected error in {value}");
-    }
-
-    #[test]
-    fn inspect_reports_entities_as_json() {
-        let mut pipeline = pipeline();
-        let text = content_text(request(
-            &mut pipeline,
-            &tool_call("context.inspect", "alice@example.com", None),
-        ));
-        assert!(text.contains(r#""kind":"email""#), "{text}");
-        assert!(text.contains(r#""end":17"#), "{text}");
-        // The matched text must never travel back to the calling agent.
-        assert!(!text.contains("alice@example.com"), "{text}");
-    }
-
-    struct TestDomainJudge;
-
-    impl SemanticJudge for TestDomainJudge {
-        fn judge(&self, _input: &str, entities: &[Entity]) -> Result<Vec<Judgment>, JudgeError> {
-            Ok(entities
-                .iter()
-                .enumerate()
-                .map(|(index, _)| Judgment::Labeled {
-                    index,
-                    label: SemanticLabel::Test,
-                    confidence: 0.95,
-                })
-                .collect())
-        }
-    }
-
-    #[test]
-    fn judge_labels_reach_the_policy() {
-        let mut judged = pipeline().with_judge(Box::new(TestDomainJudge));
-        let kept = content_text(request(
-            &mut judged,
-            &tool_call("context.sanitize", "alice@example.com", Some("s")),
-        ));
-        assert_eq!(kept, "alice@example.com");
-        let mut plain = pipeline();
-        let replaced = content_text(request(
-            &mut plain,
-            &tool_call("context.sanitize", "alice@example.com", Some("s")),
-        ));
-        assert_eq!(replaced, "__DO_PRIVATE_EMAIL_1__");
-    }
-
-    #[test]
-    fn unknown_tool_method_and_malformed_json_are_errors() {
-        let mut pipeline = pipeline();
-        for body in [
-            tool_call("context.nope", "x", None),
-            r#"{"jsonrpc":"2.0","id":2,"method":"bogus/method","params":{}}"#.to_owned(),
-            r#"{"jsonrpc": broken"#.to_owned(),
-        ] {
-            let response = request(&mut pipeline, &body);
-            let Some(value) = response else {
-                panic!("expected an error response for {body}");
-            };
-            assert!(value.get("error").is_some(), "expected error in {value}");
-        }
-    }
-}
+mod tests;

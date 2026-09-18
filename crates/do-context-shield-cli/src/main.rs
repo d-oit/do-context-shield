@@ -2,7 +2,7 @@
 
 use clap::{Args, Parser, Subcommand};
 use do_context_shield_core::PrivacyPipeline;
-use do_context_shield_plugin_api::{ProcessingContext, ScopeId};
+use do_context_shield_plugin_api::{DataCategory, ProcessingContext, RecipientClass, ScopeId};
 use do_context_shield_plugin_process::{
     DEFAULT_TIMEOUT_MS, ProcessDetector, ProcessJudge, ProcessPolicy, ProcessTransformer,
     ProcessVault,
@@ -41,6 +41,8 @@ struct SanitizeArgs {
     pipeline: PipelineSelection,
     #[command(flatten)]
     process: ProcessArgs,
+    #[command(flatten)]
+    context: ContextArgs,
 }
 
 #[derive(Args)]
@@ -174,6 +176,45 @@ impl Default for PipelineSelection {
     }
 }
 
+/// Enforcement context for `sanitize`.
+#[derive(Args)]
+struct ContextArgs {
+    /// Recipient trust classification used by the policy.
+    #[arg(
+        long,
+        default_value = "external",
+        value_parser = ["local", "trusted", "external", "unknown"]
+    )]
+    recipient: String,
+    /// Data category of the input used by the policy.
+    #[arg(
+        long,
+        default_value = "personal",
+        value_parser = ["non_personal", "personal", "special_category"]
+    )]
+    data_category: String,
+    /// Purpose of the processing operation (free-form, policy-matched).
+    #[arg(long)]
+    purpose: Option<String>,
+    /// Jurisdiction code (ISO 3166-1 alpha-2), if known.
+    #[arg(long)]
+    jurisdiction: Option<String>,
+}
+
+impl ContextArgs {
+    /// Build the pipeline context. `value_parser` already restricts both enum
+    /// arguments; the parsed-away defaults are the same most-restrictive
+    /// fallback (`external`/`personal`) if that restriction ever changes.
+    fn to_context(&self) -> ProcessingContext {
+        ProcessingContext {
+            purpose: self.purpose.clone(),
+            recipient: RecipientClass::parse(&self.recipient).unwrap_or_default(),
+            jurisdiction: self.jurisdiction.clone(),
+            data_category: DataCategory::parse(&self.data_category).unwrap_or_default(),
+        }
+    }
+}
+
 /// Timeout shared by every process plugin.
 #[derive(Args)]
 struct ProcessArgs {
@@ -297,7 +338,7 @@ fn run_simple(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             let result = pipeline.sanitize(
                 &ScopeId(args.vault.session),
                 &input,
-                &ProcessingContext::default(),
+                &args.context.to_context(),
             )?;
             print!("{}", result.text);
         }

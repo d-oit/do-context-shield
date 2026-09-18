@@ -130,5 +130,11 @@
     "rationale": "Restoration resolves raw values and must never default to a shared or implicit session scope",
     "sensor": "cargo test -p do-context-shield-mcp-server",
     "category": "contracts"
+  },
+  {
+    "invariant": "Adapter context surfaces default to the most restrictive ProcessingContext and reject unknown recipient/data_category names or wrong argument types instead of silently downgrading",
+    "rationale": "A typo in a client-supplied trust classification must fail the call, never weaken the recipient-aware policy",
+    "sensor": "cargo test -p do-context-shield-mcp-server + CLI value parsers (clap value_parser + sanitize smoke)",
+    "category": "security"
   }
 ]
