@@ -17,6 +17,19 @@ jobs:
   update_release_draft:
     name: Draft Release Notes
     runs-on: ubuntu-latest
+    # Skipped on pull requests, so this job's action and config warnings — the
+    # Node runtime deprecation, the spurious webhook-name warnings, and the
+    # categories[].labels / version-resolver deprecations — only became visible
+    # on a push to main, one layer per merge. Exercise a config or version
+    # change before merging by dry-running the action's bundle locally:
+    #
+    #   INPUT_CONFIG-NAME=file:.github/release-drafter.yml INPUT_DRY-RUN=true \
+    #   GITHUB_REPOSITORY=d-oit/do-context-shield GITHUB_REF=refs/heads/main \
+    #   GITHUB_EVENT_NAME=push GITHUB_EVENT_PATH=<payload.json> \
+    #   GITHUB_TOKEN=$(gh auth token) node <action-checkout>/dist/actions/drafter/run.js
+    #
+    # Dry-run performs every read and no write; run it against the previous
+    # config first as a control and compare the ::warning:: lines.
     if: github.event_name != 'pull_request'
     permissions:
       contents: write
