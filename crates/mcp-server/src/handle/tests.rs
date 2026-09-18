@@ -128,7 +128,12 @@ fn tools_list_is_deterministic_and_cacheable() {
         .collect();
     assert_eq!(
         names,
-        vec!["context.sanitize", "context.restore", "context.inspect"]
+        vec![
+            "context.sanitize",
+            "context.restore",
+            "context.inspect",
+            "context.forget"
+        ]
     );
     assert_eq!(
         value.pointer("/result/ttlMs").and_then(Value::as_u64),
@@ -324,4 +329,57 @@ fn invalid_context_args_fail_closed() {
             "expected error for {extra} in {value}"
         );
     }
+}
+
+/// `context.forget` call with an optional session argument.
+fn forget_call(session: Option<&str>) -> String {
+    let session_arg = match session {
+        Some(session) => format!(r#""session":"{session}""#),
+        None => String::new(),
+    };
+    format!(
+        r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"context.forget","arguments":{{{session_arg}}}}}}}"#
+    )
+}
+
+#[test]
+fn forget_requires_an_explicit_session() {
+    let mut pipeline = pipeline();
+    let response = request(&mut pipeline, &forget_call(None));
+    let Some(value) = response else {
+        panic!("expected a response");
+    };
+    assert!(value.get("error").is_some(), "{value}");
+}
+
+#[test]
+fn forget_deletes_the_session_mappings() {
+    let mut pipeline = pipeline();
+    let sanitized = content_text(request(
+        &mut pipeline,
+        &tool_call("context.sanitize", "alice@example.com", Some("s")),
+    ));
+    assert_eq!(sanitized, "__DO_PRIVATE_EMAIL_1__");
+
+    let forgotten = content_text(request(&mut pipeline, &forget_call(Some("s"))));
+    assert!(forgotten.contains(r#""forgotten":true"#), "{forgotten}");
+
+    // After the wipe, restore can no longer resolve the placeholder.
+    let restored = content_text(request(
+        &mut pipeline,
+        &tool_call("context.restore", &sanitized, Some("s")),
+    ));
+    assert_eq!(restored, sanitized);
+
+    // Other sessions are untouched.
+    let other = content_text(request(
+        &mut pipeline,
+        &tool_call("context.sanitize", "bob@example.com", Some("other")),
+    ));
+    content_text(request(&mut pipeline, &forget_call(Some("s"))));
+    let still_resolvable = content_text(request(
+        &mut pipeline,
+        &tool_call("context.restore", &other, Some("other")),
+    ));
+    assert_eq!(still_resolvable, "bob@example.com");
 }

@@ -28,6 +28,7 @@ enum Command {
     Sanitize(SanitizeArgs),
     Restore(RestoreArgs),
     Inspect(InspectArgs),
+    Forget(ForgetArgs),
     McpStdio(McpArgs),
 }
 
@@ -61,6 +62,15 @@ struct InspectArgs {
     process: ProcessArgs,
 }
 
+/// Delete every mapping stored for a session scope.
+#[derive(Args)]
+struct ForgetArgs {
+    #[command(flatten)]
+    vault: VaultArgs,
+    #[command(flatten)]
+    process: ProcessArgs,
+}
+
 /// Session scope and vault selection shared by sanitize and restore.
 #[derive(Args)]
 struct VaultArgs {
@@ -88,6 +98,10 @@ struct McpArgs {
     /// Optional local file for persistence across MCP process restarts (JSON vault).
     #[arg(long)]
     vault_file: Option<PathBuf>,
+    /// Lifetime in seconds after which in-process memory-vault mappings stop
+    /// resolving (memory vault only).
+    #[arg(long)]
+    vault_ttl_seconds: Option<u64>,
     #[command(flatten)]
     store: VaultSelection,
     #[command(flatten)]
@@ -365,11 +379,21 @@ fn run_simple(command: Command) -> Result<(), Box<dyn std::error::Error>> {
             serde_json::to_writer_pretty(io::stdout(), &InspectOutput { entities })?;
             println!();
         }
+        Command::Forget(args) => {
+            let mut pipeline = build_pipeline(
+                &args.vault,
+                &DetectorSelection::default(),
+                &PipelineSelection::default(),
+                &args.process,
+            )?;
+            pipeline.forget(&ScopeId(args.vault.session))?;
+        }
         Command::McpStdio(args) => {
             do_context_shield_mcp_server::run_stdio(do_context_shield_mcp_server::ServerConfig {
                 vault_file: args.vault_file,
                 vault: args.store.vault,
                 vault_command: args.store.vault_command,
+                vault_ttl_seconds: args.vault_ttl_seconds,
                 detector: args.detector.detector,
                 model_dir: args.detector.model_dir,
                 detector_command: args.detector.detector_command,

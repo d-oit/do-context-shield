@@ -101,21 +101,7 @@ pub(crate) fn handle_request(
             }),
         ),
         "notifications/initialized" => return Ok(None),
-        // Tools are returned in a fixed order so clients can cache reliably.
-        // `cacheScope` follows the 2026-07-28 `CacheableResult` vocabulary
-        // (`public`/`private`): results are session-scoped, so `private`.
-        "tools/list" => response(
-            id,
-            json!({
-                "tools":[
-                    {"name":"context.sanitize","description":"Detect and sanitize sensitive coding context locally. Optional recipient/data_category/purpose/jurisdiction arguments select the enforcement context; unknown values are rejected.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"},"recipient":{"type":"string","enum":["local","trusted","external","unknown"],"default":"external"},"data_category":{"type":"string","enum":["non_personal","personal","special_category"],"default":"personal"},"purpose":{"type":"string"},"jurisdiction":{"type":"string"}},"required":["text","session"]}},
-                    {"name":"context.restore","description":"Restore locally stored placeholders in an explicit session. Requires `session`; there is no fallback scope for restore.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"}},"required":["text","session"]}},
-                    {"name":"context.inspect","description":"Inspect detected sensitive entities (kind, byte span, confidence) without transforming them or returning the matched text.","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}}
-                ],
-                "ttlMs":300_000,
-                "cacheScope":"private"
-            }),
-        ),
+        "tools/list" => response(id, tools_list()),
         "tools/call" => {
             let name = request
                 .pointer("/params/name")
@@ -125,52 +111,93 @@ pub(crate) fn handle_request(
                 .pointer("/params/arguments")
                 .cloned()
                 .unwrap_or_else(|| json!({}));
-            let text = args.get("text").and_then(Value::as_str).unwrap_or("");
-            // Schemas require `session`. Sanitize still falls back to `default`
-            // for older clients; restore never does, because it resolves raw
-            // values and must name its session explicitly.
-            let session = args.get("session").and_then(Value::as_str);
-            match name {
-                "context.sanitize" => {
-                    let context = match processing_context(&args) {
-                        Ok(context) => context,
-                        Err(message) => return Ok(Some(error_response(id, &message))),
-                    };
-                    let scope = ScopeId(session.unwrap_or("default").to_owned());
-                    match pipeline.sanitize(&scope, text, &context) {
-                        Ok(result) => {
-                            response(id, json!({"content":[{"type":"text","text":result.text}]}))
-                        }
-                        Err(error) => error_response(id, &error.to_string()),
-                    }
-                }
-                "context.restore" => {
-                    let Some(session) = session else {
-                        return Ok(Some(error_response(
-                            id,
-                            "context.restore requires an explicit session",
-                        )));
-                    };
-                    match pipeline.restore(&ScopeId(session.to_owned()), text) {
-                        Ok(result) => {
-                            response(id, json!({"content":[{"type":"text","text":result}]}))
-                        }
-                        Err(error) => error_response(id, &error.to_string()),
-                    }
-                }
-                "context.inspect" => match pipeline.inspect(text) {
-                    Ok(result) => response(
-                        id,
-                        json!({"content":[{"type":"text","text":serde_json::to_string(&result)?}]}),
-                    ),
-                    Err(error) => error_response(id, &error.to_string()),
-                },
-                _ => error_response(id, "unknown tool"),
-            }
+            tool_call(pipeline, id, name, &args)?
         }
         _ => error_response(id, "unknown method"),
     };
     Ok(Some(result))
+}
+
+/// Tool catalogue. Returned in a fixed order so clients can cache reliably;
+/// `cacheScope` follows the 2026-07-28 `CacheableResult` vocabulary
+/// (`public`/`private`) because results are session-scoped.
+fn tools_list() -> Value {
+    json!({
+        "tools":[
+            {"name":"context.sanitize","description":"Detect and sanitize sensitive coding context locally. Optional recipient/data_category/purpose/jurisdiction arguments select the enforcement context; unknown values are rejected.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"},"recipient":{"type":"string","enum":["local","trusted","external","unknown"],"default":"external"},"data_category":{"type":"string","enum":["non_personal","personal","special_category"],"default":"personal"},"purpose":{"type":"string"},"jurisdiction":{"type":"string"}},"required":["text","session"]}},
+            {"name":"context.restore","description":"Restore locally stored placeholders in an explicit session. Requires `session`; there is no fallback scope for restore.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"}},"required":["text","session"]}},
+            {"name":"context.inspect","description":"Inspect detected sensitive entities (kind, byte span, confidence) without transforming them or returning the matched text.","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}},
+            {"name":"context.forget","description":"Delete all locally stored placeholders for an explicit session. Requires `session`; there is no fallback scope.","inputSchema":{"type":"object","properties":{"session":{"type":"string"}},"required":["session"]}}
+        ],
+        "ttlMs":300_000,
+        "cacheScope":"private"
+    })
+}
+
+/// Dispatch one `tools/call`. Sanitize still falls back to the `default` scope
+/// for older clients; restore and forget never do, because they resolve or
+/// delete raw values and must name their session explicitly.
+fn tool_call(
+    pipeline: &mut PrivacyPipeline,
+    id: Value,
+    name: &str,
+    args: &Value,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let text = args.get("text").and_then(Value::as_str).unwrap_or("");
+    let session = args.get("session").and_then(Value::as_str);
+    Ok(match name {
+        "context.sanitize" => {
+            let context = match processing_context(args) {
+                Ok(context) => context,
+                Err(message) => return Ok(error_response(id, &message)),
+            };
+            // Long-running servers drop expired in-process mappings before
+            // each mutation; vaults without a TTL no-op.
+            if let Err(error) = pipeline.expire_vault() {
+                return Ok(error_response(id, &error.to_string()));
+            }
+            let scope = ScopeId(session.unwrap_or("default").to_owned());
+            match pipeline.sanitize(&scope, text, &context) {
+                Ok(result) => response(id, json!({"content":[{"type":"text","text":result.text}]})),
+                Err(error) => error_response(id, &error.to_string()),
+            }
+        }
+        "context.restore" => {
+            let Some(session) = session else {
+                return Ok(error_response(
+                    id,
+                    "context.restore requires an explicit session",
+                ));
+            };
+            match pipeline.restore(&ScopeId(session.to_owned()), text) {
+                Ok(result) => response(id, json!({"content":[{"type":"text","text":result}]})),
+                Err(error) => error_response(id, &error.to_string()),
+            }
+        }
+        "context.inspect" => match pipeline.inspect(text) {
+            Ok(result) => response(
+                id,
+                json!({"content":[{"type":"text","text":serde_json::to_string(&result)?}]}),
+            ),
+            Err(error) => error_response(id, &error.to_string()),
+        },
+        "context.forget" => {
+            let Some(session) = session else {
+                return Ok(error_response(
+                    id,
+                    "context.forget requires an explicit session",
+                ));
+            };
+            match pipeline.forget(&ScopeId(session.to_owned())) {
+                Ok(()) => response(
+                    id,
+                    json!({"content":[{"type":"text","text":json!({"session":session,"forgotten":true}).to_string()}]}),
+                ),
+                Err(error) => error_response(id, &error.to_string()),
+            }
+        }
+        _ => error_response(id, "unknown tool"),
+    })
 }
 
 #[cfg(test)]

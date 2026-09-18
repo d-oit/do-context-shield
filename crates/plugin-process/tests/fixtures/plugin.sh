@@ -52,9 +52,11 @@ case "$mode" in
   vault-ok)
     case "$request" in
       *vault_get_or_insert*) printf '%s\n' '{"token":"__DO_PRIVATE_EMAIL_1__"}' ;;
+      *vault_delete_scope*) printf '%s\n' '{"deleted":true}' ;;
       *'"scope":"s1"'*'"token":"__DO_PRIVATE_EMAIL_1__"'*) printf '%s\n' '{"mapping":{"kind":"email","original":"alice@example.com","token":"__DO_PRIVATE_EMAIL_1__"}}' ;;
       *) printf '%s\n' '{"mapping":null}' ;;
     esac ;;
+  vault-delete-refused) printf '%s\n' '{"deleted":false}' ;;
   vault-bad-token)   printf '%s\n' '{"token":"NOT_A_PLACEHOLDER"}' ;;
   vault-wrong-token) printf '%s\n' '{"mapping":{"kind":"email","original":"alice@example.com","token":"__DO_PRIVATE_EMAIL_9__"}}' ;;
   vault-miss)        printf '%s\n' '{"mapping":null}' ;;

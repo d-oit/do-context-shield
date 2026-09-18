@@ -367,6 +367,7 @@ dependencies = [
  "do-context-shield-plugin-process",
  "do-context-shield-plugin-registry",
  "do-context-shield-vault-json",
+ "do-context-shield-vault-memory",
  "serde_json",
 ]
 

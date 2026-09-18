@@ -1,9 +1,11 @@
 //! `Vault` over the newline-delimited JSON protocol.
 //!
-//! Requests: `{"method":"vault_get_or_insert","scope":"...","kind":"...","original":"..."}`
-//! and `{"method":"vault_resolve","scope":"...","token":"..."}`. Responses:
-//! `{"token":"__DO_PRIVATE_EMAIL_1__"}` and
-//! `{"mapping":{"kind","original","token"}}` (or `{"mapping":null}`).
+//! Requests: `{"method":"vault_get_or_insert","scope":"...","kind":"...","original":"..."}`,
+//! `{"method":"vault_resolve","scope":"...","token":"..."}`, and
+//! `{"method":"vault_delete_scope","scope":"..."}`. Responses:
+//! `{"token":"__DO_PRIVATE_EMAIL_1__"}`,
+//! `{"mapping":{"kind","original","token"}}` (or `{"mapping":null}`), and
+//! `{"deleted":true}`.
 //!
 //! The child owns the mapping store: `ProcessVault` keeps only the command line
 //! and starts one child per operation, so stability across calls is whatever
@@ -127,6 +129,31 @@ impl Vault for ProcessVault {
             )),
         }
     }
+
+    /// Ask the configured child to delete every mapping for a scope.
+    ///
+    /// The child owns the store, so it must confirm the deletion; `expire`
+    /// stays a no-op because retention of a remote store is the child's
+    /// policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError`] when no command is configured, the child cannot
+    /// be started, no response arrives within the configured timeout, or the
+    /// child does not confirm the deletion.
+    fn delete_scope(&mut self, scope: &ScopeId) -> Result<(), VaultError> {
+        let request = DeleteScopeRequest {
+            method: "vault_delete_scope",
+            scope: &scope.0,
+        };
+        let response: DeleteScopeResponse = self.request(&request)?;
+        if !response.deleted {
+            return Err(VaultError::Message(
+                "process vault did not confirm the scope deletion".to_owned(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// Request written as one JSON line on the child's stdin.
@@ -157,4 +184,18 @@ struct ResolveRequest<'a> {
 struct ResolveResponse {
     #[serde(default)]
     mapping: Option<Mapping>,
+}
+
+/// Request written as one JSON line on the child's stdin.
+#[derive(Serialize)]
+struct DeleteScopeRequest<'a> {
+    method: &'static str,
+    scope: &'a str,
+}
+
+/// Response read as one JSON line from the child's stdout.
+#[derive(Deserialize)]
+struct DeleteScopeResponse {
+    #[serde(default)]
+    deleted: bool,
 }

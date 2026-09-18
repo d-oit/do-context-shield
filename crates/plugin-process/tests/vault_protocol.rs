@@ -85,6 +85,25 @@ fn rejects_a_token_echo_mismatch() {
 }
 
 #[test]
+fn delete_scope_is_confirmed_by_the_child() {
+    let mut vault = vault("vault-ok");
+    match vault.delete_scope(&scope("s1")) {
+        Ok(()) => {}
+        Err(error) => panic!("expected a deletion, got error: {error}"),
+    }
+}
+
+#[test]
+fn rejects_an_unconfirmed_deletion() {
+    let mut vault = vault("vault-delete-refused");
+    let message = match vault.delete_scope(&scope("s1")) {
+        Ok(()) => panic!("expected an error, got a successful deletion"),
+        Err(error) => error.to_string(),
+    };
+    assert!(message.contains("did not confirm"), "got: {message}");
+}
+
+#[test]
 fn errors_without_command() {
     let mut vault = ProcessVault::default();
     let message = match vault.get_or_insert(&scope("s1"), "email", "alice@example.com") {

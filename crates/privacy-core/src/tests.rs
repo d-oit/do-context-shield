@@ -321,3 +321,28 @@ fn block_action_fails_pipeline() {
         assert!(error.to_string().contains("blocked by policy"), "{error}");
     }
 }
+
+#[test]
+fn forget_removes_session_mappings() {
+    let mut pipeline = pipeline();
+    let scope = ScopeId("test".to_owned());
+    let other = ScopeId("other".to_owned());
+    let result = sanitize_ok(&mut pipeline, "alice@example.com");
+    let other_result = match pipeline.sanitize(&other, "bob@example.com", &context()) {
+        Ok(value) => value,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+
+    match pipeline.forget(&scope) {
+        Ok(()) => {}
+        Err(error) => panic!("unexpected error: {error}"),
+    }
+    match pipeline.restore(&scope, &result.text) {
+        Ok(restored) => assert_eq!(restored, result.text),
+        Err(error) => panic!("unexpected error: {error}"),
+    }
+    match pipeline.restore(&other, &other_result.text) {
+        Ok(restored) => assert_eq!(restored, "bob@example.com"),
+        Err(error) => panic!("unexpected error: {error}"),
+    }
+}
