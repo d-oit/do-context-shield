@@ -28,11 +28,11 @@ The agent remains authoritative:
 ```text
 agent loop
    |
-   +-- private.sanitize --> local process
+   +-- context.sanitize --> local process
    |
    +-- remote model/tool receives sanitized context
    |
-   +-- private.restore  --> local process
+   +-- context.restore  --> local process
 ```
 
 MCP and skill files are adapters, not a second agent runtime.

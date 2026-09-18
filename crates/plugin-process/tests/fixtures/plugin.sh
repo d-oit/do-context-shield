@@ -18,6 +18,14 @@ case "$mode" in
   plan-dupe)    printf '%s\n' '{"plan":[{"index":0,"action":"keep"},{"index":0,"action":"redact"}]}' ;;
   plan-range)   printf '%s\n' '{"plan":[{"index":0,"action":"keep"},{"index":7,"action":"keep"}]}' ;;
   plan-unknown) printf '%s\n' '{"plan":[{"index":0,"action":"nope"},{"index":1,"action":"keep"}]}' ;;
+  plan-block)   printf '%s\n' '{"plan":[{"index":0,"action":"block"}]}' ;;
+  plan-review)  printf '%s\n' '{"plan":[{"index":0,"action":"review"}]}' ;;
+  plan-context)
+    case "$request" in
+      *'"recipient":"unknown"'*) printf '%s\n' '{"plan":[{"index":0,"action":"block"}]}' ;;
+      *'"recipient":"local"'*)   printf '%s\n' '{"plan":[{"index":0,"action":"keep"}]}' ;;
+      *)                         printf '%s\n' '{"plan":[{"index":0,"action":"redact"}]}' ;;
+    esac ;;
   plan-judged)
     case "$request" in
       *'"judgments":[{"index":0,"label":"business","confidence":0.95}]'*) printf '%s\n' '{"plan":[{"index":0,"action":"keep"}]}' ;;

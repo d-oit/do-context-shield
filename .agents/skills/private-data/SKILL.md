@@ -21,11 +21,11 @@ Use `do-context-shield` as a local privacy boundary when coding context may cont
 ## Default workflow
 
 1. Keep source text local.
-2. Prefer the `private.inspect`, `private.sanitize`, and `private.restore` MCP tools when the coding client supports MCP (register `do-context-shield mcp-stdio` as a local stdio server, see `docs/client-integration.md`).
+2. Prefer the `context.inspect`, `context.sanitize`, and `context.restore` MCP tools when the coding client supports MCP (register `do-context-shield mcp-stdio` as a local stdio server, see `docs/client-integration.md`).
 3. Otherwise call `do-context-shield inspect` when sensitivity is unclear.
 4. Call `do-context-shield sanitize --session <stable-session-id>` before sending context to an external model/tool. Add `--detector gliner2 --model-dir <dir>` for local NER instead of regex (requires a local ONNX export and a binary built with `--features gliner2`; see below).
 5. Send **only the sanitized text** to the model/tool.
-6. After the response, call `private.restore` or `do-context-shield restore --session <same-session-id>` only when placeholders need to become original values again.
+6. After the response, call `context.restore`, or `do-context-shield restore --session <same-session-id>`, only when placeholders need to become original values again. The MCP tool requires an explicit `session`; there is no fallback scope for restore.
 7. Never paste the vault mappings into model context.
 
 ## Important rules

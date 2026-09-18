@@ -35,6 +35,9 @@ impl Transformer for PseudonymizingTransformer {
             let replacement = match planned.action {
                 Action::Keep => planned.entity.value.clone(),
                 Action::Redact => "__DO_PRIVATE_REDACTED__".to_owned(),
+                Action::Block | Action::Review => {
+                    return Err(TransformError::Message("blocked by policy".to_owned()));
+                }
                 Action::Pseudonymize => {
                     let mapping = vault
                         .get_or_insert(scope, &planned.entity.kind, &planned.entity.value)
@@ -122,5 +125,16 @@ mod tests {
         };
         assert_eq!(result.text, "keep __DO_PRIVATE_REDACTED__");
         assert!(result.mappings.is_empty());
+    }
+
+    #[test]
+    fn block_and_review_actions_fail_closed() {
+        for action in [Action::Block, Action::Review] {
+            let plan = vec![planned("email", 0, 17, action)];
+            match transform("alice@example.com", &plan) {
+                Ok(result) => panic!("expected a policy block, got {}", result.text),
+                Err(error) => assert!(error.to_string().contains("blocked by policy")),
+            }
+        }
     }
 }

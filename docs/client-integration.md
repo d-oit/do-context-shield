@@ -21,8 +21,8 @@ Modern MCP 2026-07-28 clients discover the server with `server/discover` and the
 
 Tool selection and caching contract:
 
-- `tools/list` returns `private.sanitize`, `private.restore`, `private.inspect` in a fixed order with `ttlMs: 300000` and `cacheScope: private` (session-scoped results must not sit in shared caches).
-- `sanitize` and `restore` schemas require `text` and `session`. The server still accepts a missing `session` as `default` for older clients, but always send an explicit per-task session.
+- `tools/list` returns `context.sanitize`, `context.restore`, `context.inspect` in a fixed order with `ttlMs: 300000` and `cacheScope: private` (session-scoped results must not sit in shared caches).
+- `sanitize` and `restore` schemas require `text` and `session`. `context.sanitize` still accepts a missing `session` as `default` for older clients, but `context.restore` resolves raw values and rejects a call without an explicit `session`. Always send an explicit per-task session.
 - Plugin selection: `--detector regex|gliner2|process`, `--policy default|process`, `--transformer pseudonymize|process`, `--vault memory|json|process`, plus `--detector-command`, `--policy-command`, `--transformer-command`, `--vault-command`, and `--process-timeout-ms` for process plugins (`docs/process-plugin.md`). `--detector gliner2` also needs `--model-dir <dir>` and a binary built with `--features gliner2`; `--vault json` needs `--vault-file <path>` and cannot be combined with `--vault process`.
 
 ### Client registration
@@ -52,7 +52,7 @@ Shared notes for every client:
 ```
 
 - `opencode mcp list` reports `✓ do-context-shield connected` when the registration is healthy.
-- Tools surface as `<server>_<tool>` — `do-context-shield_private_inspect`, `do-context-shield_private_sanitize`, `do-context-shield_private_restore`. `opencode run "<prompt>"` drives them non-interactively; tool calls are printed to stderr and the final reply to stdout.
+- Tools surface as `<server>_<tool>` — `do-context-shield_context_inspect`, `do-context-shield_context_sanitize`, `do-context-shield_context_restore`. `opencode run "<prompt>"` drives them non-interactively; tool calls are printed to stderr and the final reply to stdout.
 
 #### omp
 
@@ -71,7 +71,7 @@ Shared notes for every client:
 }
 ```
 
-- omp exposes each tool as an `xd://` device — `xd://mcp__do_context_shield_private_inspect`, `xd://mcp__do_context_shield_private_sanitize`, `xd://mcp__do_context_shield_private_restore`.
+- omp exposes each tool as an `xd://` device — `xd://mcp__do_context_shield_context_inspect`, `xd://mcp__do_context_shield_context_sanitize`, `xd://mcp__do_context_shield_context_restore`.
 - `omp -p --no-session --mode=json "<prompt>"` runs a non-interactive turn; the JSON stream carries `tool_execution_start` / `tool_execution_end` events with the tool result.
 
 #### Other clients

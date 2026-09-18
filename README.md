@@ -30,7 +30,7 @@ Claude Code / OpenCode / Codex / Gemini CLI / custom agent
 - Optional semantic judge (`--judge heuristics` or a local process judge) that labels candidates; secrets stay redacted regardless of judge output.
 - In-memory vault with session scoping.
 - CLI over stdin/stdout.
-- MCP-style JSON-RPC stdio adapter with `private.sanitize`, `private.restore`, and `private.inspect` tools.
+- MCP-style JSON-RPC stdio adapter with `context.sanitize`, `context.restore`, and `context.inspect` tools.
 - Agent skill instructions usable by coding clients that can execute shell tools.
 
 ## Architecture

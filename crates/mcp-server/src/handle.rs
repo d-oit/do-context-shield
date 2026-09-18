@@ -1,7 +1,7 @@
 //! JSON-RPC request handling for the MCP stdio adapter.
 
 use do_context_shield_core::PrivacyPipeline;
-use do_context_shield_plugin_api::ScopeId;
+use do_context_shield_plugin_api::{ProcessingContext, ScopeId};
 use serde_json::{Value, json};
 
 const MODERN_VERSION: &str = "2026-07-28";
@@ -68,9 +68,9 @@ pub(crate) fn handle_request(
             id,
             json!({
                 "tools":[
-                    {"name":"private.sanitize","description":"Detect and sanitize sensitive coding context locally.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"}},"required":["text","session"]}},
-                    {"name":"private.restore","description":"Restore locally stored placeholders in a session.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"}},"required":["text","session"]}},
-                    {"name":"private.inspect","description":"Inspect detected sensitive entities (kind, byte span, confidence) without transforming them or returning the matched text.","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}}
+                    {"name":"context.sanitize","description":"Detect and sanitize sensitive coding context locally.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"}},"required":["text","session"]}},
+                    {"name":"context.restore","description":"Restore locally stored placeholders in an explicit session. Requires `session`; there is no fallback scope for restore.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"}},"required":["text","session"]}},
+                    {"name":"context.inspect","description":"Inspect detected sensitive entities (kind, byte span, confidence) without transforming them or returning the matched text.","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}}
                 ],
                 "ttlMs":300_000,
                 "cacheScope":"private"
@@ -86,24 +86,35 @@ pub(crate) fn handle_request(
                 .cloned()
                 .unwrap_or_else(|| json!({}));
             let text = args.get("text").and_then(Value::as_str).unwrap_or("");
-            // Schemas require `session`, but the server still falls back to
-            // `default` so older clients that send only `text` keep working.
-            let session = args
-                .get("session")
-                .and_then(Value::as_str)
-                .unwrap_or("default");
+            // Schemas require `session`. Sanitize still falls back to `default`
+            // for older clients; restore never does, because it resolves raw
+            // values and must name its session explicitly.
+            let session = args.get("session").and_then(Value::as_str);
             match name {
-                "private.sanitize" => match pipeline.sanitize(&ScopeId(session.to_owned()), text) {
-                    Ok(result) => {
-                        response(id, json!({"content":[{"type":"text","text":result.text}]}))
+                "context.sanitize" => {
+                    let scope = ScopeId(session.unwrap_or("default").to_owned());
+                    match pipeline.sanitize(&scope, text, &ProcessingContext::default()) {
+                        Ok(result) => {
+                            response(id, json!({"content":[{"type":"text","text":result.text}]}))
+                        }
+                        Err(error) => error_response(id, &error.to_string()),
                     }
-                    Err(error) => error_response(id, &error.to_string()),
-                },
-                "private.restore" => match pipeline.restore(&ScopeId(session.to_owned()), text) {
-                    Ok(result) => response(id, json!({"content":[{"type":"text","text":result}]})),
-                    Err(error) => error_response(id, &error.to_string()),
-                },
-                "private.inspect" => match pipeline.inspect(text) {
+                }
+                "context.restore" => {
+                    let Some(session) = session else {
+                        return Ok(Some(error_response(
+                            id,
+                            "context.restore requires an explicit session",
+                        )));
+                    };
+                    match pipeline.restore(&ScopeId(session.to_owned()), text) {
+                        Ok(result) => {
+                            response(id, json!({"content":[{"type":"text","text":result}]}))
+                        }
+                        Err(error) => error_response(id, &error.to_string()),
+                    }
+                }
+                "context.inspect" => match pipeline.inspect(text) {
                     Ok(result) => response(
                         id,
                         json!({"content":[{"type":"text","text":serde_json::to_string(&result)?}]}),
@@ -237,7 +248,7 @@ mod tests {
             .collect();
         assert_eq!(
             names,
-            vec!["private.sanitize", "private.restore", "private.inspect"]
+            vec!["context.sanitize", "context.restore", "context.inspect"]
         );
         assert_eq!(
             value.pointer("/result/ttlMs").and_then(Value::as_u64),
@@ -254,33 +265,42 @@ mod tests {
         let mut pipeline = pipeline();
         let sanitized = content_text(request(
             &mut pipeline,
-            &tool_call("private.sanitize", "alice@example.com", Some("s")),
+            &tool_call("context.sanitize", "alice@example.com", Some("s")),
         ));
         assert!(!sanitized.contains("alice@example.com"));
         let restored = content_text(request(
             &mut pipeline,
-            &tool_call("private.restore", &sanitized, Some("s")),
+            &tool_call("context.restore", &sanitized, Some("s")),
         ));
         assert_eq!(restored, "alice@example.com");
         let blocked = content_text(request(
             &mut pipeline,
-            &tool_call("private.restore", &sanitized, Some("other")),
+            &tool_call("context.restore", &sanitized, Some("other")),
         ));
         assert_eq!(blocked, sanitized);
     }
 
     #[test]
-    fn missing_session_falls_back_to_default_scope() {
+    fn sanitize_without_session_falls_back_to_default_scope() {
         let mut pipeline = pipeline();
         let sanitized = content_text(request(
             &mut pipeline,
-            &tool_call("private.sanitize", "alice@example.com", None),
+            &tool_call("context.sanitize", "alice@example.com", None),
         ));
-        let restored = content_text(request(
+        assert!(sanitized.contains("__DO_PRIVATE_EMAIL_1__"), "{sanitized}");
+    }
+
+    #[test]
+    fn restore_without_session_is_rejected() {
+        let mut pipeline = pipeline();
+        let response = request(
             &mut pipeline,
-            &tool_call("private.restore", &sanitized, None),
-        ));
-        assert_eq!(restored, "alice@example.com");
+            &tool_call("context.restore", "__DO_PRIVATE_EMAIL_1__", None),
+        );
+        let Some(value) = response else {
+            panic!("expected an error response");
+        };
+        assert!(value.get("error").is_some(), "expected error in {value}");
     }
 
     #[test]
@@ -288,7 +308,7 @@ mod tests {
         let mut pipeline = pipeline();
         let text = content_text(request(
             &mut pipeline,
-            &tool_call("private.inspect", "alice@example.com", None),
+            &tool_call("context.inspect", "alice@example.com", None),
         ));
         assert!(text.contains(r#""kind":"email""#), "{text}");
         assert!(text.contains(r#""end":17"#), "{text}");
@@ -317,13 +337,13 @@ mod tests {
         let mut judged = pipeline().with_judge(Box::new(TestDomainJudge));
         let kept = content_text(request(
             &mut judged,
-            &tool_call("private.sanitize", "alice@example.com", Some("s")),
+            &tool_call("context.sanitize", "alice@example.com", Some("s")),
         ));
         assert_eq!(kept, "alice@example.com");
         let mut plain = pipeline();
         let replaced = content_text(request(
             &mut plain,
-            &tool_call("private.sanitize", "alice@example.com", Some("s")),
+            &tool_call("context.sanitize", "alice@example.com", Some("s")),
         ));
         assert_eq!(replaced, "__DO_PRIVATE_EMAIL_1__");
     }
@@ -332,7 +352,7 @@ mod tests {
     fn unknown_tool_method_and_malformed_json_are_errors() {
         let mut pipeline = pipeline();
         for body in [
-            tool_call("private.nope", "x", None),
+            tool_call("context.nope", "x", None),
             r#"{"jsonrpc":"2.0","id":2,"method":"bogus/method","params":{}}"#.to_owned(),
             r#"{"jsonrpc": broken"#.to_owned(),
         ] {

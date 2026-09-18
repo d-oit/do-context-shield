@@ -106,5 +106,29 @@
     "rationale": "A judge trusted without validation turns a malformed response into a silent policy bypass",
     "sensor": "cargo test -p do-context-shield-core -p do-context-shield-plugin-process",
     "category": "security"
+  },
+  {
+    "invariant": "Recipient-aware default policy enforces GDPR/jurisdiction data categories: special-category data addressed to external or unknown recipients blocks, and unknown recipients block non-secret non-personal data",
+    "rationale": "Fail-closed boundary prevents sensitive personal data from leaking to unvetted recipients",
+    "sensor": "cargo test -p do-context-shield-policy-default -p do-context-shield-core",
+    "category": "security"
+  },
+  {
+    "invariant": "Detector output is validated centrally for UTF-8 character boundaries, input bounds, value matching, and non-overlapping spans before judging or planning",
+    "rationale": "Downstream pipeline stages (judge, policy, transformer) must never encounter corrupted offsets or overlapping entity replacements",
+    "sensor": "cargo test -p do-context-shield-core",
+    "category": "security"
+  },
+  {
+    "invariant": "Vault lifecycle supports explicit session deletion and TTL expiration; JSON vault serializes concurrent writers via file locking",
+    "rationale": "Session cleanup bounds storage and protects privacy after agent tasks conclude; file locking prevents race conditions in multi-process workflows",
+    "sensor": "cargo test -p do-context-shield-vault-memory -p do-context-shield-vault-json",
+    "category": "architecture"
+  },
+  {
+    "invariant": "MCP tools reside in the context.* namespace and context.restore strictly requires an explicit session",
+    "rationale": "Restoration resolves raw values and must never default to a shared or implicit session scope",
+    "sensor": "cargo test -p do-context-shield-mcp-server",
+    "category": "contracts"
   }
 ]

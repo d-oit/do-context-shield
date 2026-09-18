@@ -1,9 +1,9 @@
 //! Privacy pipeline independent of any LLM provider or agent runtime.
 
 use do_context_shield_plugin_api::{
-    Detector, DetectorError, Entity, JudgeError, Policy, PolicyError, ScopeId, SemanticJudge,
-    TransformError, TransformResult, Transformer, Vault, VaultError, is_placeholder_token,
-    validate_judgments,
+    Action, Detector, DetectorError, Entity, JudgeError, Policy, PolicyError, ProcessingContext,
+    ScopeId, SemanticJudge, TransformError, TransformResult, Transformer, Vault, VaultError,
+    is_placeholder_token, validate_judgments,
 };
 use serde::{Deserialize, Serialize};
 
@@ -97,17 +97,24 @@ impl PrivacyPipeline {
         self
     }
 
-    /// Detect and sanitize text in a session scope.
+    /// Detect and sanitize text in a session scope under an enforcement context.
+    ///
+    /// Detector output is validated (character boundaries, bounds, value
+    /// match, overlaps) before the judge and policy see it. A plan containing
+    /// [`Action::Block`] or [`Action::Review`] fails the call instead of
+    /// producing text.
     ///
     /// # Errors
     ///
-    /// Returns [`PipelineError`] when detection, planning, transformation, or storage fails.
+    /// Returns [`PipelineError`] when detection, validation, planning,
+    /// transformation, or storage fails.
     pub fn sanitize(
         &mut self,
         scope: &ScopeId,
         input: &str,
+        context: &ProcessingContext,
     ) -> Result<SanitizeResult, PipelineError> {
-        let entities = self.detector.detect(input)?;
+        let entities = validate_spans(input, &self.detector.detect(input)?)?;
         let judgments = match &self.judge {
             Some(judge) => {
                 let judgments = judge.judge(input, &entities)?;
@@ -116,7 +123,15 @@ impl PrivacyPipeline {
             }
             None => Vec::new(),
         };
-        let plan = self.policy.plan(&entities, &judgments)?;
+        let plan = self.policy.plan(&entities, &judgments, context)?;
+        if plan
+            .iter()
+            .any(|planned| matches!(planned.action, Action::Block | Action::Review))
+        {
+            return Err(PipelineError::Policy(PolicyError::Message(
+                "input blocked by policy".to_owned(),
+            )));
+        }
         let TransformResult { text, .. } =
             self.transformer
                 .transform(input, &plan, scope, self.vault.as_mut())?;
@@ -187,215 +202,52 @@ impl PrivacyPipeline {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use do_context_shield_detector_regex::RegexDetector;
-    use do_context_shield_plugin_api::{Judgment, SemanticLabel};
-    use do_context_shield_policy_default::DefaultPolicy;
-    use do_context_shield_transformer_pseudonymize::PseudonymizingTransformer;
-    use do_context_shield_vault_memory::MemoryVault;
-
-    fn pipeline() -> PrivacyPipeline {
-        PrivacyPipeline::new(
-            Box::new(RegexDetector),
-            Box::new(DefaultPolicy),
-            Box::new(PseudonymizingTransformer),
-            Box::new(MemoryVault::default()),
-        )
-    }
-
-    #[test]
-    fn sanitize_preserves_repeated_identity() {
-        let mut pipeline = pipeline();
-        let scope = ScopeId("test".to_owned());
-        let result =
-            match pipeline.sanitize(&scope, "mail alice@example.com then alice@example.com") {
-                Ok(value) => value,
-                Err(error) => panic!("unexpected error: {error}"),
-            };
-        assert_eq!(result.text.matches("__DO_PRIVATE_EMAIL_1__").count(), 2);
-        assert!(!result.text.contains("alice@example.com"));
-    }
-
-    #[test]
-    fn restore_is_scope_limited() {
-        let mut pipeline = pipeline();
-        let scope = ScopeId("test".to_owned());
-        let other = ScopeId("other".to_owned());
-        let result = match pipeline.sanitize(&scope, "alice@example.com") {
-            Ok(value) => value,
-            Err(error) => panic!("unexpected error: {error}"),
-        };
-        let restored = match pipeline.restore(&scope, &result.text) {
-            Ok(value) => value,
-            Err(error) => panic!("unexpected error: {error}"),
-        };
-        let blocked = match pipeline.restore(&other, &result.text) {
-            Ok(value) => value,
-            Err(error) => panic!("unexpected error: {error}"),
-        };
-        assert_eq!(restored, "alice@example.com");
-        assert_eq!(blocked, result.text);
-    }
-
-    #[test]
-    fn restore_skips_malformed_placeholders_and_keeps_scanning() {
-        let mut pipeline = pipeline();
-        let scope = ScopeId("test".to_owned());
-        let result = match pipeline.sanitize(&scope, "alice@example.com") {
-            Ok(value) => value,
-            Err(error) => panic!("unexpected error: {error}"),
-        };
-        let adversarial = format!("__DO_PRIVATE_ junk __DO_PRIVATE_ {}", result.text);
-        let restored = match pipeline.restore(&scope, &adversarial) {
-            Ok(value) => value,
-            Err(error) => panic!("unexpected error: {error}"),
-        };
-        assert!(restored.contains("alice@example.com"));
-        assert!(restored.contains("__DO_PRIVATE_ junk __DO_PRIVATE_ "));
-    }
-
-    #[test]
-    fn restore_leaves_redacted_and_truncated_tokens_untouched() {
-        let pipeline = pipeline();
-        let scope = ScopeId("test".to_owned());
-        for input in [
-            "__DO_PRIVATE_REDACTED__",
-            "prefix __DO_PRIVATE_",
-            "__DO_PRIVATE___",
-        ] {
-            match pipeline.restore(&scope, input) {
-                Ok(output) => assert_eq!(output, input),
-                Err(error) => panic!("unexpected error: {error}"),
-            }
+/// Validate detector output before the judge and policy see it.
+///
+/// Every span must fall on UTF-8 character boundaries, stay within the input,
+/// and carry the value the input actually holds at that span. Overlaps are
+/// resolved longest-span-wins: entities are ordered by start (widest first)
+/// and any entity overlapping an already-kept one is dropped, so the
+/// transformer never sees overlapping ranges.
+fn validate_spans(input: &str, entities: &[Entity]) -> Result<Vec<Entity>, PipelineError> {
+    let mut validated = Vec::with_capacity(entities.len());
+    for entity in entities {
+        if !input.is_char_boundary(entity.start) || !input.is_char_boundary(entity.end) {
+            return Err(PipelineError::Detector(DetectorError::Message(format!(
+                "entity span {}..{} is not on character boundaries",
+                entity.start, entity.end
+            ))));
         }
-    }
-
-    struct FixedJudge(Judgment);
-
-    impl SemanticJudge for FixedJudge {
-        fn judge(&self, _input: &str, _entities: &[Entity]) -> Result<Vec<Judgment>, JudgeError> {
-            Ok(vec![self.0])
+        if entity.end > input.len() || entity.start > entity.end {
+            return Err(PipelineError::Detector(DetectorError::Message(format!(
+                "entity span {}..{} is out of bounds for input of length {}",
+                entity.start,
+                entity.end,
+                input.len()
+            ))));
         }
-    }
-
-    struct PairJudge(Judgment, Judgment);
-
-    impl SemanticJudge for PairJudge {
-        fn judge(&self, _input: &str, _entities: &[Entity]) -> Result<Vec<Judgment>, JudgeError> {
-            Ok(vec![self.0, self.1])
+        if input.get(entity.start..entity.end) != Some(entity.value.as_str()) {
+            return Err(PipelineError::Detector(DetectorError::Message(
+                "entity value does not match the input at the declared span".to_owned(),
+            )));
         }
+        validated.push(entity.clone());
     }
 
-    struct BrokenJudge;
-
-    impl SemanticJudge for BrokenJudge {
-        fn judge(&self, _input: &str, _entities: &[Entity]) -> Result<Vec<Judgment>, JudgeError> {
-            Err(JudgeError::Message("boom".to_owned()))
+    validated.sort_by_key(|entity| (entity.start, std::cmp::Reverse(entity.end)));
+    let mut deduped: Vec<Entity> = Vec::with_capacity(validated.len());
+    for entity in validated {
+        if deduped
+            .iter()
+            .any(|kept| entity.start < kept.end && kept.start < entity.end)
+        {
+            continue;
         }
+        deduped.push(entity);
     }
-
-    fn judged(judge: impl SemanticJudge + 'static) -> PrivacyPipeline {
-        pipeline().with_judge(Box::new(judge))
-    }
-
-    fn sanitize_ok(pipeline: &mut PrivacyPipeline, input: &str) -> SanitizeResult {
-        match pipeline.sanitize(&ScopeId("test".to_owned()), input) {
-            Ok(result) => result,
-            Err(error) => panic!("unexpected error: {error}"),
-        }
-    }
-
-    fn sanitize_err(pipeline: &mut PrivacyPipeline, input: &str) -> PipelineError {
-        match pipeline.sanitize(&ScopeId("test".to_owned()), input) {
-            Ok(result) => panic!("expected an error, got {result:?}"),
-            Err(error) => error,
-        }
-    }
-
-    #[test]
-    fn judge_labels_flow_into_policy() {
-        let mut pipeline = judged(FixedJudge(Judgment::Labeled {
-            index: 0,
-            label: SemanticLabel::Test,
-            confidence: 0.95,
-        }));
-        let result = sanitize_ok(&mut pipeline, "alice@example.com");
-        assert_eq!(result.text, "alice@example.com");
-        assert_eq!(result.entities.len(), 1);
-    }
-
-    #[test]
-    fn abstaining_judge_falls_back_to_the_kind_rules() {
-        let mut pipeline = judged(FixedJudge(Judgment::Abstain { index: 0 }));
-        let result = sanitize_ok(&mut pipeline, "alice@example.com");
-        assert!(result.text.contains("__DO_PRIVATE_EMAIL_1__"), "{result:?}");
-    }
-
-    #[test]
-    fn low_confidence_judgment_is_not_trusted() {
-        let mut pipeline = judged(FixedJudge(Judgment::Labeled {
-            index: 0,
-            label: SemanticLabel::Test,
-            confidence: 0.5,
-        }));
-        let result = sanitize_ok(&mut pipeline, "alice@example.com");
-        assert!(result.text.contains("__DO_PRIVATE_EMAIL_1__"), "{result:?}");
-    }
-
-    #[test]
-    fn secret_kind_is_redacted_even_when_judge_says_test() {
-        let mut pipeline = judged(FixedJudge(Judgment::Labeled {
-            index: 0,
-            label: SemanticLabel::Test,
-            confidence: 0.95,
-        }));
-        let fixture = format!("sk-test-{}", "0123456789abcdef");
-        let result = sanitize_ok(&mut pipeline, &fixture);
-        assert!(
-            result.text.contains("__DO_PRIVATE_REDACTED__"),
-            "{result:?}"
-        );
-    }
-
-    #[test]
-    fn judge_failure_fails_closed() {
-        let mut pipeline = judged(BrokenJudge);
-        let error = sanitize_err(&mut pipeline, "alice@example.com");
-        assert!(matches!(error, PipelineError::Judge(_)), "{error:?}");
-    }
-
-    #[test]
-    fn out_of_range_judgment_fails_closed() {
-        let mut pipeline = judged(FixedJudge(Judgment::Labeled {
-            index: 7,
-            label: SemanticLabel::Personal,
-            confidence: 0.9,
-        }));
-        let error = sanitize_err(&mut pipeline, "alice@example.com");
-        assert!(
-            matches!(
-                error,
-                PipelineError::Judge(JudgeError::IndexOutOfRange { index: 7, .. })
-            ),
-            "{error:?}"
-        );
-    }
-
-    #[test]
-    fn duplicate_judgment_fails_closed() {
-        let mut pipeline = judged(PairJudge(
-            Judgment::Abstain { index: 0 },
-            Judgment::Abstain { index: 0 },
-        ));
-        let error = sanitize_err(&mut pipeline, "alice@example.com");
-        assert!(
-            matches!(
-                error,
-                PipelineError::Judge(JudgeError::DuplicateIndex { index: 0 })
-            ),
-            "{error:?}"
-        );
-    }
+    deduped.sort_by_key(|entity| (entity.start, entity.end));
+    Ok(deduped)
 }
+
+#[cfg(test)]
+mod tests;

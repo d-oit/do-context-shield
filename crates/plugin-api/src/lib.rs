@@ -31,6 +31,11 @@ pub enum Action {
     Pseudonymize,
     /// Remove the value irreversibly.
     Redact,
+    /// Reject the entire input; the pipeline returns an error, not sanitized text.
+    Block,
+    /// Flag for human review; the pipeline treats this as [`Action::Block`] until
+    /// a review flow exists.
+    Review,
 }
 
 /// Entity plus policy decision.
@@ -61,6 +66,10 @@ pub struct Mapping {
     /// Replacement token.
     pub token: String,
 }
+
+mod context;
+
+pub use context::{DataCategory, ProcessingContext, RecipientClass};
 
 /// Detector failures.
 #[derive(Debug, Error)]
@@ -109,7 +118,9 @@ pub trait Policy: Send + Sync {
     /// Build transformation decisions.
     ///
     /// `judgments` is empty when no semantic judge is configured; every index
-    /// has already been validated against `entities`.
+    /// has already been validated against `entities`. `context` carries the
+    /// enforcement context (recipient trust, data category, purpose, and
+    /// jurisdiction) the policy may consult.
     ///
     /// # Errors
     ///
@@ -118,6 +129,7 @@ pub trait Policy: Send + Sync {
         &self,
         entities: &[Entity],
         judgments: &[Judgment],
+        context: &ProcessingContext,
     ) -> Result<Vec<PlannedEntity>, PolicyError>;
 }
 
@@ -171,6 +183,29 @@ pub trait Vault: Send + Sync {
     ///
     /// Returns [`VaultError`] when resolution fails.
     fn resolve(&self, scope: &ScopeId, token: &str) -> Result<Option<Mapping>, VaultError>;
+
+    /// Delete every mapping and counter for a session scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError`] when the deletion cannot be completed. Vaults
+    /// that cannot delete state keep the default no-op, so a caller that never
+    /// deletes a scope is unaffected.
+    fn delete_scope(&mut self, _scope: &ScopeId) -> Result<(), VaultError> {
+        Ok(())
+    }
+
+    /// Remove expired mappings.
+    ///
+    /// Called by the pipeline or a background tick. Vaults without a lifetime
+    /// policy keep the default no-op.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError`] when cleanup cannot be completed.
+    fn expire(&mut self) -> Result<(), VaultError> {
+        Ok(())
+    }
 }
 
 /// Whether `token` has the `__DO_PRIVATE_<INNER>__` placeholder shape that
