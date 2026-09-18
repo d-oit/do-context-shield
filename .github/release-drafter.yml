@@ -19,41 +19,53 @@ template: |
 
 categories:
   - title: 'Features'
-    labels:
-      - 'enhancement'
-      - 'feature'
+    when:
+      labels:
+        - 'enhancement'
+        - 'feature'
   - title: 'Bug Fixes'
-    labels:
-      - 'bug'
-      - 'fix'
-      - 'bugfix'
+    when:
+      labels:
+        - 'bug'
+        - 'fix'
+        - 'bugfix'
   - title: 'Security'
-    labels:
-      - 'security'
+    when:
+      labels:
+        - 'security'
   - title: 'Maintenance'
-    labels:
-      - 'chore'
-      - 'deps'
-      - 'dependencies'
-      - 'refactor'
+    when:
+      labels:
+        - 'chore'
+        - 'deps'
+        - 'dependencies'
+        - 'refactor'
   - title: 'Documentation'
-    labels:
-      - 'documentation'
-      - 'docs'
+    when:
+      labels:
+        - 'documentation'
+        - 'docs'
+  # v7 moved version resolution onto categories: a matching category's
+  # `semver-increment` contributes, and the highest match wins. These
+  # resolver-only categories reproduce the label lists the removed
+  # top-level `version-resolver` key used, without rendering a section.
+  - type: 'version-resolver'
+    semver-increment: 'major'
+    when:
+      label: 'major'
+  - type: 'version-resolver'
+    semver-increment: 'minor'
+    when:
+      labels:
+        - 'enhancement'
+        - 'feature'
+  - type: 'version-resolver'
+    semver-increment: 'patch'
+    when:
+      labels:
+        - 'bug'
+        - 'patch'
+        - 'chore'
 
 change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
 change-title-escapes: '\<*_&'
-
-version-resolver:
-  major:
-    labels:
-      - 'major'
-  minor:
-    labels:
-      - 'enhancement'
-      - 'feature'
-  patch:
-    labels:
-      - 'bug'
-      - 'patch'
-      - 'chore'
