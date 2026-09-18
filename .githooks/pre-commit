@@ -45,7 +45,10 @@ if [[ -n "$STAGED_RS" ]]; then
     printf "  ${GREEN}✓ No unwrap/expect${NC}\n"
   fi
   printf "Checking formatting...\n"
-  if ! echo "$STAGED_RS" | xargs rustfmt --check 2>/dev/null; then
+  # Workspace-wide on purpose: bare `rustfmt --check` cannot resolve
+  # `edition.workspace = true`, falls back to an older style edition and
+  # false-fails on edition-2024 files. Same command as the do-harness sensor.
+  if ! cargo fmt --all -- --check; then
     printf "  ${RED}✗ Formatting issues. Run: cargo fmt --all${NC}\n"
     FAILED=1
   else
