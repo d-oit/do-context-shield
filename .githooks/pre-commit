@@ -18,10 +18,38 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 FAILED=0
 
+# Protected-branch guard: `main` takes pull requests only, so a local commit
+# there can never be pushed — it is nearly always a slip after a fetch/reset.
+BRANCH="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+if [[ "$BRANCH" == "main" ]]; then
+  printf "${RED}✗ Refusing to commit on 'main': it only accepts pull requests.${NC}\n"
+  printf "  Branch first: git switch -c <type>/<description>\n"
+  printf "  To bypass (not recommended): git commit --no-verify\n"
+  exit 1
+fi
+
+# Staged secret scan with the same config CI uses. Requires gitleaks on PATH;
+# without it the check is skipped with a note (CI still scans the branch).
+if command -v gitleaks >/dev/null 2>&1; then
+  printf "Checking staged content for secrets (gitleaks)...\n"
+  if gitleaks git --staged --redact --exit-code=2 --no-banner >/dev/null 2>&1; then
+    printf "  ${GREEN}✓ No secrets in staged content${NC}\n"
+  else
+    printf "  ${RED}✗ gitleaks flagged the staged content — inspect with: gitleaks git --staged --redact${NC}\n"
+    FAILED=1
+  fi
+else
+  printf "${YELLOW}SKIP: gitleaks not installed — staged secret scan unavailable (CI still scans).${NC}\n"
+fi
+
 STAGED_RS=$(git diff --cached --name-only --diff-filter=ACM -- '*.rs' 2>/dev/null)
 STAGED_TOML=$(git diff --cached --name-only --diff-filter=ACM -- '*.toml' 2>/dev/null)
 
 if [[ -z "$STAGED_RS" && -z "$STAGED_TOML" ]]; then
+  if (( FAILED )); then
+    printf "\n${RED}Pre-commit checks FAILED.${NC}\n"
+    exit 1
+  fi
   printf "${GREEN}No staged .rs or .toml files — skipping checks.${NC}\n"
   exit 0
 fi
