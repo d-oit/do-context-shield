@@ -1,9 +1,28 @@
-# All runtime capabilities are selected independently.
+# Plugin selection. All plugins have compiled-in defaults; a value here
+# overrides that default and is itself overridden by the matching CLI flag.
 [plugins]
-detector = "regex"
-policy = "default"
-transformer = "pseudonymize"
-vault = "memory"
+detector = "regex"                  # regex | gliner2 | process
+policy = "default"                  # default | process
+transformer = "pseudonymize"        # pseudonymize | process
+# judge = "heuristics"             # heuristics | process (optional)
+# model_dir = "path/to/gliner2"    # GLiNER2 ONNX export directory
+# detector_command = "my-detector"  # process plugin command
+# policy_command = "my-policy"
+# transformer_command = "my-transformer"
+# judge_command = "my-judge"
 
-# Future local replacements can use names such as `gliner2`, `redact`,
-# `sqlite`, or a process plugin without changing the core pipeline.
+[vault]
+# vault = "memory"                 # memory | json | process
+# vault_file = "vault.json"        # required with vault = "json"
+# vault_command = "my-vault"       # process plugin command
+# vault_ttl_seconds = 3600         # memory vault mapping lifetime
+
+# Default enforcement context for `sanitize`. CLI flags override per call.
+[context]
+# recipient = "external"           # local | trusted | external | unknown
+# data_category = "personal"       # non_personal | personal | special_category
+# purpose = "code assistance"
+# jurisdiction = "DE"
+
+[process]
+# timeout_ms = 30000               # per-plugin response timeout

@@ -142,5 +142,11 @@
     "rationale": "Retention must be bounded and a child that silently ignores a wipe would leave raw values resolvable",
     "sensor": "cargo test -p do-context-shield-core -p do-context-shield-plugin-process -p do-context-shield-mcp-server",
     "category": "security"
+  },
+  {
+    "invariant": "The configuration file may only select known plugins and context names; unknown fields or values fail startup, and a CLI flag outranks the file, which outranks the built-in default",
+    "rationale": "A config typo must never silently select a weaker plugin, and effective settings must not depend on which clap default happened to be compiled in",
+    "sensor": "cargo test -p do-context-shield (config module tests: unknown field/value rejected, CLI-over-config precedence)",
+    "category": "security"
   }
 ]
