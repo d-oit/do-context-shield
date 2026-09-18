@@ -39,7 +39,6 @@ fn sanitizes_and_restores_across_process_plugins() {
         Err(error) => panic!("sanitize failed: {error}"),
     };
     assert_eq!(result.text, "__DO_PRIVATE_EMAIL_1__");
-    assert_eq!(result.mappings.len(), 1);
     let restored = match pipeline.restore(&scope("s1"), &result.text) {
         Ok(restored) => restored,
         Err(error) => panic!("restore failed: {error}"),

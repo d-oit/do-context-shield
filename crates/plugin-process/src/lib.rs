@@ -11,6 +11,7 @@
 //! Methods:
 //!
 //! - `detect` — [`ProcessDetector`]: input text to entities.
+//! - `judge` — [`ProcessJudge`]: input plus entities to per-candidate labels.
 //! - `plan` — [`ProcessPolicy`]: entities to per-entity actions.
 //! - `transform` — [`ProcessTransformer`]: input plus plan to sanitized text.
 //! - `vault_get_or_insert` / `vault_resolve` — [`ProcessVault`]: scope-keyed
@@ -46,12 +47,15 @@
 //! for anything more elaborate.
 
 mod detector;
+mod judge;
 mod policy;
 mod protocol;
 mod transformer;
 mod vault;
+mod wire;
 
 pub use detector::ProcessDetector;
+pub use judge::ProcessJudge;
 pub use policy::ProcessPolicy;
 pub use transformer::ProcessTransformer;
 pub use vault::ProcessVault;

@@ -1,11 +1,16 @@
 //! `Policy` over the newline-delimited JSON protocol.
 //!
-//! Request: `{"method":"plan","entities":[{"kind","start","end","value","confidence"}]}`.
+//! Request: `{"method":"plan","entities":[{"kind","start","end","value","confidence"}],"judgments":[{"index":0,"label":"business","confidence":0.95}]}`.
 //! Response: `{"plan":[{"index":0,"action":"keep|pseudonymize|redact"}]}`.
+//!
+//! `judgments` carries the semantic judge's decisions and is empty when no
+//! judge is configured. An abstention serializes as `{"index":0,"label":null}`,
+//! and `confidence` is omitted for abstentions.
 
 use crate::ProcessConfig;
 use crate::protocol;
-use do_context_shield_plugin_api::{Action, Entity, PlannedEntity, Policy, PolicyError};
+use crate::wire::WireEntity;
+use do_context_shield_plugin_api::{Action, Entity, Judgment, PlannedEntity, Policy, PolicyError};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -60,7 +65,11 @@ impl Policy for ProcessPolicy {
     /// Returns [`PolicyError`] when no command is configured, the child cannot
     /// be started, no response arrives within the configured timeout, or the
     /// response violates the protocol contract.
-    fn plan(&self, entities: &[Entity]) -> Result<Vec<PlannedEntity>, PolicyError> {
+    fn plan(
+        &self,
+        entities: &[Entity],
+        judgments: &[Judgment],
+    ) -> Result<Vec<PlannedEntity>, PolicyError> {
         let Some((program, args)) = protocol::split_command(self.config.command.as_deref()) else {
             return Err(PolicyError::Message(NO_COMMAND.to_owned()));
         };
@@ -79,6 +88,7 @@ impl Policy for ProcessPolicy {
             &Request {
                 method: "plan",
                 entities: wire_entities,
+                judgments: wire_judgments(judgments),
             },
         )
         .map_err(PolicyError::Message)?;
@@ -94,16 +104,39 @@ impl Policy for ProcessPolicy {
 struct Request<'a> {
     method: &'static str,
     entities: Vec<WireEntity<'a>>,
+    judgments: Vec<WireJudgment>,
 }
 
-/// One detected entity as sent to the child.
+/// One judge decision as sent to the child.
 #[derive(Serialize)]
-struct WireEntity<'a> {
-    kind: &'a str,
-    start: usize,
-    end: usize,
-    value: &'a str,
-    confidence: f32,
+struct WireJudgment {
+    index: usize,
+    label: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    confidence: Option<f32>,
+}
+
+/// Convert pipeline judgments to the wire shape.
+fn wire_judgments(judgments: &[Judgment]) -> Vec<WireJudgment> {
+    judgments
+        .iter()
+        .map(|judgment| match judgment {
+            Judgment::Labeled {
+                index,
+                label,
+                confidence,
+            } => WireJudgment {
+                index: *index,
+                label: Some(label.as_str()),
+                confidence: Some(*confidence),
+            },
+            Judgment::Abstain { index } => WireJudgment {
+                index: *index,
+                label: None,
+                confidence: None,
+            },
+        })
+        .collect()
 }
 
 /// Response read as one JSON line from the child's stdout.

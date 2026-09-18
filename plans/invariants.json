@@ -24,7 +24,7 @@
     "category": "architecture"
   },
   {
-    "invariant": "Every detector, policy, transformer, and vault implementation stays replaceable behind plugin-api traits",
+    "invariant": "Every detector, judge, policy, transformer, and vault implementation stays replaceable behind plugin-api traits",
     "rationale": "Capabilities must remain swappable and testable in isolation",
     "sensor": "cargo check --workspace (implementations compile against plugin-api) + review of new capability crates",
     "category": "architecture"
@@ -38,7 +38,7 @@
   {
     "invariant": "Raw sensitive input, vault mappings, and restored secrets are never logged or echoed outside the sanitized/blob contract",
     "rationale": "Logs and error messages are context that can leave the machine",
-    "sensor": "review (no automated check yet; add one before relying on it)",
+    "sensor": "cargo test -p do-context-shield-core --test privacy_invariants && cargo test -p do-context-shield-mcp-server (raw-value egress assertions)",
     "category": "security"
   },
   {
@@ -94,5 +94,17 @@
     "rationale": "A core.hooksPath pointing at .githooks makes git ignore .git/hooks entirely",
     "sensor": "review + do-harness doctor (reports managed-hook presence and state-db skew)",
     "category": "workflow"
+  },
+  {
+    "invariant": "Semantic judges classify existing candidates only: they return labels and confidence, never spans or text, and a judge can never downgrade a secret-like kind from redaction",
+    "rationale": "A judge that could invent spans or rewrite values would move the privacy boundary into a model",
+    "sensor": "cargo test -p do-context-shield-core -p do-context-shield-policy-default",
+    "category": "security"
+  },
+  {
+    "invariant": "A judge failure, an out-of-range or duplicated judgment index, or an out-of-range confidence fails the sanitize call closed",
+    "rationale": "A judge trusted without validation turns a malformed response into a silent policy bypass",
+    "sensor": "cargo test -p do-context-shield-core -p do-context-shield-plugin-process",
+    "category": "security"
   }
 ]
