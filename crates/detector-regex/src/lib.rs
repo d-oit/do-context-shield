@@ -335,17 +335,20 @@ mod tests {
     fn detects_private_key() {
         let detector = RegexDetector;
         // Synthetic fixtures built programmatically so no key literal is committed.
-        let rsa = format!("-----BEGIN {}PRIVATE KEY-----", "RSA ");
-        let pgp = format!("-----BEGIN {}PRIVATE KEY BLOCK-----", "PGP ");
-        let entities = match detector.detect(&format!("{rsa} body {pgp}")) {
+        let header = format!("-----BEGIN {}PRIVATE KEY-----", "RSA ");
+        let body = "MIIEowIBAAKCAQEAx7Vv";
+        let block = format!("{header}\n{body}\n-----END {}PRIVATE KEY-----", "RSA ");
+        // A header without a matching END marker still detects the header.
+        let truncated = format!("-----BEGIN {}PRIVATE KEY BLOCK-----", "PGP ");
+        let entities = match detector.detect(&format!("{block} then {truncated}")) {
             Ok(value) => value,
             Err(error) => panic!("unexpected error: {error}"),
         };
         assert_eq!(entities.len(), 2);
         assert_eq!(entities[0].kind, "private_key");
-        assert_eq!(entities[0].value, rsa);
+        assert_eq!(entities[0].value, block);
         assert_eq!(entities[1].kind, "private_key");
-        assert_eq!(entities[1].value, pgp);
+        assert_eq!(entities[1].value, truncated);
     }
 
     #[test]
@@ -373,6 +376,17 @@ mod tests {
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0].kind, "generic_secret");
         assert_eq!(entities[0].value, assignment);
+
+        // Env-style keys are underscore-prefixed; the separator is consumed
+        // into the span, so the assignment value is still redacted whole.
+        let underscored = format!("DB_PASSWORD={}", "hunter2hunter2");
+        let entities = match detector.detect(&underscored) {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].kind, "generic_secret");
+        assert_eq!(entities[0].value, underscored[2..]);
 
         let bearer = format!("Authorization: Bearer {}", "abcdef12345678");
         let entities = match detector.detect(&bearer) {

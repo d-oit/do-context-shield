@@ -50,7 +50,7 @@ pub(crate) const SPECS: [(&str, &str, f32); 19] = [
     ("slack_token", r"\bxox[bpras]-[A-Za-z0-9-]{10,}\b", 0.99),
     (
         "private_key",
-        r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY(?: BLOCK)?-----",
+        r"(?s)(?:-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----.*?-----END (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----|-----BEGIN PGP PRIVATE KEY BLOCK-----.*?-----END PGP PRIVATE KEY BLOCK-----|-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY(?: BLOCK)?-----)",
         0.99,
     ),
     ("ipv6", IPV6, 0.99),
@@ -62,7 +62,7 @@ pub(crate) const SPECS: [(&str, &str, f32); 19] = [
     ("google_api_key", r"\bAIza[0-9A-Za-z_-]{35}\b", 0.99),
     (
         "generic_secret",
-        r"(?i)(?:\b(?:password|passwd|pwd|secret|token)\s*[:=]\s*\S{8,}\b|\bbearer\s+\S{8,}\b)",
+        r"(?i)(?:(?:\b|_)(?:password|passwd|pwd|secret|token)\s*[:=]\s*\S{8,}\b|\bbearer\s+\S{8,}\b)",
         0.80,
     ),
     (
