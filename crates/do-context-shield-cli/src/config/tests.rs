@@ -3,7 +3,7 @@
 use super::{
     CliSelection, Config, ContextConfig, Plugins, ProcessConfig, VaultConfig, resolve, validate,
 };
-use crate::DetectorSelection;
+use crate::cli::DetectorSelection;
 use do_context_shield_plugin_process::DEFAULT_TIMEOUT_MS;
 use std::path::PathBuf;
 

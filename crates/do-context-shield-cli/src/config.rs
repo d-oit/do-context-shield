@@ -5,7 +5,7 @@
 //! fields and unknown plugin names are rejected so that a typo cannot silently
 //! change which plugin guards the privacy boundary.
 
-use crate::{ContextArgs, DetectorSelection, PipelineSelection, ProcessArgs, VaultSelection};
+use crate::cli::{ContextArgs, DetectorSelection, PipelineSelection, ProcessArgs, VaultSelection};
 use do_context_shield_plugin_api::{DataCategory, ProcessingContext, RecipientClass};
 use do_context_shield_plugin_process::DEFAULT_TIMEOUT_MS;
 use serde::Deserialize;

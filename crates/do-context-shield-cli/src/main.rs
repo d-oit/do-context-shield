@@ -1,199 +1,21 @@
 //! Local privacy boundary CLI: sanitize, restore, and inspect over stdin/stdout.
 
-use clap::{Args, Parser, Subcommand};
+use clap::Parser;
+use cli::{
+    Cli, Command, ContextArgs, DetectorSelection, ForgetArgs, InspectArgs, InspectOutput, McpArgs,
+    PipelineSelection, RestoreArgs, SanitizeArgs, VaultArgs, VaultSelection,
+};
 use do_context_shield_core::PrivacyPipeline;
 use do_context_shield_plugin_api::ScopeId;
 use do_context_shield_plugin_process::{
     ProcessDetector, ProcessJudge, ProcessPolicy, ProcessTransformer, ProcessVault,
 };
-use serde::Serialize;
 use std::io::{self, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
+mod cli;
 mod config;
-
-#[derive(Parser)]
-#[command(
-    name = "do-context-shield",
-    version,
-    about = "Local privacy boundary for coding agents"
-)]
-struct Cli {
-    /// Path to a configuration file; without it `./do-context-shield.toml` and
-    /// `$HOME/.config/do-context-shield/config.toml` are tried in that order.
-    #[arg(long, global = true)]
-    config: Option<PathBuf>,
-    #[command(subcommand)]
-    command: Command,
-}
-
-#[derive(Subcommand)]
-enum Command {
-    Sanitize(SanitizeArgs),
-    Restore(RestoreArgs),
-    Inspect(InspectArgs),
-    Forget(ForgetArgs),
-    McpStdio(McpArgs),
-}
-
-#[derive(Args)]
-struct SanitizeArgs {
-    #[command(flatten)]
-    vault: VaultArgs,
-    #[command(flatten)]
-    detector: DetectorSelection,
-    #[command(flatten)]
-    pipeline: PipelineSelection,
-    #[command(flatten)]
-    process: ProcessArgs,
-    #[command(flatten)]
-    context: ContextArgs,
-}
-
-#[derive(Args)]
-struct RestoreArgs {
-    #[command(flatten)]
-    vault: VaultArgs,
-    #[command(flatten)]
-    process: ProcessArgs,
-}
-
-#[derive(Args)]
-struct InspectArgs {
-    #[command(flatten)]
-    detector: DetectorSelection,
-    #[command(flatten)]
-    process: ProcessArgs,
-}
-
-/// Delete every mapping stored for a session scope.
-#[derive(Args)]
-struct ForgetArgs {
-    #[command(flatten)]
-    vault: VaultArgs,
-    #[command(flatten)]
-    process: ProcessArgs,
-}
-
-/// Session scope and vault selection shared by sanitize and restore.
-#[derive(Args)]
-struct VaultArgs {
-    #[arg(long, default_value = "default")]
-    session: String,
-    /// Optional local file for persistence across separate CLI processes (JSON vault).
-    #[arg(long)]
-    vault_file: Option<PathBuf>,
-    #[command(flatten)]
-    store: VaultSelection,
-}
-
-#[derive(Args)]
-struct McpArgs {
-    /// Optional local file for persistence across MCP process restarts (JSON vault).
-    #[arg(long)]
-    vault_file: Option<PathBuf>,
-    /// Lifetime in seconds after which in-process memory-vault mappings stop
-    /// resolving (memory vault only).
-    #[arg(long)]
-    vault_ttl_seconds: Option<u64>,
-    #[command(flatten)]
-    store: VaultSelection,
-    #[command(flatten)]
-    detector: DetectorSelection,
-    #[command(flatten)]
-    pipeline: PipelineSelection,
-    #[command(flatten)]
-    process: ProcessArgs,
-}
-
-/// Detector plugin selection shared by sanitize, inspect, and mcp-stdio.
-#[derive(Args, Default)]
-struct DetectorSelection {
-    /// Detector plugin (default `regex`): `regex` (built-in), `gliner2` (local ONNX NER), or
-    /// `process` (local executable over newline-delimited JSON).
-    #[arg(long, value_parser = ["regex", "gliner2", "process"])]
-    detector: Option<String>,
-    /// Local directory holding the `GLiNER2` ONNX export; only used with `--detector gliner2`.
-    #[arg(long)]
-    model_dir: Option<PathBuf>,
-    /// Command line of a local detector executable; required with `--detector process`.
-    /// Split on whitespace; quoting and shell expansion are not supported.
-    #[arg(long)]
-    detector_command: Option<String>,
-}
-
-/// Vault plugin selection shared by sanitize, restore, and mcp-stdio.
-#[derive(Args, Default)]
-struct VaultSelection {
-    /// Vault plugin: `memory`, `json` (with `--vault-file`), or `process` (local executable).
-    #[arg(long, value_parser = ["memory", "json", "process"])]
-    vault: Option<String>,
-    /// Command line of a local vault executable; required with `--vault process`.
-    /// Split on whitespace; quoting and shell expansion are not supported.
-    #[arg(long)]
-    vault_command: Option<String>,
-}
-
-/// Policy and transformer selection shared by sanitize and mcp-stdio.
-#[derive(Args, Default)]
-struct PipelineSelection {
-    /// Optional semantic judge: `heuristics` (built-in rules) or `process` (local executable
-    /// over newline-delimited JSON).
-    #[arg(long, value_parser = ["heuristics", "process"])]
-    judge: Option<String>,
-    /// Command line of a local judge executable; required with `--judge process`.
-    /// Split on whitespace; quoting and shell expansion are not supported.
-    #[arg(long)]
-    judge_command: Option<String>,
-    /// Policy plugin (default `default`): `default` or `process` (local executable over
-    /// newline-delimited JSON).
-    #[arg(long, value_parser = ["default", "process"])]
-    policy: Option<String>,
-    /// Command line of a local policy executable; required with `--policy process`.
-    /// Split on whitespace; quoting and shell expansion are not supported.
-    #[arg(long)]
-    policy_command: Option<String>,
-    /// Transformer plugin (default `pseudonymize`): `pseudonymize` or `process` (local executable
-    /// over newline-delimited JSON).
-    #[arg(long, value_parser = ["pseudonymize", "process"])]
-    transformer: Option<String>,
-    /// Command line of a local transformer executable; required with `--transformer process`.
-    /// Split on whitespace; quoting and shell expansion are not supported.
-    #[arg(long)]
-    transformer_command: Option<String>,
-}
-
-/// Enforcement context for `sanitize`.
-#[derive(Args, Default)]
-struct ContextArgs {
-    /// Recipient trust classification used by the policy (default `external`).
-    #[arg(long, value_parser = ["local", "trusted", "external", "unknown"])]
-    recipient: Option<String>,
-    /// Data category of the input used by the policy (default `personal`).
-    #[arg(long, value_parser = ["non_personal", "personal", "special_category"])]
-    data_category: Option<String>,
-    /// Purpose of the processing operation (free-form, policy-matched).
-    #[arg(long)]
-    purpose: Option<String>,
-    /// Jurisdiction code (ISO 3166-1 alpha-2), if known.
-    #[arg(long)]
-    jurisdiction: Option<String>,
-}
-
-/// Timeout shared by every process plugin.
-#[derive(Args, Default)]
-struct ProcessArgs {
-    /// Milliseconds to wait for one process-plugin response (detector, policy, transformer, vault);
-    /// defaults to the config file value or the built-in timeout.
-    #[arg(long)]
-    process_timeout_ms: Option<u64>,
-}
-
-#[derive(Serialize)]
-struct InspectOutput {
-    entities: Vec<do_context_shield_core::EntitySummary>,
-}
 
 fn build_pipeline(
     resolved: &config::Resolved,
