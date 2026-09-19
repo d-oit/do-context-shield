@@ -227,7 +227,11 @@ pub fn is_placeholder_token(token: &str) -> bool {
 /// Whether `kind` names a credential that must be redacted, never pseudonymized.
 #[must_use]
 pub fn is_secret_kind(kind: &str) -> bool {
-    kind.contains("key") || kind.contains("secret") || kind == "password" || kind == "github_token"
+    kind.contains("key")
+        || kind.contains("secret")
+        || kind == "password"
+        || kind == "github_token"
+        || kind == "jwt"
 }
 
 /// Semantic role assigned by a judge to one detected candidate.
