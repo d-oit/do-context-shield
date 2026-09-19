@@ -160,5 +160,11 @@
     "rationale": "A looser pattern can match exactly the same text as a more specific kind, so list order decides the reported kind; filtering invalid candidates after dedup would silently drop the specific match",
     "sensor": "cargo test -p do-context-shield-detector-regex",
     "category": "contracts"
+  },
+  {
+    "invariant": "CodeQL code scanning runs through GitHub default setup (rust, python, actions) and must stay configured, because the main branch ruleset requires code-scanning results before a pull request can merge",
+    "rationale": "With default setup disabled, or with no analysis on the target branch, the ruleset's code_scanning rule can never be satisfied and every merge needs an administrator bypass; an advanced-setup workflow added alongside default setup fails at analysis upload instead of taking over",
+    "sensor": "gh api repos/d-oit/do-context-shield/code-scanning/default-setup (state=configured) + gh api repos/d-oit/do-context-shield/rulesets/rule-suites (code_scanning rule result)",
+    "category": "workflow"
   }
 ]
