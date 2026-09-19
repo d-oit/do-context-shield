@@ -338,17 +338,28 @@ mod tests {
         let header = format!("-----BEGIN {}PRIVATE KEY-----", "RSA ");
         let body = "MIIEowIBAAKCAQEAx7Vv";
         let block = format!("{header}\n{body}\n-----END {}PRIVATE KEY-----", "RSA ");
-        // A header without a matching END marker still detects the header.
-        let truncated = format!("-----BEGIN {}PRIVATE KEY BLOCK-----", "PGP ");
-        let entities = match detector.detect(&format!("{block} then {truncated}")) {
+        let encrypted_flavor = "ENCRYPTED ";
+        let encrypted = format!(
+            "-----BEGIN {encrypted_flavor}PRIVATE KEY-----\n{body}\n-----END {encrypted_flavor}PRIVATE KEY-----"
+        );
+        // Headers without a matching END marker still detect the header alone.
+        let pgp_header = format!("-----BEGIN {}PRIVATE KEY BLOCK-----", "PGP ");
+        let encrypted_header = format!("-----BEGIN {encrypted_flavor}PRIVATE KEY-----");
+        let entities = match detector.detect(&format!(
+            "{block} then {encrypted} then {pgp_header} then {encrypted_header}"
+        )) {
             Ok(value) => value,
             Err(error) => panic!("unexpected error: {error}"),
         };
-        assert_eq!(entities.len(), 2);
+        assert_eq!(entities.len(), 4);
         assert_eq!(entities[0].kind, "private_key");
         assert_eq!(entities[0].value, block);
         assert_eq!(entities[1].kind, "private_key");
-        assert_eq!(entities[1].value, truncated);
+        assert_eq!(entities[1].value, encrypted);
+        assert_eq!(entities[2].kind, "private_key");
+        assert_eq!(entities[2].value, pgp_header);
+        assert_eq!(entities[3].kind, "private_key");
+        assert_eq!(entities[3].value, encrypted_header);
     }
 
     #[test]
