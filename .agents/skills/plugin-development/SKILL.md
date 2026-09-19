@@ -12,6 +12,9 @@ metadata:
   compatibility: Requires the Rust workspace in this repository (Rust 1.88, edition 2024). Heavy model dependencies must stay behind opt-in Cargo features.
   tags: plugin detector policy transformer vault rust
 ---
+## Guides
+
+See [references/heuristics.md](references/heuristics.md) for distilled heuristics.
 
 # Plugin Development Skill
 
