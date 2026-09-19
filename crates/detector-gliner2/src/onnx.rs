@@ -48,8 +48,12 @@ pub(crate) fn detect(
 
     let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path)
         .map_err(|_| map_err("cannot load tokenizer.json"))?;
+    // Exported token-classification models expect their special tokens
+    // (`[CLS]`/`[SEP]` and friends); omitting them shifts the encoder out of
+    // its training distribution and produces misaligned spans. Special-token
+    // offsets are `(0, 0)` and are skipped during decoding.
     let encoding = tokenizer
-        .encode(input, false)
+        .encode(input, true)
         .map_err(|_| map_err("tokenization failed"))?;
     let ids: Vec<i64> = encoding.get_ids().iter().map(|id| i64::from(*id)).collect();
     let mask: Vec<i64> = encoding
@@ -101,7 +105,12 @@ pub(crate) fn detect(
 /// Decode `[seq_len, num_labels]` logits with BIO tags into char spans.
 ///
 /// Token offsets `(0, 0)` mark special tokens and are skipped. Scores use a
-/// sigmoid of the winning logit as a bounded heuristic.
+/// sigmoid of the winning logit as a bounded heuristic. Adjacent same-kind
+/// `B-`/`I-` tags extend the open span — the recommended exports tag every
+/// subtoken of a word with `B-`, and splitting those into fragments would
+/// break entities apart. A span still open after the final non-special token
+/// closes at that token's end, so entities running to the end of the input
+/// survive the trailing `[SEP]` row.
 fn bio_decode(
     seq_len: usize,
     num_labels: usize,
@@ -112,17 +121,11 @@ fn bio_decode(
     let seq_len = seq_len.min(offsets.len());
     let mut spans = Vec::new();
     let mut open: Option<(String, usize, f32)> = None;
+    let mut last_end = 0;
 
     let close = |open: &mut Option<(String, usize, f32)>, spans: &mut Vec<RawSpan>, end: usize| {
         if let Some((label, start, score)) = open.take() {
-            if end > start {
-                spans.push(RawSpan {
-                    label,
-                    start,
-                    end,
-                    score,
-                });
-            }
+            push_span(spans, label, start, end, score);
         }
     };
 
@@ -130,6 +133,7 @@ fn bio_decode(
         if start >= end {
             continue;
         }
+        last_end = end;
         let row = index * num_labels;
         let mut best = 0usize;
         for label in 1..num_labels {
@@ -144,26 +148,115 @@ fn bio_decode(
         let (prefix, name) = raw_label
             .split_once('-')
             .map_or(("O", raw_label), |(prefix, name)| (prefix, name));
-        if prefix == "B" {
-            close(&mut open, &mut spans, start);
-            open = Some((name.to_owned(), start, score));
-        } else if prefix == "I" {
-            if let Some((label, open_start, best_score)) = open.take() {
-                if label == name {
+        if prefix == "B" || prefix == "I" {
+            match open.take() {
+                Some((label, open_start, best_score)) if label == name => {
                     open = Some((label, open_start, best_score.max(score)));
-                } else {
-                    close(&mut open, &mut spans, start);
+                }
+                Some((label, open_start, best_score)) => {
+                    push_span(&mut spans, label, open_start, start, best_score);
                     open = Some((name.to_owned(), start, score));
                 }
-            } else {
-                open = Some((name.to_owned(), start, score));
+                None => open = Some((name.to_owned(), start, score)),
             }
         } else {
             close(&mut open, &mut spans, start);
         }
-        if index + 1 == seq_len && open.is_some() {
-            close(&mut open, &mut spans, end);
-        }
     }
+    close(&mut open, &mut spans, last_end);
     spans
+}
+
+fn push_span(spans: &mut Vec<RawSpan>, label: String, start: usize, end: usize, score: f32) {
+    if end > start {
+        spans.push(RawSpan {
+            label,
+            start,
+            end,
+            score,
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bio_decode;
+
+    fn labels() -> Vec<String> {
+        ["B-name", "I-name", "B-city", "I-city", "O"]
+            .iter()
+            .map(ToString::to_string)
+            .collect()
+    }
+
+    fn spans(logits: &[f32], offsets: &[(usize, usize)]) -> Vec<(String, usize, usize)> {
+        bio_decode(offsets.len(), 5, logits, offsets, &labels())
+            .into_iter()
+            .map(|span| (span.label, span.start, span.end))
+            .collect()
+    }
+
+    #[test]
+    fn closes_span_open_at_last_text_token_when_special_row_follows() {
+        // [CLS](0,0) "John"(0,4) [SEP](0,0): the trailing special row is
+        // skipped, so the open B-name span must close at end of input.
+        let offsets = [(0, 0), (0, 4), (0, 0)];
+        #[rustfmt::skip]
+        let logits = [
+            0.0, 0.0, 0.0, 0.0, 9.0,
+            9.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 9.0,
+        ];
+        assert_eq!(spans(&logits, &offsets), vec![("name".to_owned(), 0, 4)]);
+    }
+
+    #[test]
+    fn special_and_o_rows_close_spans_without_shifting_alignment() {
+        // [CLS](0,0) "John"(0,4) " Doe"(4,8) " "(8,9): a different kind closes
+        // the first span and opens the second on the right offsets.
+        let offsets = [(0, 0), (0, 4), (4, 8), (8, 9)];
+        #[rustfmt::skip]
+        let logits = [
+            0.0, 0.0, 0.0, 0.0, 9.0,
+            9.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 9.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 9.0,
+        ];
+        assert_eq!(
+            spans(&logits, &offsets),
+            vec![("name".to_owned(), 0, 4), ("city".to_owned(), 4, 8)]
+        );
+    }
+
+    #[test]
+    fn merges_adjacent_tags_of_the_same_kind() {
+        // Word-level exports repeat `B-` for every subtoken; fragments of one
+        // entity must decode to a single span.
+        let offsets = [(0, 0), (0, 4), (4, 8), (8, 12)];
+        #[rustfmt::skip]
+        let logits = [
+            0.0, 0.0, 0.0, 0.0, 9.0,
+            9.0, 0.0, 0.0, 0.0, 0.0,
+            9.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 9.0, 0.0, 0.0, 0.0,
+        ];
+        assert_eq!(spans(&logits, &offsets), vec![("name".to_owned(), 0, 12)]);
+    }
+
+    #[test]
+    fn kind_change_on_i_tag_closes_the_open_span() {
+        // B-name then I-city must emit the name span and start the city span;
+        // dropping the open span would silently lose a detected entity.
+        let offsets = [(0, 0), (0, 4), (4, 8)];
+        #[rustfmt::skip]
+        let logits = [
+            0.0, 0.0, 0.0, 0.0, 9.0,
+            9.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 9.0, 0.0,
+        ];
+        assert_eq!(
+            spans(&logits, &offsets),
+            vec![("name".to_owned(), 0, 4), ("city".to_owned(), 4, 8)]
+        );
+    }
 }
