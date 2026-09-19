@@ -31,7 +31,7 @@ Tool selection and caching contract:
 
 ### Client registration
 
-Any MCP stdio client can register the server — the transport is plain stdio JSON-RPC, so nothing is client-specific beyond the config-file shape. Verified end-to-end in this repository with **OpenCode 1.18.31** and **omp 18.2.4**; Claude Code 1.0.44 accepted the project registration (`claude mcp get` resolves it) but its model turn could not run in the verification environment (invalid API credentials), and the Codex shape below comes from its own documentation and is not exercised here.
+Any MCP stdio client can register the server — the transport is plain stdio JSON-RPC, so nothing is client-specific beyond the config-file shape. Verified end-to-end in this repository with **OpenCode 1.18.31** and **omp 18.2.4**. Registration without a model turn is also verified for **Claude Code 2.1.251** and **Codex 0.147.0**; both clients' model turns remain blocked in the verification environment (evidence under "Other clients").
 
 Shared notes for every client:
 
@@ -80,13 +80,20 @@ Shared notes for every client:
 
 #### Other clients
 
-- Claude Code 1.0.44: `claude mcp add -s project do-context-shield <binary> mcp-stdio` writes a project `.mcp.json` (`type: "stdio"`, `command`, `args`, `env`); `claude mcp get do-context-shield` resolves project scope. For non-interactive runs pass the prompt on stdin and pin the server with `--mcp-config .mcp.json --strict-mcp-config --allowedTools mcp__do-context-shield`.
-- Codex: `~/.codex/config.toml` or project `.codex/config.toml`:
+- **Claude Code 2.1.251** (registration verified 2026-09-19): `claude mcp add -s project do-context-shield <binary> mcp-stdio` writes a project `.mcp.json` (`type: "stdio"`, `command`, `args`, `env: {}`) and `claude mcp list` reports the server, but as `⏸ Pending approval (run claude to approve)` — project-scoped servers need one interactive approval before they are exposed, so non-interactive runs should pin the server explicitly with `--mcp-config .mcp.json --strict-mcp-config --allowedTools mcp__do-context-shield`. The model turn is still unverified in this environment: `claude -p …` produces empty stdout/stderr and is killed only by timeout (exit 124 after 60–90 s), and the earlier 1.0.44 attempt returned `401 Invalid Authentication`.
+- **Codex 0.147.0** (registration verified 2026-09-19): the table below in the user config `~/.codex/config.toml`, or the same keys passed one-off with `-c` overrides, is accepted and `codex mcp list` reports `do-context-shield … enabled`. Codex reads a project `.codex/config.toml` **only when the project is trusted** (untrusted projects' `.codex/` layers are ignored), so the user config is the reliable path. The model turn is unverified here: the account is usage-limited (`You've hit your usage limit … try again at Oct 15th, 2026 10:04 PM`) even though `codex doctor` reports auth mode `chatgpt` with 0 failures.
 
 ```toml
+# ~/.codex/config.toml
 [mcp_servers.do-context-shield]
-command = "do-context-shield"
+command = "/abs/path/do-context-shield"
 args = ["mcp-stdio"]
+```
+
+```shell
+# one-off registration, no config change
+codex exec -c 'mcp_servers.do-context-shield.command="/abs/path/do-context-shield"' \
+           -c 'mcp_servers.do-context-shield.args=["mcp-stdio"]' "<prompt>"
 ```
 
 ## Skill-only clients
