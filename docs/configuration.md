@@ -22,11 +22,11 @@ CLI flag > file value > built-in default. A flag passed for one invocation there
 
 | Key | Values | Default | Notes |
 | --- | --- | --- | --- |
-| `detector` | `regex`, `gliner2`, `process` | `regex` | |
+| `detector` | `regex`, `gliner2`, `hybrid`, `process` | `regex` | |
 | `policy` | `default`, `process` | `default` | |
 | `transformer` | `pseudonymize`, `process` | `pseudonymize` | |
 | `judge` | `heuristics`, `process` | unset | judging is optional and off by default |
-| `model_dir` | path | unset | `gliner2` ONNX export directory |
+| `model_dir` | path | unset | `gliner2`/`hybrid` ONNX export directory |
 | `detector_command` | command line | unset | required with `detector = "process"` |
 | `policy_command` | command line | unset | required with `policy = "process"` |
 | `transformer_command` | command line | unset | required with `transformer = "process"` |

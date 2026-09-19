@@ -4,7 +4,7 @@ The core does not know which detector, judge, policy, transformer, or vault is u
 
 | Capability | Contract | Initial plugin | Future replacements |
 | --- | --- | --- | --- |
-| detection | `Detector` | regex, `detector-gliner2` (local ONNX NER), `plugin-process` (`detect`) | custom local NER, rules |
+| detection | `Detector` | regex, `detector-gliner2` (local ONNX NER), `detector-hybrid` (regex + model), `plugin-process` (`detect`) | custom local NER, rules |
 | judging | `SemanticJudge` | `judge-heuristics` (local rules), `plugin-process` (`judge`) | local model, hosted judge via process |
 | policy | `Policy` | default, `plugin-process` (`plan`) | project policy, enterprise DLP |
 | transformation | `Transformer` | pseudonymize, `plugin-process` (`transform`) | redact, generalize, encrypt, format-preserving |
@@ -74,6 +74,17 @@ curl -L -o models/ettin-32m/config.json    "$repo/config.json"
 
 printf 'Contact Jane Doe at jane@example.com.' |
   do-context-shield sanitize --detector gliner2 --model-dir models/ettin-32m
+```
+
+### Hybrid detector (regex + model)
+
+`--detector hybrid --model-dir <dir>` runs `detector-regex` and the GLiNER2 model over the same input and merges their entities: regex owns the structured identifiers (cards, SSNs, keys, tokens) and the model the linguistic PII (names, addresses, demographics). When the two disagree, regex wins: any model entity overlapping a regex entity is dropped before the pipeline's longest-span-wins pass, so a noisy model fragment can never displace — and fragment — an authoritative regex span. This is the recommended production stack — the [REDACT benchmark](https://arxiv.org/abs/2606.19881) shows rule-based detectors collapsing on high-sensitivity, non-verbatim PII while combining rules with a model lifts recall over either alone.
+
+The hybrid fails closed when either half fails: a missing or unusable `model_dir` errors the call even when regex finds nothing, so "model not checked" can never look like "nothing sensitive found". It is selectable from the CLI (`--detector hybrid --model-dir <dir>`), the configuration file (`[plugins] detector = "hybrid"` with `model_dir`), and the MCP server's detector field; there is no process-plugin variant.
+
+```bash
+printf 'Contact Jane Doe in Boston: 123-45-6789' |
+  do-context-shield sanitize --detector hybrid --model-dir models/gliner2-pii
 ```
 
 ### Unsupported model families

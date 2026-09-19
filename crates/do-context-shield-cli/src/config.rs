@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 const CONFIG_FILE_NAME: &str = "do-context-shield.toml";
 
 /// Detector plugin names accepted in the configuration file.
-const DETECTORS: [&str; 3] = ["regex", "gliner2", "process"];
+const DETECTORS: [&str; 4] = ["regex", "gliner2", "hybrid", "process"];
 /// Policy plugin names accepted in the configuration file.
 const POLICIES: [&str; 2] = ["default", "process"];
 /// Transformer plugin names accepted in the configuration file.

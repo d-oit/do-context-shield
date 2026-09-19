@@ -158,13 +158,21 @@ pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Err
     let timeout = Duration::from_millis(config.process_timeout_ms);
     let vault = build_vault(&mut config, timeout)?;
     let detector: Box<dyn do_context_shield_plugin_api::Detector> = match config.detector.as_str() {
-        "gliner2" => {
+        "gliner2" | "hybrid" => {
             use do_context_shield_detector_gliner2::{Gliner2Config, Gliner2Detector};
             let detector_config = match config.model_dir.take() {
                 Some(dir) => Gliner2Config::with_model_dir(dir),
                 None => Gliner2Config::default(),
             };
-            Box::new(Gliner2Detector::new(detector_config))
+            let gliner2 = Box::new(Gliner2Detector::new(detector_config));
+            if config.detector == "hybrid" {
+                Box::new(do_context_shield_detector_hybrid::HybridDetector::new(
+                    do_context_shield_plugin_registry::detector("regex")?,
+                    gliner2,
+                ))
+            } else {
+                gliner2
+            }
         }
         "process" => Box::new(ProcessDetector::from_selection(
             config.detector_command.as_deref(),

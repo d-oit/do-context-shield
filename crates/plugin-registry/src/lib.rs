@@ -1,6 +1,7 @@
 //! Built-in plugin registry.
 
 use do_context_shield_detector_gliner2::Gliner2Detector;
+use do_context_shield_detector_hybrid::HybridDetector;
 use do_context_shield_detector_regex::RegexDetector;
 use do_context_shield_judge_heuristics::HeuristicJudge;
 use do_context_shield_plugin_api::{Detector, Policy, SemanticJudge, Transformer, Vault};
@@ -34,6 +35,10 @@ pub fn detector(name: &str) -> Result<Box<dyn Detector>, RegistryError> {
     match name {
         "regex" => Ok(Box::new(RegexDetector)),
         "gliner2" => Ok(Box::new(Gliner2Detector::default())),
+        "hybrid" => Ok(Box::new(HybridDetector::new(
+            Box::new(RegexDetector),
+            Box::new(Gliner2Detector::default()),
+        ))),
         "process" => Ok(Box::new(ProcessDetector::default())),
         _ => Err(RegistryError::Unknown {
             kind: "detector",

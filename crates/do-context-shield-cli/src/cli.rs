@@ -102,11 +102,13 @@ pub(crate) struct McpArgs {
 /// Detector plugin selection shared by sanitize, inspect, and mcp-stdio.
 #[derive(Args, Default)]
 pub(crate) struct DetectorSelection {
-    /// Detector plugin (default `regex`): `regex` (built-in), `gliner2` (local ONNX NER), or
-    /// `process` (local executable over newline-delimited JSON).
-    #[arg(long, value_parser = ["regex", "gliner2", "process"])]
+    /// Detector plugin (default `regex`): `regex` (built-in), `gliner2` (local ONNX NER),
+    /// `hybrid` (regex plus the local ONNX NER model), or `process` (local executable over
+    /// newline-delimited JSON).
+    #[arg(long, value_parser = ["regex", "gliner2", "hybrid", "process"])]
     pub(crate) detector: Option<String>,
-    /// Local directory holding the `GLiNER2` ONNX export; only used with `--detector gliner2`.
+    /// Local directory holding the `GLiNER2` ONNX export; used with `--detector gliner2` and
+    /// `--detector hybrid`.
     #[arg(long)]
     pub(crate) model_dir: Option<PathBuf>,
     /// Command line of a local detector executable; required with `--detector process`.

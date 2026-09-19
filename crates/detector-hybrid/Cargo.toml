@@ -1,0 +1,16 @@
+[package]
+name = "do-context-shield-detector-hybrid"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Hybrid detector plugin (runs two detectors, e.g. regex + local model) for do-context-shield"
+homepage.workspace = true
+repository.workspace = true
+include = ["src/**/*", "Cargo.toml"]
+
+[lints]
+workspace = true
+
+[dependencies]
+do-context-shield-plugin-api.workspace = true

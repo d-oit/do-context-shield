@@ -15,6 +15,7 @@ workspace = true
 [dependencies]
 do-context-shield-core.workspace = true
 do-context-shield-detector-gliner2.workspace = true
+do-context-shield-detector-hybrid.workspace = true
 do-context-shield-plugin-process.workspace = true
 do-context-shield-plugin-api.workspace = true
 do-context-shield-plugin-registry.workspace = true

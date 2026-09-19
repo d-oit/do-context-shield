@@ -46,6 +46,7 @@ toml = "0.8"
 do-context-shield-core = { path = "crates/privacy-core", version = "0.1.0" }
 do-context-shield-detector-regex = { path = "crates/detector-regex", version = "0.1.0" }
 do-context-shield-detector-gliner2 = { path = "crates/detector-gliner2", version = "0.1.0" }
+do-context-shield-detector-hybrid = { path = "crates/detector-hybrid", version = "0.1.0" }
 do-context-shield-judge-heuristics = { path = "crates/judge-heuristics", version = "0.1.0" }
 do-context-shield-mcp-server = { path = "crates/mcp-server", version = "0.1.0" }
 do-context-shield-plugin-api = { path = "crates/plugin-api", version = "0.1.0" }
