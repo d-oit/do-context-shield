@@ -1,88 +1,13 @@
 //! Regex-based detector plugin.
 
+mod patterns;
+
 use do_context_shield_plugin_api::{Detector, DetectorError, Entity};
-use regex::Regex;
-use std::sync::LazyLock;
+use patterns::compiled;
 
 /// Regex detector for common sensitive values.
 #[derive(Default)]
 pub struct RegexDetector;
-
-/// IPv6 matcher: full, `::`-compressed, and v4-mapped forms.
-///
-/// Alternatives are ordered so the longest valid form wins at one start
-/// position (`2001:db8::1.2.3.4` before `2001:db8::1`). Zone IDs (`%eth0`)
-/// and a bare `::` are out of scope.
-const IPV6: &str = concat!(
-    r"(?i)",
-    r"\b(?:[0-9a-f]{1,4}:){1,6}:(?:[0-9a-f]{1,4}:){0,5}(?:\d{1,3}\.){3}\d{1,3}\b",
-    r"|\b(?:[0-9a-f]{1,4}:){1,7}(?:\d{1,3}\.){3}\d{1,3}\b",
-    r"|::(?:[0-9a-f]{1,4}:){0,6}(?:\d{1,3}\.){3}\d{1,3}\b",
-    r"|\b(?:[0-9a-f]{1,4}:){1,7}:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*\b",
-    r"|\b(?:[0-9a-f]{1,4}:){1,7}:",
-    r"|\b(?:[0-9a-f]{1,4}:){2,7}[0-9a-f]{1,4}\b",
-    r"|::(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})\b",
-);
-
-/// Pattern specs: entity kind, regex source, and detector confidence.
-///
-/// The order is part of the contract: for one identical span the overlap pass
-/// keeps the first entity pushed, so `ssn` and `credit_card` precede the
-/// looser `phone` shape that also matches their text.
-const SPECS: [(&str, &str, f32); 11] = [
-    (
-        "email",
-        r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b",
-        0.99,
-    ),
-    ("ssn", r"\b\d{3}-\d{2}-\d{4}\b", 0.95),
-    ("credit_card", r"\b(?:\d[ -]*?){13,19}\b", 0.95),
-    ("phone", r"\b(?:\+?\d[\d ()-]{7,}\d)\b", 0.99),
-    ("iban", r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b", 0.99),
-    ("ipv4", r"\b(?:\d{1,3}\.){3}\d{1,3}\b", 0.99),
-    ("api_key", r"\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}\b", 0.99),
-    ("github_token", r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b", 0.99),
-    ("ipv6", IPV6, 0.99),
-    (
-        "aws_access_key",
-        r"\b(?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}\b",
-        0.99,
-    ),
-    (
-        "jwt",
-        r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b",
-        0.95,
-    ),
-];
-
-/// One compiled pattern with its entity kind and confidence.
-struct Compiled {
-    kind: String,
-    regex: Regex,
-    confidence: f32,
-}
-
-/// Compiled once per process; patterns are constants, so a build failure
-/// here means a programming error surfaced as [`DetectorError`].
-static COMPILED: LazyLock<Result<Vec<Compiled>, String>> = LazyLock::new(|| {
-    let mut specs = Vec::with_capacity(SPECS.len());
-    for (kind, pattern, confidence) in SPECS {
-        let regex = Regex::new(pattern).map_err(|error| error.to_string())?;
-        specs.push(Compiled {
-            kind: kind.to_owned(),
-            regex,
-            confidence,
-        });
-    }
-    Ok(specs)
-});
-
-fn compiled() -> Result<&'static [Compiled], DetectorError> {
-    match &*COMPILED {
-        Ok(specs) => Ok(specs.as_slice()),
-        Err(message) => Err(DetectorError::Message(message.clone())),
-    }
-}
 
 impl Detector for RegexDetector {
     fn detect(&self, input: &str) -> Result<Vec<Entity>, DetectorError> {
@@ -100,8 +25,12 @@ impl Detector for RegexDetector {
         }
 
         // A long digit run is only a card candidate until its checksum
-        // passes; the loose matcher cannot express Luhn itself.
-        entities.retain(|entity| entity.kind != "credit_card" || luhn_valid(&entity.value));
+        // passes, and a 9-digit run is only a routing candidate until the ABA
+        // checksum passes; the loose matchers cannot express either.
+        entities.retain(|entity| {
+            (entity.kind != "credit_card" || luhn_valid(&entity.value))
+                && (entity.kind != "us_bank_routing" || aba_valid(&entity.value))
+        });
 
         entities.sort_by_key(|entity| (entity.start, usize::MAX - entity.end));
         let mut deduped = Vec::with_capacity(entities.len());
@@ -144,6 +73,25 @@ fn luhn_valid(value: &str) -> bool {
         sum += digit;
         double = !double;
     }
+    sum % 10 == 0
+}
+
+/// Whether `value` is a 9-digit run with a valid ABA routing checksum
+/// (weights `3, 7, 1, 3, 7, 1, 3, 7, 1`).
+///
+/// Unlike [`luhn_valid`], the source pattern admits no separators, so the
+/// length check is exact and any other character rejects the value.
+fn aba_valid(value: &str) -> bool {
+    const WEIGHTS: [u32; 9] = [3, 7, 1, 3, 7, 1, 3, 7, 1];
+    let bytes = value.as_bytes();
+    if bytes.len() != WEIGHTS.len() || !bytes.iter().all(u8::is_ascii_digit) {
+        return false;
+    }
+    let sum = bytes
+        .iter()
+        .zip(WEIGHTS)
+        .map(|(&byte, weight)| u32::from(byte - b'0') * weight)
+        .sum::<u32>();
     sum % 10 == 0
 }
 
@@ -278,5 +226,168 @@ mod tests {
         };
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0].kind, "credit_card");
+    }
+
+    #[test]
+    fn detects_date_of_birth() {
+        let detector = RegexDetector;
+        let entities = match detector.detect("DOB 01/15/1990 recorded") {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].kind, "date_of_birth");
+        assert_eq!(entities[0].value, "01/15/1990");
+
+        // Out-of-range months and out-of-window years are not dates.
+        let invalid = match detector.detect("on 13/15/1990 and 01/15/1890") {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert!(invalid.is_empty(), "{invalid:?}");
+    }
+
+    #[test]
+    fn date_of_birth_and_ssn_coexist() {
+        let detector = RegexDetector;
+        let entities = match detector.detect("DOB 01/15/1990 SSN 123-45-6789") {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert_eq!(entities.len(), 2);
+        assert_eq!(entities[0].kind, "date_of_birth");
+        assert_eq!(entities[1].kind, "ssn");
+    }
+
+    #[test]
+    fn detects_passport() {
+        let detector = RegexDetector;
+        let entities = match detector.detect("passport AB1234567 expires 2030") {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].kind, "passport");
+        assert_eq!(entities[0].value, "AB1234567");
+
+        // Passport numbers are uppercase-only.
+        let lowercase = match detector.detect("passport ab1234567 expires") {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert!(lowercase.is_empty(), "{lowercase:?}");
+    }
+
+    #[test]
+    fn detects_us_drivers_license() {
+        let detector = RegexDetector;
+        let entities = match detector.detect("license W1234-56789-01234 on file") {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].kind, "us_drivers_license");
+        assert_eq!(entities[0].value, "W1234-56789-01234");
+    }
+
+    #[test]
+    fn detects_us_bank_routing_with_aba_checksum() {
+        let detector = RegexDetector;
+        let entities = match detector.detect("routing 021000021 on file") {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].kind, "us_bank_routing");
+        assert_eq!(entities[0].value, "021000021");
+    }
+
+    #[test]
+    fn rejects_invalid_aba_checksum() {
+        let detector = RegexDetector;
+        let entities = match detector.detect("routing 021000022 on file") {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert!(
+            !entities
+                .iter()
+                .any(|entity| entity.kind == "us_bank_routing"),
+            "{entities:?}"
+        );
+    }
+
+    #[test]
+    fn detects_slack_token() {
+        let detector = RegexDetector;
+        // Synthetic fixture built programmatically so no credential literal is committed.
+        let token = format!("xoxb-{}", "0123456789abcdef");
+        let entities = match detector.detect(&token) {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].kind, "slack_token");
+        assert_eq!(entities[0].value, token);
+    }
+
+    #[test]
+    fn detects_private_key() {
+        let detector = RegexDetector;
+        // Synthetic fixtures built programmatically so no key literal is committed.
+        let rsa = format!("-----BEGIN {}PRIVATE KEY-----", "RSA ");
+        let pgp = format!("-----BEGIN {}PRIVATE KEY BLOCK-----", "PGP ");
+        let entities = match detector.detect(&format!("{rsa} body {pgp}")) {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert_eq!(entities.len(), 2);
+        assert_eq!(entities[0].kind, "private_key");
+        assert_eq!(entities[0].value, rsa);
+        assert_eq!(entities[1].kind, "private_key");
+        assert_eq!(entities[1].value, pgp);
+    }
+
+    #[test]
+    fn detects_google_api_key() {
+        let detector = RegexDetector;
+        // Synthetic fixture built programmatically so no credential literal is committed.
+        let key = format!("AIza{}", "0123456789abcdefghijKLMNOPQRSTUVWXY");
+        let entities = match detector.detect(&key) {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].kind, "google_api_key");
+        assert_eq!(entities[0].value, key);
+    }
+
+    #[test]
+    fn detects_generic_secret_assignments() {
+        let detector = RegexDetector;
+        let assignment = format!("password={}", "hunter2hunter2");
+        let entities = match detector.detect(&assignment) {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].kind, "generic_secret");
+        assert_eq!(entities[0].value, assignment);
+
+        let bearer = format!("Authorization: Bearer {}", "abcdef12345678");
+        let entities = match detector.detect(&bearer) {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].kind, "generic_secret");
+        assert_eq!(entities[0].value, "Bearer abcdef12345678");
+
+        // A bare keyword without an assignment or value is not a secret.
+        let bare = match detector.detect("password") {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert!(bare.is_empty(), "{bare:?}");
     }
 }

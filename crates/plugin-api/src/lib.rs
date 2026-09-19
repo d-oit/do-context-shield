@@ -231,6 +231,7 @@ pub fn is_secret_kind(kind: &str) -> bool {
         || kind.contains("secret")
         || kind == "password"
         || kind == "github_token"
+        || kind == "slack_token"
         || kind == "jwt"
 }
 
@@ -364,4 +365,40 @@ pub fn validate_judgments(len: usize, judgments: &[Judgment]) -> Result<(), Judg
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_secret_kind;
+
+    #[test]
+    fn credential_kinds_are_secrets() {
+        for kind in [
+            "api_key",
+            "aws_access_key",
+            "generic_secret",
+            "github_token",
+            "google_api_key",
+            "jwt",
+            "password",
+            "private_key",
+            "slack_token",
+        ] {
+            assert!(is_secret_kind(kind), "{kind}");
+        }
+    }
+
+    #[test]
+    fn personal_kinds_are_not_secrets() {
+        for kind in [
+            "date_of_birth",
+            "email",
+            "passport",
+            "phone",
+            "us_bank_routing",
+            "us_drivers_license",
+        ] {
+            assert!(!is_secret_kind(kind), "{kind}");
+        }
+    }
 }
