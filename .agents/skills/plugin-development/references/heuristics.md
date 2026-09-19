@@ -1,0 +1,3 @@
+# Heuristics
+- **In detector-regex SPECS, equal-span overlap ties resolve by list order: place more specific kinds before looser shapes that also match the same text (ssn and credit_card before phone).**: When adding or reordering entity patterns in crates/detector-regex/src/lib.rs (from trace 1)
+- **Validate a candidate detector regex against real-shaped positive and negative fixtures before wiring it in: alternation branches sharing a prefix can truncate a longer form, and a global \b wrapper breaks branches that start or end with ':'.**: When adding or changing alternation-heavy detector patterns such as IPv6 (from trace 1)
