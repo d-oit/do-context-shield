@@ -148,5 +148,11 @@
     "rationale": "A config typo must never silently select a weaker plugin, and effective settings must not depend on which clap default happened to be compiled in",
     "sensor": "cargo test -p do-context-shield (config module tests: unknown field/value rejected, CLI-over-config precedence)",
     "category": "security"
+  },
+  {
+    "invariant": "CLI and MCP stdio behavior is tested black-box against the compiled `do-context-shield` binary, spawned with a hermetic working directory and `$HOME` so ambient config files can never change a test outcome",
+    "rationale": "Behavior in the shipped artifact, not library internals, is the contract; a test reading the developer's real HOME or cwd config would be non-reproducible",
+    "sensor": "cargo test -p do-context-shield (tests/cli_*.rs and tests/mcp_stdio.rs)",
+    "category": "verification"
   }
 ]
