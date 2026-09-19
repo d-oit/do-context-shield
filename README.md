@@ -24,7 +24,7 @@ Claude Code / OpenCode / Codex / Gemini CLI / custom agent
 
 ## First vertical slice
 
-- Regex detector for email, phone, IBAN, IPv4/IPv6, SSN and credit-card numbers, AWS access keys, JWTs, and common API-key shapes.
+- Regex detector for email, phone, IBAN, IPv4/IPv6, SSN, credit-card and US bank-routing numbers, dates of birth, passports, driver's licenses, private-key blocks (PEM/OpenPGP/PKCS#8), AWS/Google/Slack/GitHub tokens, JWTs, `password=`/`Bearer` style secrets, and common API-key shapes.
 - Process plugins: a local executable can implement detection, judging, policy, transformation, or storage over newline-delimited JSON (`--detector process --detector-command "<program> [args...]"`, likewise `--judge`, `--policy`, `--transformer`, and `--vault` with their own command flags; see `docs/process-plugin.md`).
 - Default policy: pseudonymize personal identifiers; redact secrets.
 - Optional semantic judge (`--judge heuristics` or a local process judge) that labels candidates; secrets stay redacted regardless of judge output.
