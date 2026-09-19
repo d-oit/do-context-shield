@@ -27,6 +27,10 @@ expect_used = "deny"
 
 [workspace.dependencies]
 clap = { version = "4.5", features = ["derive"] }
+# Fragment orchestrator for GLiNER2 span exports (encoder + 7 fragments).
+# `default-features = false` keeps the hf-hub download stack (and its TLS
+# dependencies) out of the binary: the privacy boundary never fetches models.
+gliner2-rs = { version = "0.9", default-features = false }
 ort = { version = "=2.0.0-rc.13", default-features = false, features = [
   "load-dynamic",
 ] }
