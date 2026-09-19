@@ -11,15 +11,21 @@ include = ["src/**/*", "Cargo.toml"]
 
 [features]
 default = []
-# Enable the bundled ONNX backend (ort + tokenizers + serde_json).
+# Enable the bundled ONNX backend (ort + tokenizers + serde_json) for
+# single-file token-classification exports, and the gliner2-rs fragment
+# engine for GLiNER2 span exports (encoder + span_rep + scorer + ...).
 # Off by default so the base workspace builds light and offline.
-gliner2 = ["dep:ort", "dep:tokenizers", "dep:serde_json"]
+gliner2 = ["dep:ort", "dep:tokenizers", "dep:serde_json", "dep:gliner2-rs"]
 
 [lints]
 workspace = true
 
 [dependencies]
 do-context-shield-plugin-api.workspace = true
+gliner2-rs = { workspace = true, optional = true }
 ort = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 tokenizers = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,22 +1,26 @@
 //! `GLiNER2` local NER detector plugin.
 //!
 //! Rust-only inference path: an ONNX backend behind the `gliner2` Cargo
-//! feature ([`ort`] + `tokenizers` + `ndarray`, CPU-first). The base build
-//! carries no model and no native dependency; detection without a configured
-//! model fails closed instead of silently returning no entities.
+//! feature ([`ort`] + `tokenizers` for single-file exports, [`gliner2_rs`] for
+//! fragment exports, CPU-first). The base build carries no model and no native
+//! dependency; detection without a configured model fails closed instead of
+//! silently returning no entities.
 //!
 //! Supported model layouts inside `model_dir`:
 //!
 //! - Single-file token-classification ONNX (`model.onnx` + `tokenizer.json`
 //!   + `config.json` with `id2label`): executed directly.
-//! - `GLiNER2` / `GLiNER2.5` multi-fragment boundary exports: detected and
-//!   reported as unsupported until fragment orchestration lands (see
-//!   `docs/plugins.md`); the span-decoding contract below already matches
-//!   that pipeline's output shape.
+//! - `GLiNER2` span exports (`encoder` + `span_rep` + `scorer` + `classifier`
+//!   fragments, flat or under `fp16_v2/`/`fp32_v2/`): executed by `gliner2-rs`
+//!   with [`Gliner2Config::labels`] as the label schema.
+//! - `GLiNER2.5` boundary exports (`boundary_manifest.json`): rejected; the
+//!   boundary architecture needs a different engine (see `docs/plugins.md`).
 
 use do_context_shield_plugin_api::{Detector, DetectorError, Entity};
 use std::path::PathBuf;
 
+#[cfg(feature = "gliner2")]
+mod fragments;
 #[cfg(feature = "gliner2")]
 mod onnx;
 
@@ -166,13 +170,19 @@ pub fn decode_spans(input: &str, spans: &[RawSpan], threshold: f32) -> Vec<Entit
 /// fails closed with guidance instead of returning an empty entity list.
 pub struct Gliner2Detector {
     config: Gliner2Config,
+    #[cfg(feature = "gliner2")]
+    fragment: std::sync::Mutex<Option<fragments::FragmentEngine>>,
 }
 
 impl Gliner2Detector {
     /// Build a detector from an explicit config.
     #[must_use]
     pub fn new(config: Gliner2Config) -> Self {
-        Self { config }
+        Self {
+            config,
+            #[cfg(feature = "gliner2")]
+            fragment: std::sync::Mutex::new(None),
+        }
     }
 
     /// Current configuration.
@@ -202,11 +212,25 @@ impl Detector for Gliner2Detector {
         if !model_dir.is_dir() {
             return Err(Self::fail_closed("model_dir does not exist"));
         }
-        if has_boundary_fragments(&model_dir) {
+        if boundary_export(&model_dir) {
             return Err(DetectorError::Message(
-                "gliner2 boundary-fragment export detected; multi-fragment orchestration is not implemented yet, use a single-file token-classification ONNX export"
+                "gliner2.5 boundary export detected; the boundary architecture is not supported, use a GLiNER2 span export (encoder + span_rep + scorer fragments) or a single-file token-classification ONNX export"
                     .to_owned(),
             ));
+        }
+        if fragment_export(&model_dir) {
+            #[cfg(feature = "gliner2")]
+            {
+                let spans = self.fragment_spans(&model_dir, input)?;
+                return Ok(decode_spans(input, &spans, self.config.threshold));
+            }
+            #[cfg(not(feature = "gliner2"))]
+            {
+                let _ = input;
+                return Err(Self::fail_closed(
+                    "this export is a GLiNER2 fragment set, which needs a binary built with the `gliner2` feature",
+                ));
+            }
         }
         #[cfg(feature = "gliner2")]
         {
@@ -224,79 +248,61 @@ impl Detector for Gliner2Detector {
     }
 }
 
-/// Check for a `GLiNER2` / `GLiNER2.5` multi-fragment boundary export.
-fn has_boundary_fragments(model_dir: &std::path::Path) -> bool {
+impl Gliner2Detector {
+    /// Fragment-export spans for `input`, loading the engine on first use.
+    #[cfg(feature = "gliner2")]
+    fn fragment_spans(
+        &self,
+        model_dir: &std::path::Path,
+        input: &str,
+    ) -> Result<Vec<RawSpan>, DetectorError> {
+        let mut guard = self.fragment.lock().map_err(|_| {
+            DetectorError::Message("gliner2 fragment backend: engine lock poisoned".to_owned())
+        })?;
+        let intra_threads = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
+        let engine = guard.get_or_insert_with(fragments::FragmentEngine::new);
+        engine.extract(
+            model_dir,
+            intra_threads,
+            &self.config.labels,
+            self.config.threshold,
+            input,
+        )
+    }
+}
+
+/// Whether `model_dir` holds a fragment export the backend can attempt.
+///
+/// Matches the flat layout (`encoder.onnx`, `encoder_fp32.onnx`,
+/// `encoder_fp16.onnx`, plus their `_iobinding` variants) and the legacy
+/// `fp16_v2/` / `fp32_v2/` subfolder layout. Presence only routes the call: an
+/// incomplete set still fails closed when the engine loads it.
+fn fragment_export(model_dir: &std::path::Path) -> bool {
+    for subdir in ["", "fp32_v2", "fp16_v2"] {
+        let dir = if subdir.is_empty() {
+            model_dir.to_path_buf()
+        } else {
+            model_dir.join(subdir)
+        };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        let has_encoder = entries.flatten().any(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            name.starts_with("encoder") && name.ends_with(".onnx")
+        });
+        if has_encoder {
+            return true;
+        }
+    }
+    false
+}
+
+/// Whether `model_dir` holds a `GLiNER2.5` boundary export (unsupported here).
+fn boundary_export(model_dir: &std::path::Path) -> bool {
     model_dir.join("boundary_manifest.json").is_file()
-        || model_dir.join("encoder.onnx").is_file()
-        || model_dir.join("onnx").is_dir()
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::PathBuf;
-
-    fn span(label: &str, start: usize, end: usize, score: f32) -> RawSpan {
-        RawSpan {
-            label: label.to_owned(),
-            start,
-            end,
-            score,
-        }
-    }
-
-    #[test]
-    fn default_labels_cover_42_pii_types() {
-        assert_eq!(PII_LABELS_42.len(), 42);
-        let config = Gliner2Config::default();
-        assert_eq!(config.labels.len(), 42);
-        assert!((config.threshold - DEFAULT_THRESHOLD).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn canonical_kind_normalizes_labels() {
-        assert_eq!(canonical_kind("email"), "email");
-        assert_eq!(canonical_kind(" Phone Number "), "phone_number");
-        assert_eq!(canonical_kind("PERSON"), "person");
-    }
-
-    #[test]
-    fn decode_applies_threshold_and_dedup() {
-        let input = "alice@example.com";
-        let spans = vec![
-            span("email", 0, 17, 0.9),
-            span("person", 0, 5, 0.8),
-            span("email", 0, 17, 0.2),
-        ];
-        let entities = decode_spans(input, &spans, 0.5);
-        assert_eq!(entities.len(), 1);
-        assert_eq!(entities[0].kind, "email");
-        assert_eq!(entities[0].value, input);
-    }
-
-    #[test]
-    fn decode_rejects_non_char_boundaries() {
-        let input = "grüße";
-        let spans = vec![span("person", 1, 3, 0.9)];
-        assert!(decode_spans(input, &spans, 0.0).is_empty());
-    }
-
-    #[test]
-    fn detect_without_model_dir_fails_closed() {
-        let detector = Gliner2Detector::default();
-        match detector.detect("alice@example.com") {
-            Ok(_) => panic!("expected fail-closed error"),
-            Err(error) => assert!(error.to_string().contains("model_dir")),
-        }
-    }
-
-    #[test]
-    fn detect_with_missing_dir_fails_closed() {
-        let config = Gliner2Config::with_model_dir(PathBuf::from("/nonexistent-gliner2-model-xyz"));
-        let detector = Gliner2Detector::new(config);
-        match detector.detect("alice@example.com") {
-            Ok(_) => panic!("expected fail-closed error"),
-            Err(error) => assert!(error.to_string().contains("does not exist")),
-        }
-    }
-}
+mod tests;
