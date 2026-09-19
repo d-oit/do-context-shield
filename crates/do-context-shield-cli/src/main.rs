@@ -17,6 +17,19 @@ use std::time::Duration;
 mod cli;
 mod config;
 
+/// `GLiNER2` detector for the resolved model directory; an unconfigured or
+/// missing export fails closed on the first detect.
+fn gliner2_detector(
+    model_dir: Option<&Path>,
+) -> do_context_shield_detector_gliner2::Gliner2Detector {
+    use do_context_shield_detector_gliner2::{Gliner2Config, Gliner2Detector};
+    let config = match model_dir {
+        Some(dir) => Gliner2Config::with_model_dir(dir.to_path_buf()),
+        None => Gliner2Config::default(),
+    };
+    Gliner2Detector::new(config)
+}
+
 fn build_pipeline(
     resolved: &config::Resolved,
 ) -> Result<PrivacyPipeline, Box<dyn std::error::Error>> {
@@ -55,14 +68,11 @@ fn build_pipeline(
     };
     let detector: Box<dyn do_context_shield_plugin_api::Detector> = match resolved.detector.as_str()
     {
-        "gliner2" => {
-            use do_context_shield_detector_gliner2::{Gliner2Config, Gliner2Detector};
-            let config = match resolved.model_dir.as_deref() {
-                Some(dir) => Gliner2Config::with_model_dir(dir.to_path_buf()),
-                None => Gliner2Config::default(),
-            };
-            Box::new(Gliner2Detector::new(config))
-        }
+        "gliner2" => Box::new(gliner2_detector(resolved.model_dir.as_deref())),
+        "hybrid" => Box::new(do_context_shield_detector_hybrid::HybridDetector::new(
+            do_context_shield_plugin_registry::detector("regex")?,
+            Box::new(gliner2_detector(resolved.model_dir.as_deref())),
+        )),
         "process" => Box::new(ProcessDetector::from_selection(
             resolved.detector_command.as_deref(),
             timeout,

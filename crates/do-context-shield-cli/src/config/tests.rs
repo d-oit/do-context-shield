@@ -98,6 +98,13 @@ fn invalid_value_rejected() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn hybrid_detector_name_is_accepted() -> Result<(), Box<dyn std::error::Error>> {
+    let config: Config = toml::from_str("[plugins]\ndetector = \"hybrid\"\n")?;
+    assert!(validate(&config).is_ok());
+    Ok(())
+}
+
+#[test]
 fn vault_combinations_checked() -> Result<(), Box<dyn std::error::Error>> {
     for text in [
         "[vault]\nvault = \"json\"\n",
