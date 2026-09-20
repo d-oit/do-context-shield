@@ -40,7 +40,7 @@ Agent = Model + Harness. Feedforward guides (this skill, `AGENTS.md`, `CONTRIBUT
 |---|---|---|---|
 | fmt | `cargo fmt --all -- --check` | pre-commit, CI | `cargo fmt --all` |
 | check | `cargo check --workspace` | pre-commit, CI | fix the compile error |
-| clippy | `cargo clippy --workspace --all-targets -- -D warnings` | pre-push, CI | fix the lint; no `unwrap()`/`expect()`; document `Result` fns with `# Errors` |
+| clippy | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | pre-push, CI | fix the lint; no `unwrap()`/`expect()`; document `Result` fns with `# Errors` |
 | test | `cargo test --workspace` (`--all-features` in CI) | pre-push, CI | fix the test; update it first when behavior changes intentionally |
 | loc | `bash scripts/check-loc.sh` | pre-commit, CI | decompose at 450 LOC; extract a module or a `<module>_tests.rs` |
 | skills | `bash scripts/check-skills.sh` | pre-push | fix frontmatter/evals; see skill-creator |

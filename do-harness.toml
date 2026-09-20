@@ -26,7 +26,7 @@ when-changed = ["**/*.rs", "Cargo.toml", "Cargo.lock"]
 
 [[sensors]]
 name = "clippy"
-argv = ["cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]
+argv = ["cargo", "clippy", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"]
 when-changed = ["**/*.rs", "Cargo.toml", "Cargo.lock"]
 
 [[sensors]]
