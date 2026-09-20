@@ -57,7 +57,7 @@ do-harness eval --strict-fixtures             # skill structure + hermetic walkt
 bash scripts/check-skills.sh                  # skill gate + planning-catalog check
 
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace
 cargo deny check
 cargo audit

@@ -55,6 +55,14 @@ fn stub(
     })
 }
 
+/// `(kind, start, end)` tuples in result order.
+fn spans(entities: &[Entity]) -> Vec<(&str, usize, usize)> {
+    entities
+        .iter()
+        .map(|entity| (entity.kind.as_str(), entity.start, entity.end))
+        .collect()
+}
+
 #[test]
 fn runs_both_detectors_in_order_and_concatenates() {
     let log = Arc::new(Mutex::new(Vec::new()));
@@ -154,4 +162,185 @@ fn primary_failure_short_circuits() {
         Ok(log) => assert_eq!(*log, ["primary"]),
         Err(error) => panic!("stub log poisoned: {error}"),
     }
+}
+
+#[test]
+fn touching_secondary_spans_are_kept() {
+    // Half-open spans: secondary entities that touch a primary boundary (on
+    // either side) do not overlap it and survive the merge.
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let hybrid = HybridDetector::new(
+        stub("primary", vec![entity("ssn", 5, 10, "56789")], &log, false),
+        stub(
+            "secondary",
+            vec![
+                entity("city", 0, 5, "01234"),
+                entity("state", 10, 15, "abcde"),
+            ],
+            &log,
+            false,
+        ),
+    );
+    let entities = match hybrid.detect("0123456789abcde") {
+        Ok(entities) => entities,
+        Err(error) => panic!("hybrid detect failed: {error}"),
+    };
+    assert_eq!(
+        spans(&entities),
+        [("ssn", 5, 10), ("city", 0, 5), ("state", 10, 15)]
+    );
+}
+
+#[test]
+fn primary_displaces_engulfing_secondary() {
+    // A secondary entity wider than the primary span it overlaps still loses:
+    // primary precedence is not a length comparison.
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let hybrid = HybridDetector::new(
+        stub("primary", vec![entity("ssn", 2, 5, "234")], &log, false),
+        stub(
+            "secondary",
+            vec![entity("tax_id", 0, 10, "0123456789")],
+            &log,
+            false,
+        ),
+    );
+    let entities = match hybrid.detect("0123456789") {
+        Ok(entities) => entities,
+        Err(error) => panic!("hybrid detect failed: {error}"),
+    };
+    assert_eq!(spans(&entities), [("ssn", 2, 5)]);
+}
+
+#[test]
+fn equal_length_overlapping_secondaries_keep_first() {
+    // Equal-length secondary overlap: the earlier-returned span is kept.
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let hybrid = HybridDetector::new(
+        stub("primary", Vec::new(), &log, false),
+        stub(
+            "secondary",
+            vec![
+                entity("city", 0, 5, "01234"),
+                entity("state", 2, 7, "23456"),
+            ],
+            &log,
+            false,
+        ),
+    );
+    let entities = match hybrid.detect("0123456") {
+        Ok(entities) => entities,
+        Err(error) => panic!("hybrid detect failed: {error}"),
+    };
+    assert_eq!(spans(&entities), [("city", 0, 5)]);
+}
+
+#[test]
+fn longer_secondary_displaces_shorter_secondary() {
+    // A strictly longer secondary displaces the shorter span it overlaps.
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let hybrid = HybridDetector::new(
+        stub("primary", Vec::new(), &log, false),
+        stub(
+            "secondary",
+            vec![
+                entity("city", 0, 5, "01234"),
+                entity("address", 3, 9, "345678"),
+            ],
+            &log,
+            false,
+        ),
+    );
+    let entities = match hybrid.detect("0123456789") {
+        Ok(entities) => entities,
+        Err(error) => panic!("hybrid detect failed: {error}"),
+    };
+    assert_eq!(spans(&entities), [("address", 3, 9)]);
+}
+
+#[test]
+fn longer_secondary_kept_when_returned_first() {
+    // Longest-span-wins does not depend on arrival order: a later, shorter
+    // overlapping secondary never displaces the longer kept one.
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let hybrid = HybridDetector::new(
+        stub("primary", Vec::new(), &log, false),
+        stub(
+            "secondary",
+            vec![
+                entity("address", 3, 9, "345678"),
+                entity("city", 0, 5, "01234"),
+            ],
+            &log,
+            false,
+        ),
+    );
+    let entities = match hybrid.detect("0123456789") {
+        Ok(entities) => entities,
+        Err(error) => panic!("hybrid detect failed: {error}"),
+    };
+    assert_eq!(spans(&entities), [("address", 3, 9)]);
+}
+
+#[test]
+fn exact_duplicate_secondary_spans_keep_one() {
+    // An exact duplicate span is dropped, not appended.
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let hybrid = HybridDetector::new(
+        stub("primary", Vec::new(), &log, false),
+        stub(
+            "secondary",
+            vec![entity("city", 0, 5, "01234"), entity("city", 0, 5, "01234")],
+            &log,
+            false,
+        ),
+    );
+    let entities = match hybrid.detect("01234") {
+        Ok(entities) => entities,
+        Err(error) => panic!("hybrid detect failed: {error}"),
+    };
+    assert_eq!(spans(&entities), [("city", 0, 5)]);
+}
+
+#[test]
+fn empty_input_returns_merged_empty() {
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let hybrid = HybridDetector::new(
+        stub("primary", Vec::new(), &log, false),
+        stub("secondary", Vec::new(), &log, false),
+    );
+    match hybrid.detect("") {
+        Ok(entities) => assert!(entities.is_empty()),
+        Err(error) => panic!("hybrid detect failed: {error}"),
+    }
+}
+
+#[test]
+fn unicode_offsets_merge_by_byte_spans() {
+    // Offsets are UTF-8 byte offsets: the secondary span overlapping the
+    // multi-byte prefix by bytes is dropped, and the span that merely touches
+    // the primary at byte 10 survives.
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let hybrid = HybridDetector::new(
+        stub(
+            "primary",
+            vec![entity("secret", 4, 10, "secret")],
+            &log,
+            false,
+        ),
+        stub(
+            "secondary",
+            vec![
+                entity("person", 0, 8, "🎉secr"),
+                entity("emoji", 10, 14, "🎉"),
+            ],
+            &log,
+            false,
+        ),
+    );
+    let entities = match hybrid.detect("🎉secret🎉") {
+        Ok(entities) => entities,
+        Err(error) => panic!("hybrid detect failed: {error}"),
+    };
+    assert_eq!(spans(&entities), [("secret", 4, 10), ("emoji", 10, 14)]);
 }

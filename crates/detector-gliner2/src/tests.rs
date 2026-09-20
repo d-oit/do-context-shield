@@ -159,3 +159,27 @@ fn incomplete_fragment_export_fails_closed() {
         }
     }
 }
+
+#[cfg(feature = "gliner2")]
+#[test]
+fn fragment_engine_lock_poisoning_fails_closed() {
+    let dir = temp_dir_with(&["encoder_fp32.onnx"]);
+    let detector = detector_with(dir.path());
+    // Poison the fragment-engine mutex by panicking while holding the lock;
+    // detection must surface that as a fail-closed error, not a panic.
+    let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        match detector.fragment.lock() {
+            // Hold the guard across the panic so the mutex is poisoned.
+            Ok(_guard) => panic!("poison the fragment engine mutex on purpose"),
+            Err(error) => panic!("fragment mutex unexpectedly poisoned: {error}"),
+        }
+    }));
+    assert!(poisoned.is_err());
+    match detector.detect("John Doe") {
+        Ok(entities) => panic!("expected fail-closed error, got {entities:?}"),
+        Err(error) => {
+            let text = error.to_string();
+            assert!(text.contains("engine lock poisoned"), "{text}");
+        }
+    }
+}
