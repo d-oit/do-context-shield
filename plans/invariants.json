@@ -166,5 +166,11 @@
     "rationale": "With default setup disabled, or with no analysis on the target branch, the ruleset's code_scanning rule can never be satisfied and every merge needs an administrator bypass; an advanced-setup workflow added alongside default setup fails at analysis upload instead of taking over",
     "sensor": "gh api repos/d-oit/do-context-shield/code-scanning/default-setup (state=configured) + gh api repos/d-oit/do-context-shield/rulesets/rule-suites (code_scanning rule result)",
     "category": "workflow"
+  },
+  {
+    "invariant": "Hybrid detector merge keeps primary spans authoritative and resolves secondary-secondary overlaps longest-span-wins, keeping the earlier-returned span on equal lengths",
+    "rationale": "The merged list must carry no overlapping secondary spans so hybrid output is stable before the pipeline's own dedup pass, while primary precedence stops a noisy model fragment from splitting an authoritative structured-identifier span",
+    "sensor": "cargo test -p do-context-shield-detector-hybrid",
+    "category": "contracts"
   }
 ]
