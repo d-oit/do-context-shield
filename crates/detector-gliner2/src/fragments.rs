@@ -170,3 +170,50 @@ fn extract_spans(
 fn engine_error(reason: &str) -> DetectorError {
     DetectorError::Message(format!("gliner2 fragment backend: {reason}"))
 }
+
+#[cfg(test)]
+mod tests {
+    //! Worker-lifecycle tests. None of them trigger the engine load, so the
+    //! ONNX runtime is never required: only the first `Extract` request calls
+    //! `gliner2_rs::init`, and these tests stop before that.
+
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn worker_shutdown_on_drop_exits_the_serve_loop() {
+        let (requests, incoming) = channel();
+        let (stopped, confirmation) = channel();
+        let thread = std::thread::spawn(move || {
+            serve(&incoming, Path::new("/nonexistent-gliner2-model"), 1);
+            let _ = stopped.send(());
+        });
+        drop(Worker { requests });
+        match confirmation.recv_timeout(Duration::from_secs(10)) {
+            Ok(()) => {}
+            Err(error) => panic!("serve loop did not stop after worker drop: {error}"),
+        }
+        match thread.join() {
+            Ok(()) => {}
+            Err(payload) => panic!("serve thread panicked: {payload:?}"),
+        }
+    }
+
+    #[test]
+    fn engine_thread_stopped_surfaces_error() {
+        // A worker whose receiver is already gone: the send must fail with the
+        // closed-channel error, never hang or panic.
+        let (requests, incoming) = channel::<Request>();
+        drop(incoming);
+        let mut engine = FragmentEngine {
+            worker: Some(Worker { requests }),
+        };
+        match engine.extract(Path::new("/nonexistent-gliner2-model"), 1, &[], 0.0, "text") {
+            Ok(spans) => panic!("expected a closed-channel error, got {spans:?}"),
+            Err(error) => {
+                let text = error.to_string();
+                assert!(text.contains("engine thread stopped"), "{text}");
+            }
+        }
+    }
+}
