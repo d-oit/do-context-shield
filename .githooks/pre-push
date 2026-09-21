@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Pre-push hook: mirrors the `pre-push` sensors in do-harness.toml (fmt,
+# check, clippy, test, loc, deps, audit, commitlint) without requiring the
+# do-harness binary, like the hand-written pre-commit hook does. Install with:
+# git config core.hooksPath .githooks
+set -uo pipefail
+
+if [[ -f "$HOME/.cargo/env" ]]; then
+  # shellcheck disable=SC1091
+  source "$HOME/.cargo/env"
+fi
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT" || exit 1
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+FAILED=0
+
+# Runs one sensor, printing the command and the tail of its output on failure.
+run_sensor() {
+  local name="$1"
+  shift
+  local log
+  log="$(mktemp)"
+  printf "Running %s: %s\n" "$name" "$*"
+  if "$@" >"$log" 2>&1; then
+    printf "  ${GREEN}✓ %s OK${NC}\n" "$name"
+  else
+    printf "  ${RED}✗ %s failed (last 40 lines):${NC}\n" "$name"
+    tail -40 "$log"
+    FAILED=1
+  fi
+  rm -f "$log"
+}
+
+printf "\n"
+run_sensor "fmt" cargo fmt --all -- --check
+run_sensor "check" cargo check --workspace --all-targets
+run_sensor "clippy" cargo clippy --workspace --all-targets --all-features -- -D warnings
+run_sensor "test" cargo test --workspace
+run_sensor "loc" bash scripts/check-loc.sh
+run_sensor "deps" bash scripts/check-deps.sh
+run_sensor "audit" bash scripts/check-audit.sh
+run_sensor "commitlint" bash scripts/check-commitlint.sh
+
+printf "\n"
+if [[ $FAILED -ne 0 ]]; then
+  printf "${RED}Pre-push checks FAILED. Fix issues above before pushing.${NC}\n"
+  printf "To bypass (not recommended): git push --no-verify\n"
+  exit 1
+fi
+
+printf "${GREEN}All pre-push checks passed.${NC}\n"
+exit 0

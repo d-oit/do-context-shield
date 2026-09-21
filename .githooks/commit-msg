@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Commit-msg hook: lints the prepared subject with the same checker CI runs
+# against PR titles (the `commitlint` sensor). Install with:
+# git config core.hooksPath .githooks
+set -uo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [[ ! -f "$REPO_ROOT/scripts/check-commitlint.sh" ]]; then
+  echo "commit-msg: $REPO_ROOT/scripts/check-commitlint.sh not found; blocking commit." >&2
+  exit 2
+fi
+
+exec bash "$REPO_ROOT/scripts/check-commitlint.sh" --message "$1"
