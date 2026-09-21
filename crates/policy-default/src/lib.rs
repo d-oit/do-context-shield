@@ -211,6 +211,23 @@ mod tests {
     }
 
     #[test]
+    fn unknown_recipient_keeps_non_personal() {
+        // The unknown-recipient block covers personal data only: explicitly
+        // non-personal entities fall through to the normal rules.
+        let context = ProcessingContext {
+            recipient: RecipientClass::Unknown,
+            data_category: DataCategory::NonPersonal,
+            ..ProcessingContext::default()
+        };
+        assert_eq!(action_with("email", &[], &context), Action::Pseudonymize);
+        assert_eq!(action_with("api_key", &[], &context), Action::Redact);
+        assert_eq!(
+            action_with("email", &[labeled(0, SemanticLabel::Test, 0.95)], &context),
+            Action::Keep
+        );
+    }
+
+    #[test]
     fn unknown_recipient_still_redacts_secrets() {
         let context = ProcessingContext {
             recipient: RecipientClass::Unknown,
@@ -246,5 +263,17 @@ mod tests {
             ..ProcessingContext::default()
         };
         assert_eq!(action_with("email", &[], &context), Action::Keep);
+    }
+
+    #[test]
+    fn special_category_to_trusted_pseudonymizes() {
+        // Only external and unknown recipients block special-category data; a
+        // trusted recipient pseudonymizes it like any other personal data.
+        let context = ProcessingContext {
+            recipient: RecipientClass::Trusted,
+            data_category: DataCategory::SpecialCategory,
+            ..ProcessingContext::default()
+        };
+        assert_eq!(action_with("email", &[], &context), Action::Pseudonymize);
     }
 }
