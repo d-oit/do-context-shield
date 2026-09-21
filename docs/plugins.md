@@ -30,12 +30,12 @@ tar -xzf ort.tgz
 export ORT_DYLIB_PATH="$PWD/onnxruntime-linux-x64-1.28.0/lib/libonnxruntime.so"
 ```
 
-Model-backed end-to-end tests pick up a local export and runtime from the environment and skip with a note when either is unset:
+Model-backed end-to-end tests pick up a local export and runtime from the environment and skip with a note when either is unset: `cli_model_e2e` drives the CLI path, `mcp_model_e2e` the MCP stdio path with a config-selected hybrid detector.
 
 ```bash
 ORT_DYLIB_PATH="$PWD/onnxruntime-linux-x64-1.28.0/lib/libonnxruntime.so" \
 DO_CONTEXT_SHIELD_E2E_MODEL_DIR="$PWD/models/gliner2-pii" \
-cargo test -p do-context-shield --features gliner2 --test cli_model_e2e
+cargo test -p do-context-shield --features gliner2 --test cli_model_e2e --test mcp_model_e2e
 ```
 
 ### Supported export layouts
