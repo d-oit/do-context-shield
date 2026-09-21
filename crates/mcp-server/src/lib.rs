@@ -14,6 +14,118 @@ mod handle;
 
 use crate::handle::handle_request;
 
+/// One MCP tool, as accepted by `--tools` and offered in `tools/list`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ToolName {
+    /// `context.sanitize`.
+    Sanitize,
+    /// `context.restore`.
+    Restore,
+    /// `context.inspect`.
+    Inspect,
+    /// `context.forget`.
+    Forget,
+}
+
+impl ToolName {
+    /// Every tool, in catalogue order.
+    pub const ALL: [Self; 4] = [Self::Sanitize, Self::Restore, Self::Inspect, Self::Forget];
+
+    /// Short name accepted by `--tools`.
+    #[must_use]
+    pub const fn short(self) -> &'static str {
+        match self {
+            Self::Sanitize => "sanitize",
+            Self::Restore => "restore",
+            Self::Inspect => "inspect",
+            Self::Forget => "forget",
+        }
+    }
+
+    const fn bit(self) -> u8 {
+        match self {
+            Self::Sanitize => 0b0001,
+            Self::Restore => 0b0010,
+            Self::Inspect => 0b0100,
+            Self::Forget => 0b1000,
+        }
+    }
+}
+
+/// Which MCP tools the server exposes.
+///
+/// The default is the model-safe surface — `context.sanitize` and
+/// `context.inspect` — because MCP tool results are returned to the calling
+/// model: exposing `context.restore` would let a prompt-injected model resolve
+/// the raw values the boundary keeps away from it. `--tools` opts in when a
+/// client genuinely needs the extra tools.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ToolSet {
+    bits: u8,
+}
+
+impl ToolSet {
+    /// Every tool.
+    #[must_use]
+    pub const fn all() -> Self {
+        Self {
+            bits: ToolName::Sanitize.bit()
+                | ToolName::Restore.bit()
+                | ToolName::Inspect.bit()
+                | ToolName::Forget.bit(),
+        }
+    }
+
+    /// The fail-closed default: `context.sanitize` and `context.inspect`.
+    #[must_use]
+    pub const fn model_facing() -> Self {
+        Self {
+            bits: ToolName::Sanitize.bit() | ToolName::Inspect.bit(),
+        }
+    }
+
+    /// Parse a comma-separated tool list; `all` selects every tool.
+    ///
+    /// # Errors
+    ///
+    /// Returns the accepted names when the list is empty or names an unknown tool.
+    pub fn parse(list: &str) -> Result<Self, String> {
+        let mut bits = 0u8;
+        for name in list.split(',') {
+            match name.trim() {
+                "sanitize" => bits |= ToolName::Sanitize.bit(),
+                "restore" => bits |= ToolName::Restore.bit(),
+                "inspect" => bits |= ToolName::Inspect.bit(),
+                "forget" => bits |= ToolName::Forget.bit(),
+                "all" => bits = Self::all().bits,
+                other => {
+                    return Err(format!(
+                        "unknown tool `{other}` (accepted: sanitize, restore, inspect, forget, all)"
+                    ));
+                }
+            }
+        }
+        if bits == 0 {
+            return Err(
+                "empty tool list (accepted: sanitize, restore, inspect, forget, all)".to_owned(),
+            );
+        }
+        Ok(Self { bits })
+    }
+
+    /// Whether `tool` is exposed.
+    #[must_use]
+    pub const fn contains(self, tool: ToolName) -> bool {
+        self.bits & tool.bit() != 0
+    }
+}
+
+impl Default for ToolSet {
+    fn default() -> Self {
+        Self::model_facing()
+    }
+}
+
 /// Server configuration: persistence and plugin selection.
 pub struct ServerConfig {
     /// Optional local file for persistence across MCP process restarts (JSON vault).
@@ -53,6 +165,9 @@ pub struct ServerConfig {
     /// resolving. Only valid with the memory vault; `None` keeps mappings for
     /// the server's lifetime.
     pub vault_ttl_seconds: Option<u64>,
+    /// MCP tools to expose. Defaults to [`ToolSet::model_facing`]: `restore`
+    /// and `forget` stay off the model-facing surface unless opted in.
+    pub tools: ToolSet,
 }
 
 impl Default for ServerConfig {
@@ -72,6 +187,7 @@ impl Default for ServerConfig {
             transformer_command: None,
             process_timeout_ms: DEFAULT_TIMEOUT_MS,
             vault_ttl_seconds: None,
+            tools: ToolSet::model_facing(),
         }
     }
 }
@@ -214,6 +330,7 @@ pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Err
     let stdout = io::stdout();
     let mut output = stdout.lock();
     let mut line = String::new();
+    let tools = config.tools;
 
     loop {
         line.clear();
@@ -223,7 +340,7 @@ pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Err
         if line.trim().is_empty() {
             continue;
         }
-        let response = handle_request(&mut pipeline, &line)?;
+        let response = handle_request(&mut pipeline, tools, &line)?;
         if let Some(response) = response {
             serde_json::to_writer(&mut output, &response)?;
             output.write_all(b"\n")?;
@@ -231,4 +348,27 @@ pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Err
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tool_set_parses_lists_and_rejects_unknown_names() {
+        assert_eq!(ToolSet::parse("all"), Ok(ToolSet::all()));
+        let partial = match ToolSet::parse("sanitize, forget") {
+            Ok(set) => set,
+            Err(error) => panic!("cannot parse tool set: {error}"),
+        };
+        assert!(partial.contains(ToolName::Sanitize));
+        assert!(partial.contains(ToolName::Forget));
+        assert!(!partial.contains(ToolName::Restore));
+        assert!(!partial.contains(ToolName::Inspect));
+        assert!(ToolSet::parse("nope").is_err());
+        assert!(ToolSet::parse("").is_err());
+        assert_eq!(ToolSet::default(), ToolSet::model_facing());
+        assert!(!ToolSet::default().contains(ToolName::Restore));
+        assert!(ToolSet::all().contains(ToolName::Restore));
+    }
 }

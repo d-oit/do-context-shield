@@ -73,6 +73,7 @@ This first slice is intentionally conservative:
 - No cloud model dependency.
 - Secrets are redacted rather than pseudonymized.
 - Vault scope is explicit.
+- The MCP surface defaults to `sanitize` and `inspect`; `restore` resolves raw values and stays out of the model loop unless `--tools` opts it in.
 - Sanitized text is a separate value from the original input.
 
 This is a foundation, not a claim of complete DLP coverage. Name/entity detection should be added through a local detector plugin such as GLiNER2 rather than hard-coded into the core.

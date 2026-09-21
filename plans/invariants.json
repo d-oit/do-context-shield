@@ -150,6 +150,12 @@
     "category": "contracts"
   },
   {
+    "invariant": "The MCP surface defaults to the model-safe tool set: `mcp-stdio` exposes only `context.sanitize` and `context.inspect` unless `--tools` opts into `restore`/`forget`/`all`, because MCP tool results return to the calling model and a model-driven restore hands raw values into the context the boundary protects",
+    "rationale": "Restore resolves raw values and forget destroys mappings; exposing them to a prompt-injected model lets it un-sanitize text it holds or destroy the harness's ability to restore. The fail-closed default keeps the model-facing surface non-revealing, and the CLI remains the harness-side restore path.",
+    "sensor": "cargo test -p do-context-shield-mcp-server + cargo test -p do-context-shield (tests/mcp_stdio.rs, tests/cli_errors.rs)",
+    "category": "security"
+  },
+  {
     "invariant": "Adapter context surfaces default to the most restrictive ProcessingContext and reject unknown recipient/data_category names or wrong argument types instead of silently downgrading",
     "rationale": "A typo in a client-supplied trust classification must fail the call, never weaken the recipient-aware policy",
     "sensor": "cargo test -p do-context-shield-mcp-server + CLI value parsers (clap value_parser + sanitize smoke)",

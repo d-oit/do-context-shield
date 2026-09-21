@@ -21,11 +21,11 @@ Use `do-context-shield` as a local privacy boundary when coding context may cont
 ## Default workflow
 
 1. Keep source text local.
-2. Prefer the `context.inspect`, `context.sanitize`, and `context.restore` MCP tools when the coding client supports MCP (register `do-context-shield mcp-stdio` as a local stdio server, see `docs/client-integration.md`).
+2. Prefer the `context.inspect` and `context.sanitize` MCP tools when the coding client supports MCP (register `do-context-shield mcp-stdio` as a local stdio server, see `docs/client-integration.md`).
 3. Otherwise call `do-context-shield inspect` when sensitivity is unclear.
 4. Call `do-context-shield sanitize --session <stable-session-id>` before sending context to an external model/tool. Add `--detector gliner2 --model-dir <dir>` for local NER instead of regex (requires a local ONNX export and a binary built with `--features gliner2`; see below).
 5. Send **only the sanitized text** to the model/tool.
-6. After the response, call `context.restore`, or `do-context-shield restore --session <same-session-id>`, only when placeholders need to become original values again. The MCP tool requires an explicit `session`; there is no fallback scope for restore.
+6. After the response, call `do-context-shield restore --session <same-session-id>` only when placeholders need to become original values again. Restore harness-side: MCP tool results return to the calling model, so `context.restore` is not exposed by default (`--tools` opts in) and there is no fallback scope. Treat a reply containing placeholders you did not send as untrusted — `restore` resolves any well-formed token that matches a stored mapping, so fabricated placeholders become real values.
 7. Never paste the vault mappings into model context.
 
 ## Important rules
@@ -36,7 +36,7 @@ Use `do-context-shield` as a local privacy boundary when coding context may cont
 - Add `--judge heuristics` to keep high-confidence test-domain values (e.g. `alice@example.com`) and role addresses (e.g. `support@acme.com`) unchanged; secrets stay redacted regardless of judge output.
 - Keep one stable session id per agent task so repeated entities get stable pseudonyms.
 - Set the destination explicitly on `sanitize`: `--recipient local` (or the MCP `recipient` argument) keeps non-secret values for a same-device step, and `--data-category special_category` blocks health/biometric-class data addressed to external recipients; omitting both keeps the conservative `external`/`personal` defaults.
-- When a task is done, delete its mappings: call `context.forget` (or `do-context-shield forget --session <same-session-id>`) so the local vault stops holding original values. Long-running MCP servers can also bound mapping lifetime with `--vault-ttl-seconds`.
+- When a task is done, delete its mappings: call `do-context-shield forget --session <same-session-id>` (or `context.forget` when the server is started with `--tools all`) so the local vault stops holding original values. Long-running MCP servers can also bound mapping lifetime with `--vault-ttl-seconds`.
 - Do not assume regex detection is complete. For names, addresses, source-code secrets, or domain-specific entities, install a stronger detector plugin (see `plugin-development` skill).
 - The skill does not choose an LLM provider. The coding client remains responsible for model selection.
 

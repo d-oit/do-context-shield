@@ -59,3 +59,14 @@ fn session_is_required_exits_2() {
             .stderr(predicates::str::contains("--session"));
     }
 }
+
+#[test]
+fn invalid_tools_value_exits_2() {
+    let dir = temp_dir();
+    cmd(dir.path())
+        .args(["mcp-stdio", "--tools", "nope"])
+        .write_stdin("")
+        .assert()
+        .code(2)
+        .stderr(predicates::str::contains("unknown tool"));
+}

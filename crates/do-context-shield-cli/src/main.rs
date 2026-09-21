@@ -240,6 +240,7 @@ fn run_forget(args: ForgetArgs, config: &config::Config) -> Result<(), Box<dyn s
 }
 
 fn run_mcp(args: McpArgs, config: &config::Config) -> Result<(), Box<dyn std::error::Error>> {
+    let tools = args.tools.unwrap_or_default();
     let resolved = config::resolve(
         config::CliSelection {
             detector: args.detector,
@@ -253,6 +254,7 @@ fn run_mcp(args: McpArgs, config: &config::Config) -> Result<(), Box<dyn std::er
         config,
     );
     do_context_shield_mcp_server::run_stdio(do_context_shield_mcp_server::ServerConfig {
+        tools,
         vault_file: resolved.vault_file,
         vault: resolved.vault,
         vault_command: resolved.vault_command,

@@ -18,14 +18,21 @@ struct McpSession {
 }
 
 impl McpSession {
-    /// Spawn `do-context-shield mcp-stdio` with pipes for both directions.
+    /// Spawn `do-context-shield mcp-stdio` with pipes for both directions
+    /// (default tool set: `sanitize` and `inspect`).
     fn start() -> Self {
+        Self::start_with(&[])
+    }
+
+    /// Spawn with extra arguments after `mcp-stdio` (e.g. `--tools all`).
+    fn start_with(extra: &[&str]) -> Self {
         let home = match tempfile::tempdir() {
             Ok(dir) => dir,
             Err(error) => panic!("cannot create a temp directory: {error}"),
         };
         let mut child = match Command::new(env!("CARGO_BIN_EXE_do-context-shield"))
             .arg("mcp-stdio")
+            .args(extra)
             .current_dir(home.path())
             .env("HOME", home.path())
             .stdin(Stdio::piped())
@@ -165,7 +172,7 @@ fn initialize_returns_legacy_protocol_version() {
 
 #[test]
 fn sanitize_restore_round_trip_over_stdio() {
-    let mut session = McpSession::start();
+    let mut session = McpSession::start_with(&["--tools", "all"]);
     let sanitized = content_text(&session.send(&tool_call(
         "context.sanitize",
         &json!({"text": "alice@example.com", "session": "s1"}),
@@ -200,8 +207,34 @@ fn inspect_over_stdio() {
 }
 
 #[test]
-fn forget_over_stdio() {
+fn default_surface_hides_restore_and_forget() {
     let mut session = McpSession::start();
+    let listed = session.send(r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#);
+    let names: Vec<&str> = match listed.pointer("/result/tools").and_then(Value::as_array) {
+        Some(tools) => tools
+            .iter()
+            .filter_map(|tool| tool.get("name").and_then(Value::as_str))
+            .collect(),
+        None => panic!("missing tools in {listed}"),
+    };
+    assert_eq!(names, ["context.sanitize", "context.inspect"]);
+
+    // A disabled tool is rejected before it could resolve raw values.
+    let denied = session.send(&tool_call(
+        "context.restore",
+        &json!({"text": "__DO_PRIVATE_EMAIL_1__", "session": "s1"}),
+    ));
+    let message = denied
+        .pointer("/error/message")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    assert!(message.contains("not enabled"), "{denied}");
+    session.close();
+}
+
+#[test]
+fn forget_over_stdio() {
+    let mut session = McpSession::start_with(&["--tools", "all"]);
     let sanitized = content_text(&session.send(&tool_call(
         "context.sanitize",
         &json!({"text": "alice@example.com", "session": "f1"}),
