@@ -22,7 +22,7 @@ Every selection can also come from `do-context-shield.toml` (`docs/configuration
 cargo build -p do-context-shield --features gliner2
 ```
 
-ONNX Runtime is loaded dynamically at run time: provide `libonnxruntime.so` on the loader path, or set `ORT_DYLIB_PATH` to one (an ONNX Runtime release archive or an installed `onnxruntime-node` package both ship a usable library). The runtime must match the `ort` release the binary was built with — **1.28.x** for the current `ort 2.0.0-rc.13`. The official 1.28.0 archive is verified end-to-end with the fp16 fragment export below (x64 Linux, 2026-09-20: `inspect`/`sanitize`, chunked and multibyte input):
+ONNX Runtime is loaded dynamically at run time: provide `libonnxruntime.so` on the loader path, or set `ORT_DYLIB_PATH` to one (an ONNX Runtime release archive or an installed `onnxruntime-node` package both ship a usable library). The runtime must match the `ort` release the binary was built with — **1.28.x** for the current `ort 2.0.0-rc.13`. The official 1.28.0 archive is verified end-to-end with the recommended fragment export's `fp16_v2/` set at revision `e594898` (x64 Linux, 2026-09-20: `inspect`/`sanitize`, chunked and multibyte input):
 
 ```bash
 curl -L -o ort.tgz https://github.com/microsoft/onnxruntime/releases/download/v1.28.0/onnxruntime-linux-x64-1.28.0.tgz
@@ -62,16 +62,23 @@ Everything else fails closed with an error and zero entities — an unconfigured
 
 The fragment set is the primary choice: highest published span F1 on the [SPY benchmark](https://aclanthology.org/2025.naacl-srw.23/) with recall-first trade-offs (0.477 avg F1, 0.750/0.686 recall on the legal/medical splits), label-conditioned so custom schemas work without retraining, and multilingual (EN/FR/ES/DE/IT/PT/NL). The Ettin pair is the lightweight single-file alternative: ModernBERT encoders fine-tuned on NVIDIA's synthetic Nemotron-PII dataset, tagged to complement deterministic rules — use them for linguistic PII (names, locations, demographics, dates, employment) and leave structured identifiers (SSN, cards, IPs, keys) to `detector-regex`, whose format matching is more reliable. English only.
 
-Fragment set (fp32 for CPU):
+Fragment set (fp32 for CPU; `fp16_v2/` holds the same fragment names with an `_fp16` suffix):
 
 ```bash
-repo=https://huggingface.co/jugaadsrl/gliner2-privacy-filter-PII-multi-onnx/resolve/main/fp32_v2
+# Pinned export revision: `main` moves, this hash does not.
+rev=e594898629d452e8311796f5f329c7edbeda907c
+repo=https://huggingface.co/jugaadsrl/gliner2-privacy-filter-PII-multi-onnx/resolve/$rev/fp32_v2
 mkdir -p models/gliner2-pii/fp32_v2
 for f in encoder_fp32.onnx token_gather_fp32.onnx span_rep_fp32.onnx \
          schema_gather_fp32.onnx count_pred_argmax_fp32.onnx \
          count_lstm_fixed_fp32.onnx scorer_fp32.onnx classifier_fp32.onnx tokenizer.json; do
   curl -L -o "models/gliner2-pii/fp32_v2/$f" "$repo/$f"
 done
+
+# Verify each file against the Hub's LFS object id (its sha256; needs jq):
+curl -s "https://huggingface.co/api/models/jugaadsrl/gliner2-privacy-filter-PII-multi-onnx/tree/$rev/fp32_v2?recursive=1" \
+  | jq -r '.[] | select(.lfs) | "\(.lfs.oid)  models/gliner2-pii/fp32_v2/\(.path | split("/")[-1])"' \
+  | sha256sum -c -
 
 printf 'Contact Jane Doe at jane@example.com.' |
   do-context-shield sanitize --detector gliner2 --model-dir models/gliner2-pii
@@ -80,7 +87,9 @@ printf 'Contact Jane Doe at jane@example.com.' |
 Single-file alternative:
 
 ```bash
-repo=https://huggingface.co/rulesentry-io/ettin-32m-nemotron-pii-onnx/resolve/main
+# Pinned export revision, as above.
+rev=a7564cc972723bd22ccb3c7a248aadb456adb267
+repo=https://huggingface.co/rulesentry-io/ettin-32m-nemotron-pii-onnx/resolve/$rev
 mkdir -p models/ettin-32m
 curl -L -o models/ettin-32m/model.onnx     "$repo/model.onnx"
 curl -L -o models/ettin-32m/tokenizer.json "$repo/tokenizer.json"
