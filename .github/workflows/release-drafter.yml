@@ -16,7 +16,7 @@ permissions:
 jobs:
   update_release_draft:
     name: Draft Release Notes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Only the push-to-main path writes the draft; pull requests are covered by
     # the dry-run job below.
     if: github.event_name != 'pull_request'
@@ -36,7 +36,7 @@ jobs:
   # pull request's merge ref, i.e. exactly what a post-merge push would use.
   dry_run:
     name: Release Drafter (dry run)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'pull_request'
     permissions:
       contents: read

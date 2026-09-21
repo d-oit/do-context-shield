@@ -12,34 +12,34 @@ fi
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[1;33m'
+NC=$'\033[0m'
 FAILED=0
 
 # Protected-branch guard: `main` takes pull requests only, so a local commit
 # there can never be pushed — it is nearly always a slip after a fetch/reset.
 BRANCH="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
 if [[ "$BRANCH" == "main" ]]; then
-  printf "${RED}✗ Refusing to commit on 'main': it only accepts pull requests.${NC}\n"
-  printf "  Branch first: git switch -c <type>/<description>\n"
-  printf "  To bypass (not recommended): git commit --no-verify\n"
+  printf '%s\n' "${RED}✗ Refusing to commit on 'main': it only accepts pull requests.${NC}"
+  printf '  Branch first: git switch -c <type>/<description>\n'
+  printf '  To bypass (not recommended): git commit --no-verify\n'
   exit 1
 fi
 
 # Staged secret scan with the same config CI uses. Requires gitleaks on PATH;
 # without it the check is skipped with a note (CI still scans the branch).
 if command -v gitleaks >/dev/null 2>&1; then
-  printf "Checking staged content for secrets (gitleaks)...\n"
+  printf 'Checking staged content for secrets (gitleaks)...\n'
   if gitleaks git --staged --redact --exit-code=2 --no-banner >/dev/null 2>&1; then
-    printf "  ${GREEN}✓ No secrets in staged content${NC}\n"
+    printf '  %s\n' "${GREEN}✓ No secrets in staged content${NC}"
   else
-    printf "  ${RED}✗ gitleaks flagged the staged content — inspect with: gitleaks git --staged --redact${NC}\n"
+    printf '  %s\n' "${RED}✗ gitleaks flagged the staged content — inspect with: gitleaks git --staged --redact${NC}"
     FAILED=1
   fi
 else
-  printf "${YELLOW}SKIP: gitleaks not installed — staged secret scan unavailable (CI still scans).${NC}\n"
+  printf '%s\n' "${YELLOW}SKIP: gitleaks not installed — staged secret scan unavailable (CI still scans).${NC}"
 fi
 
 STAGED_RS=$(git diff --cached --name-only --diff-filter=ACM -- '*.rs' 2>/dev/null)
@@ -47,68 +47,68 @@ STAGED_TOML=$(git diff --cached --name-only --diff-filter=ACM -- '*.toml' 2>/dev
 
 if [[ -z "$STAGED_RS" && -z "$STAGED_TOML" ]]; then
   if (( FAILED )); then
-    printf "\n${RED}Pre-commit checks FAILED.${NC}\n"
+    printf '\n%s\n' "${RED}Pre-commit checks FAILED.${NC}"
     exit 1
   fi
-  printf "${GREEN}No staged .rs or .toml files — skipping checks.${NC}\n"
+  printf '%s\n' "${GREEN}No staged .rs or .toml files — skipping checks.${NC}"
   exit 0
 fi
 
 if [[ -n "$STAGED_RS" ]]; then
-  printf "Checking line counts (max 500)...\n"
+  printf 'Checking line counts (max 500)...\n'
   for f in $STAGED_RS; do
     if [[ -f "$f" ]]; then
       lines=$(wc -l < "$f" 2>/dev/null || echo 0)
       if [[ "$lines" -gt 500 ]]; then
-        printf "  ${RED}✗ %s: %d lines (max 500)${NC}\n" "$f" "$lines"
+        printf '  %s\n' "${RED}✗ ${f}: ${lines} lines (max 500)${NC}"
         FAILED=1
       fi
     fi
   done
-  printf "Checking for forbidden unwrap/expect...\n"
+  printf 'Checking for forbidden unwrap/expect...\n'
   if echo "$STAGED_RS" | xargs grep -nE "\.unwrap\(|\.expect\(" 2>/dev/null; then
-    printf "  ${RED}✗ unwrap()/expect() forbidden by AGENTS.md${NC}\n"
+    printf '  %s\n' "${RED}✗ unwrap()/expect() forbidden by AGENTS.md${NC}"
     FAILED=1
   else
-    printf "  ${GREEN}✓ No unwrap/expect${NC}\n"
+    printf '  %s\n' "${GREEN}✓ No unwrap/expect${NC}"
   fi
-  printf "Checking formatting...\n"
+  printf 'Checking formatting...\n'
   # Workspace-wide on purpose: bare `rustfmt --check` cannot resolve
   # `edition.workspace = true`, falls back to an older style edition and
   # false-fails on edition-2024 files. Same command as the do-harness sensor.
   if ! cargo fmt --all -- --check; then
-    printf "  ${RED}✗ Formatting issues. Run: cargo fmt --all${NC}\n"
+    printf '  %s\n' "${RED}✗ Formatting issues. Run: cargo fmt --all${NC}"
     FAILED=1
   else
-    printf "  ${GREEN}✓ Format OK${NC}\n"
+    printf '  %s\n' "${GREEN}✓ Format OK${NC}"
   fi
 fi
 
 if [[ -n "$STAGED_TOML" ]]; then
-  printf "Checking TOML syntax...\n"
+  printf 'Checking TOML syntax...\n'
   for f in $STAGED_TOML; do
     if ! python3 -c "import sys, tomllib; tomllib.load(open(sys.argv[1], 'rb'))" "$f" 2>/dev/null; then
-      printf "  ${RED}✗ TOML syntax error in: %s${NC}\n" "$f"
+      printf '  %s\n' "${RED}✗ TOML syntax error in: ${f}${NC}"
       FAILED=1
     fi
   done
 fi
 
-printf "Running cargo check (do-harness.toml pre-commit sensor)...\n"
+printf 'Running cargo check (do-harness.toml pre-commit sensor)...\n'
 if ! cargo check --workspace --all-targets >/dev/null 2>&1; then
-  printf "  ${RED}✗ cargo check failed${NC}\n"
+  printf '  %s\n' "${RED}✗ cargo check failed${NC}"
   FAILED=1
 else
-  printf "  ${GREEN}✓ check OK${NC}\n"
+  printf '  %s\n' "${GREEN}✓ check OK${NC}"
 fi
 
-printf "\n"
+printf '\n'
 if [[ $FAILED -ne 0 ]]; then
-  printf "${RED}Pre-commit checks FAILED. Fix issues above before committing.${NC}\n"
-  printf "To bypass (not recommended): git commit --no-verify\n"
+  printf '%s\n' "${RED}Pre-commit checks FAILED. Fix issues above before committing.${NC}"
+  printf 'To bypass (not recommended): git commit --no-verify\n'
   exit 1
 fi
 
-printf "${GREEN}All pre-commit checks passed.${NC}\n"
-printf "${YELLOW}Reminder: pre-push runs fmt, check, clippy, test (see do-harness.toml).${NC}\n"
+printf '%s\n' "${GREEN}All pre-commit checks passed.${NC}"
+printf '%s\n' "${YELLOW}Reminder: pre-push runs fmt, check, clippy, test (see do-harness.toml).${NC}"
 exit 0
