@@ -19,7 +19,7 @@ Every selection can also come from `do-context-shield.toml` (`docs/configuration
 `--detector gliner2 --model-dir <dir>` runs a local ONNX export in-process: no Python, no network. Build the CLI with the backend enabled:
 
 ```bash
-cargo build -p do-context-shield --features do-context-shield-detector-gliner2/gliner2
+cargo build -p do-context-shield --features gliner2
 ```
 
 ONNX Runtime is loaded dynamically at run time: provide `libonnxruntime.so` on the loader path, or set `ORT_DYLIB_PATH` to one (an ONNX Runtime release archive or an installed `onnxruntime-node` package both ship a usable library). The runtime must match the `ort` release the binary was built with — **1.28.x** for the current `ort 2.0.0-rc.13`. The official 1.28.0 archive is verified end-to-end with the fp16 fragment export below (x64 Linux, 2026-09-20: `inspect`/`sanitize`, chunked and multibyte input):
@@ -28,6 +28,14 @@ ONNX Runtime is loaded dynamically at run time: provide `libonnxruntime.so` on t
 curl -L -o ort.tgz https://github.com/microsoft/onnxruntime/releases/download/v1.28.0/onnxruntime-linux-x64-1.28.0.tgz
 tar -xzf ort.tgz
 export ORT_DYLIB_PATH="$PWD/onnxruntime-linux-x64-1.28.0/lib/libonnxruntime.so"
+```
+
+Model-backed end-to-end tests pick up a local export and runtime from the environment and skip with a note when either is unset:
+
+```bash
+ORT_DYLIB_PATH="$PWD/onnxruntime-linux-x64-1.28.0/lib/libonnxruntime.so" \
+DO_CONTEXT_SHIELD_E2E_MODEL_DIR="$PWD/models/gliner2-pii" \
+cargo test -p do-context-shield --features gliner2 --test cli_model_e2e
 ```
 
 ### Supported export layouts

@@ -176,7 +176,7 @@
   {
     "invariant": "The GLiNER2 backend loads ONNX Runtime dynamically and needs a runtime matching the ort release it was built against (1.28.x for ort 2.0.0-rc.13, supplied via ORT_DYLIB_PATH or the loader path)",
     "rationale": "ort is built with load-dynamic, so a missing or mismatched runtime fails at engine load; the version pin plus the official archive command is what users need to bring the model backend up",
-    "sensor": "docs/plugins.md runtime note + manual model-backed E2E (ORT 1.28.0 + fp16 fragment export, 2026-09-20: inspect/sanitize, chunked and multibyte inputs)",
+    "sensor": "docs/plugins.md runtime note + gated model-backed E2E (cargo test -p do-context-shield --features gliner2 --test cli_model_e2e; skips without ORT_DYLIB_PATH + DO_CONTEXT_SHIELD_E2E_MODEL_DIR; verified 2026-09-20 with ORT 1.28.0 + fp16 fragment export)",
     "category": "architecture"
   }
 ]
