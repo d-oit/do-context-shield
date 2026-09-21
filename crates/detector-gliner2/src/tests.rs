@@ -45,8 +45,32 @@ fn decode_applies_threshold_and_dedup() {
 #[test]
 fn decode_rejects_non_char_boundaries() {
     let input = "grüße";
+    // End inside a multi-byte character …
     let spans = vec![span("person", 1, 3, 0.9)];
     assert!(decode_spans(input, &spans, 0.0).is_empty());
+    // … and the mirror: start inside one.
+    let spans = vec![span("person", 3, 6, 0.9)];
+    assert!(decode_spans(input, &spans, 0.0).is_empty());
+}
+
+#[test]
+fn decode_drops_nan_scores_and_clamps_confidence() {
+    let input = "alice@example.com";
+    let spans = vec![
+        span("email", 0, 17, f32::NAN),
+        span("person", 0, 5, 1.5),
+        span("city", 6, 13, -0.5),
+    ];
+    // NaN never passes the threshold comparison; out-of-range scores survive
+    // and are clamped into 0..=1.
+    let entities = decode_spans(input, &spans, -1.0);
+    assert_eq!(
+        entities
+            .iter()
+            .map(|entity| (entity.kind.as_str(), entity.confidence))
+            .collect::<Vec<_>>(),
+        [("person", 1.0), ("city", 0.0)]
+    );
 }
 
 #[test]

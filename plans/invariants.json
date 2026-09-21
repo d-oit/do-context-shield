@@ -30,6 +30,12 @@
     "category": "architecture"
   },
   {
+    "invariant": "Registry names map to the intended plugins and unknown names fail with a capability-naming error; `hybrid` wires regex together with the model half, so it fails closed without a model_dir instead of degrading to regex",
+    "rationale": "The names are the user-facing selection surface for CLI and MCP; a silently remapped or degraded name would change what detects and transforms without any other sensor noticing",
+    "sensor": "cargo test -p do-context-shield-plugin-registry",
+    "category": "contracts"
+  },
+  {
     "invariant": "Secrets are redacted, never pseudonymized; personal identifiers are pseudonymized",
     "rationale": "A reversible token for a secret would defeat the redaction guarantee",
     "sensor": "cargo test --workspace (privacy-core pipeline tests)",
@@ -114,7 +120,7 @@
     "category": "security"
   },
   {
-    "invariant": "Recipient-aware default policy enforces GDPR/jurisdiction data categories: special-category data addressed to external or unknown recipients blocks, and unknown recipients block non-secret non-personal data",
+    "invariant": "Recipient-aware default policy enforces GDPR/jurisdiction data categories: special-category data addressed to external or unknown recipients blocks, and unknown recipients block non-secret data except when it is explicitly declared non-personal",
     "rationale": "Fail-closed boundary prevents sensitive personal data from leaking to unvetted recipients",
     "sensor": "cargo test -p do-context-shield-policy-default -p do-context-shield-core",
     "category": "security"

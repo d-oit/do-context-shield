@@ -110,3 +110,75 @@ pub fn vault(name: &str) -> Result<Box<dyn Vault>, RegistryError> {
         }),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn known_names_construct() {
+        for name in ["regex", "gliner2", "hybrid", "process"] {
+            assert!(detector(name).is_ok(), "detector `{name}`");
+        }
+        for name in ["heuristics", "process"] {
+            assert!(judge(name).is_ok(), "judge `{name}`");
+        }
+        for name in ["default", "process"] {
+            assert!(policy(name).is_ok(), "policy `{name}`");
+        }
+        for name in ["pseudonymize", "process"] {
+            assert!(transformer(name).is_ok(), "transformer `{name}`");
+        }
+        for name in ["memory", "process"] {
+            assert!(vault(name).is_ok(), "vault `{name}`");
+        }
+    }
+
+    #[test]
+    fn unknown_names_report_the_capability() {
+        let errors = [
+            ("detector", detector("nope").err()),
+            ("judge", judge("nope").err()),
+            ("policy", policy("nope").err()),
+            ("transformer", transformer("nope").err()),
+            ("vault", vault("nope").err()),
+        ];
+        for (kind, error) in errors {
+            match error {
+                Some(RegistryError::Unknown {
+                    kind: reported,
+                    name,
+                }) => {
+                    assert_eq!(reported, kind);
+                    assert_eq!(name, "nope");
+                }
+                other => panic!("expected an unknown-{kind} error, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn regex_name_detects_and_hybrid_name_pairs_it_with_the_model() {
+        let Ok(regex) = detector("regex") else {
+            panic!("the regex detector must construct");
+        };
+        let entities = match regex.detect("SSN 123-45-6789") {
+            Ok(entities) => entities,
+            Err(error) => panic!("regex detect failed: {error}"),
+        };
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].kind, "ssn");
+
+        // The hybrid name must wire regex together with the model half: with
+        // no model directory the pair fails closed even though regex alone
+        // finds the SSN.
+        let Ok(hybrid) = detector("hybrid") else {
+            panic!("the hybrid detector must construct");
+        };
+        let error = match hybrid.detect("SSN 123-45-6789") {
+            Ok(entities) => panic!("expected a fail-closed error, got {entities:?}"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("model_dir"), "{error}");
+    }
+}

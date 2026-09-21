@@ -283,6 +283,31 @@ fn engulfing_secondary_displaces_shorter_secondary() {
 }
 
 #[test]
+fn longer_secondary_displaces_two_overlapping_shorter_secondaries() {
+    // One strictly longer secondary clears several kept secondaries in a
+    // single pass; the merged list must carry no overlapping secondary spans.
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let hybrid = HybridDetector::new(
+        stub("primary", Vec::new(), &log, false),
+        stub(
+            "secondary",
+            vec![
+                entity("city", 0, 4, "0123"),
+                entity("state", 6, 10, "6789"),
+                entity("address", 3, 8, "34567"),
+            ],
+            &log,
+            false,
+        ),
+    );
+    let entities = match hybrid.detect("0123456789") {
+        Ok(entities) => entities,
+        Err(error) => panic!("hybrid detect failed: {error}"),
+    };
+    assert_eq!(spans(&entities), [("address", 3, 8)]);
+}
+
+#[test]
 fn longer_secondary_kept_when_returned_first() {
     // Longest-span-wins does not depend on arrival order: a later, shorter
     // overlapping secondary never displaces the longer kept one.
