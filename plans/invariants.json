@@ -114,8 +114,8 @@
     "category": "security"
   },
   {
-    "invariant": "Detector output is validated centrally for UTF-8 character boundaries, input bounds, value matching, and non-overlapping spans before judging or planning",
-    "rationale": "Downstream pipeline stages (judge, policy, transformer) must never encounter corrupted offsets or overlapping entity replacements",
+    "invariant": "Detector output is validated centrally for a non-empty kind, confidence in 0..=1, UTF-8 character boundaries, input bounds, value matching, and non-overlapping spans before judging or planning",
+    "rationale": "Downstream pipeline stages (judge, policy, transformer) must never encounter corrupted offsets or overlapping entity replacements, and an empty kind or NaN/out-of-range confidence from an in-process detector must fail the call closed instead of reaching policy decisions or results",
     "sensor": "cargo test -p do-context-shield-core",
     "category": "security"
   },

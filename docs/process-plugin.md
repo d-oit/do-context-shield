@@ -37,7 +37,7 @@ Response:
 - `confidence` is optional, defaults to `1.0`, and must be within `0..=1`.
 - Fails closed on an empty kind, an invalid span, a value mismatch, or an out-of-range confidence.
 - Overlaps are resolved longest-span-wins; the first reported entity wins on identical spans.
-- The pipeline re-validates every report (character boundaries, bounds, value equality) and resolves overlaps before the judge, policy, and transformer run, so a misbehaving detector fails the call either way.
+- The pipeline re-validates every report (character boundaries, bounds, value equality, a non-empty kind, confidence in `0..=1`) and resolves overlaps before the judge, policy, and transformer run, so a misbehaving detector fails the call either way.
 
 ## judge
 

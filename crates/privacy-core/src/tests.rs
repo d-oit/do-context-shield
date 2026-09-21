@@ -275,6 +275,35 @@ fn out_of_bounds_span_fails_closed() {
 }
 
 #[test]
+fn empty_kind_fails_closed() {
+    // A malformed model label can canonicalize to an empty kind; the pipeline
+    // rejects it instead of letting an untyped entity reach policy decisions.
+    let mut pipeline = with_detector(vec![entity("  ", 0, 5, "alice")]);
+    let error = sanitize_err(&mut pipeline, "alice@example.com");
+    assert!(matches!(error, PipelineError::Detector(_)), "{error:?}");
+    assert!(error.to_string().contains("empty kind"), "{error}");
+}
+
+#[test]
+fn confidence_out_of_range_fails_closed() {
+    let mut too_high = with_detector(vec![Entity {
+        confidence: 1.5,
+        ..entity("email", 0, 5, "alice")
+    }]);
+    let error = sanitize_err(&mut too_high, "alice@example.com");
+    assert!(matches!(error, PipelineError::Detector(_)), "{error:?}");
+    assert!(error.to_string().contains("outside 0..=1"), "{error}");
+
+    // NaN compares false against every bound, so it must be rejected too.
+    let mut not_a_number = with_detector(vec![Entity {
+        confidence: f32::NAN,
+        ..entity("email", 0, 5, "alice")
+    }]);
+    let error = sanitize_err(&mut not_a_number, "alice@example.com");
+    assert!(matches!(error, PipelineError::Detector(_)), "{error:?}");
+}
+
+#[test]
 fn overlapping_spans_resolved_to_longest() {
     let mut pipeline = with_detector(vec![
         entity("person", 0, 5, "alice"),
