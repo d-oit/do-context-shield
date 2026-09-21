@@ -24,18 +24,18 @@ run_sensor() {
   shift
   local log
   log="$(mktemp)"
-  printf "Running %s: %s\n" "$name" "$*"
+  printf 'Running %s: %s\n' "$name" "$*"
   if "$@" >"$log" 2>&1; then
-    printf "  ${GREEN}✓ %s OK${NC}\n" "$name"
+    printf '  %s\n' "${GREEN}✓ ${name} OK${NC}"
   else
-    printf "  ${RED}✗ %s failed (last 40 lines):${NC}\n" "$name"
+    printf '  %s\n' "${RED}✗ ${name} failed (last 40 lines):${NC}"
     tail -40 "$log"
     FAILED=1
   fi
   rm -f "$log"
 }
 
-printf "\n"
+printf '\n'
 run_sensor "fmt" cargo fmt --all -- --check
 run_sensor "check" cargo check --workspace --all-targets
 run_sensor "clippy" cargo clippy --workspace --all-targets --all-features -- -D warnings
@@ -45,12 +45,12 @@ run_sensor "deps" bash scripts/check-deps.sh
 run_sensor "audit" bash scripts/check-audit.sh
 run_sensor "commitlint" bash scripts/check-commitlint.sh
 
-printf "\n"
+printf '\n'
 if [[ $FAILED -ne 0 ]]; then
-  printf "${RED}Pre-push checks FAILED. Fix issues above before pushing.${NC}\n"
-  printf "To bypass (not recommended): git push --no-verify\n"
+  printf '%s\n' "${RED}Pre-push checks FAILED. Fix issues above before pushing.${NC}"
+  printf 'To bypass (not recommended): git push --no-verify\n'
   exit 1
 fi
 
-printf "${GREEN}All pre-push checks passed.${NC}\n"
+printf '%s\n' "${GREEN}All pre-push checks passed.${NC}"
 exit 0
