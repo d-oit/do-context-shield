@@ -259,6 +259,30 @@ fn longer_secondary_displaces_shorter_secondary() {
 }
 
 #[test]
+fn engulfing_secondary_displaces_shorter_secondary() {
+    // A contained secondary never displaces the wider kept one: the engulfer
+    // arrived first and stays whole.
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let hybrid = HybridDetector::new(
+        stub("primary", Vec::new(), &log, false),
+        stub(
+            "secondary",
+            vec![
+                entity("address", 0, 10, "0123456789"),
+                entity("city", 3, 5, "34"),
+            ],
+            &log,
+            false,
+        ),
+    );
+    let entities = match hybrid.detect("0123456789") {
+        Ok(entities) => entities,
+        Err(error) => panic!("hybrid detect failed: {error}"),
+    };
+    assert_eq!(spans(&entities), [("address", 0, 10)]);
+}
+
+#[test]
 fn longer_secondary_kept_when_returned_first() {
     // Longest-span-wins does not depend on arrival order: a later, shorter
     // overlapping secondary never displaces the longer kept one.
