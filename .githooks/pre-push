@@ -41,6 +41,7 @@ run_sensor "check" cargo check --workspace --all-targets
 run_sensor "clippy" cargo clippy --workspace --all-targets --all-features -- -D warnings
 run_sensor "test" cargo test --workspace
 run_sensor "loc" bash scripts/check-loc.sh
+run_sensor "shellcheck" bash scripts/check-shellcheck.sh
 run_sensor "deps" bash scripts/check-deps.sh
 run_sensor "audit" bash scripts/check-audit.sh
 run_sensor "commitlint" bash scripts/check-commitlint.sh

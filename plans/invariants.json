@@ -184,5 +184,11 @@
     "rationale": "The CLI and MCP server ship as cross-platform binaries; Linux-only CI silently missed a Windows TOML path-escaping defect the first matrix run surfaced",
     "sensor": "GitHub CI: the `test` job (Linux, --all-features) and the `cross-platform` matrix (macos-latest, windows-latest, --no-fail-fast)",
     "category": "verification"
+  },
+  {
+    "invariant": "The shell surfaces (`scripts/*.sh`, `.githooks/*`) pass shellcheck; the sensor WARN-skips without the tool locally and fails closed in CI",
+    "rationale": "The hooks and helper scripts are load-bearing contributor and CI gates; the SC2059-class printf defects a manual sweep had to fix should surface automatically instead",
+    "sensor": "bash scripts/check-shellcheck.sh (shellcheck sensor, in the verification and ci sets)",
+    "category": "verification"
   }
 ]
