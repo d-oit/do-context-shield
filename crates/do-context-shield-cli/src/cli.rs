@@ -68,10 +68,15 @@ pub(crate) struct ForgetArgs {
     pub(crate) process: ProcessArgs,
 }
 
-/// Session scope and vault selection shared by sanitize and restore.
+/// Session scope and vault selection shared by sanitize, restore, and forget.
 #[derive(Args)]
 pub(crate) struct VaultArgs {
-    #[arg(long, default_value = "default")]
+    /// Session scope for the vault mappings.
+    ///
+    /// Required on every command: an implicit default scope would let
+    /// concurrent tasks resolve each other's placeholders, which explicit
+    /// session scoping exists to prevent.
+    #[arg(long)]
     pub(crate) session: String,
     /// Optional local file for persistence across separate CLI processes (JSON vault).
     #[arg(long)]

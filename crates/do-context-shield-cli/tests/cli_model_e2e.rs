@@ -59,7 +59,14 @@ fn gliner2_sanitizes_multibyte_input() {
     let dir = temp_dir();
     let assert = cmd(dir.path())
         .env("ORT_DYLIB_PATH", &ort)
-        .args(["sanitize", "--detector", "gliner2", "--model-dir"])
+        .args([
+            "sanitize",
+            "--session",
+            "e2e",
+            "--detector",
+            "gliner2",
+            "--model-dir",
+        ])
         .arg(&model)
         .write_stdin("Grüße von Jane Doe, jane@example.com.")
         .assert()
@@ -82,7 +89,14 @@ fn gliner2_finds_tail_entities_in_chunked_input() {
     let input = format!("{filler}Contact Jane Doe at jane@example.com.");
     let assert = cmd(dir.path())
         .env("ORT_DYLIB_PATH", &ort)
-        .args(["sanitize", "--detector", "gliner2", "--model-dir"])
+        .args([
+            "sanitize",
+            "--session",
+            "e2e",
+            "--detector",
+            "gliner2",
+            "--model-dir",
+        ])
         .arg(&model)
         .write_stdin(input)
         .assert()
@@ -102,7 +116,14 @@ fn hybrid_merges_regex_and_model_spans() {
     let dir = temp_dir();
     let assert = cmd(dir.path())
         .env("ORT_DYLIB_PATH", &ort)
-        .args(["sanitize", "--detector", "hybrid", "--model-dir"])
+        .args([
+            "sanitize",
+            "--session",
+            "e2e",
+            "--detector",
+            "hybrid",
+            "--model-dir",
+        ])
         .arg(&model)
         .write_stdin("Jane Doe, SSN 123-45-6789, card 4111 1111 1111 1111.")
         .assert()

@@ -81,7 +81,7 @@ curl -s "https://huggingface.co/api/models/jugaadsrl/gliner2-privacy-filter-PII-
   | sha256sum -c -
 
 printf 'Contact Jane Doe at jane@example.com.' |
-  do-context-shield sanitize --detector gliner2 --model-dir models/gliner2-pii
+  do-context-shield sanitize --session s1 --detector gliner2 --model-dir models/gliner2-pii
 ```
 
 Single-file alternative:
@@ -96,7 +96,7 @@ curl -L -o models/ettin-32m/tokenizer.json "$repo/tokenizer.json"
 curl -L -o models/ettin-32m/config.json    "$repo/config.json"
 
 printf 'Contact Jane Doe at jane@example.com.' |
-  do-context-shield sanitize --detector gliner2 --model-dir models/ettin-32m
+  do-context-shield sanitize --session s1 --detector gliner2 --model-dir models/ettin-32m
 ```
 
 ### Hybrid detector (regex + model)
@@ -107,7 +107,7 @@ The hybrid fails closed when either half fails: a missing or unusable `model_dir
 
 ```bash
 printf 'Contact Jane Doe in Boston: 123-45-6789' |
-  do-context-shield sanitize --detector hybrid --model-dir models/gliner2-pii
+  do-context-shield sanitize --session s1 --detector hybrid --model-dir models/gliner2-pii
 ```
 
 ### Unsupported model families

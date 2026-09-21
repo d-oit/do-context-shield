@@ -134,19 +134,31 @@ fn tools_list() -> Value {
     })
 }
 
-/// Dispatch one `tools/call`. Sanitize still falls back to the `default` scope
-/// for older clients; restore and forget never do, because they resolve or
-/// delete raw values and must name their session explicitly.
+/// Dispatch one `tools/call`. Arguments are enforced, not just declared: a
+/// non-object `arguments`, or a missing/non-string `text` for the tools that
+/// declare it, is an error instead of a silent empty-input call. Sanitize
+/// still falls back to the `default` scope for older clients; restore and
+/// forget never do, because they resolve or delete raw values and must name
+/// their session explicitly.
 fn tool_call(
     pipeline: &mut PrivacyPipeline,
     id: Value,
     name: &str,
     args: &Value,
 ) -> Result<Value, Box<dyn std::error::Error>> {
-    let text = args.get("text").and_then(Value::as_str).unwrap_or("");
-    let session = args.get("session").and_then(Value::as_str);
+    if !args.is_object() {
+        return Ok(error_response(id, "`arguments` must be a JSON object"));
+    }
     Ok(match name {
         "context.sanitize" => {
+            let text = match text_argument(args, "context.sanitize") {
+                Ok(text) => text,
+                Err(message) => return Ok(error_response(id, &message)),
+            };
+            let session = match optional_string(args, "session") {
+                Ok(session) => session,
+                Err(message) => return Ok(error_response(id, &message)),
+            };
             let context = match processing_context(args) {
                 Ok(context) => context,
                 Err(message) => return Ok(error_response(id, &message)),
@@ -156,39 +168,45 @@ fn tool_call(
             if let Err(error) = pipeline.expire_vault() {
                 return Ok(error_response(id, &error.to_string()));
             }
-            let scope = ScopeId(session.unwrap_or("default").to_owned());
-            match pipeline.sanitize(&scope, text, &context) {
+            let scope = ScopeId(session.unwrap_or_else(|| "default".to_owned()));
+            match pipeline.sanitize(&scope, &text, &context) {
                 Ok(result) => response(id, json!({"content":[{"type":"text","text":result.text}]})),
                 Err(error) => error_response(id, &error.to_string()),
             }
         }
         "context.restore" => {
-            let Some(session) = session else {
-                return Ok(error_response(
-                    id,
-                    "context.restore requires an explicit session",
-                ));
+            let text = match text_argument(args, "context.restore") {
+                Ok(text) => text,
+                Err(message) => return Ok(error_response(id, &message)),
             };
-            match pipeline.restore(&ScopeId(session.to_owned()), text) {
+            let session = match required_session(args, "context.restore") {
+                Ok(session) => session,
+                Err(message) => return Ok(error_response(id, &message)),
+            };
+            match pipeline.restore(&ScopeId(session), &text) {
                 Ok(result) => response(id, json!({"content":[{"type":"text","text":result}]})),
                 Err(error) => error_response(id, &error.to_string()),
             }
         }
-        "context.inspect" => match pipeline.inspect(text) {
-            Ok(result) => response(
-                id,
-                json!({"content":[{"type":"text","text":serde_json::to_string(&result)?}]}),
-            ),
-            Err(error) => error_response(id, &error.to_string()),
-        },
-        "context.forget" => {
-            let Some(session) = session else {
-                return Ok(error_response(
-                    id,
-                    "context.forget requires an explicit session",
-                ));
+        "context.inspect" => {
+            let text = match text_argument(args, "context.inspect") {
+                Ok(text) => text,
+                Err(message) => return Ok(error_response(id, &message)),
             };
-            match pipeline.forget(&ScopeId(session.to_owned())) {
+            match pipeline.inspect(&text) {
+                Ok(result) => response(
+                    id,
+                    json!({"content":[{"type":"text","text":serde_json::to_string(&result)?}]}),
+                ),
+                Err(error) => error_response(id, &error.to_string()),
+            }
+        }
+        "context.forget" => {
+            let session = match required_session(args, "context.forget") {
+                Ok(session) => session,
+                Err(message) => return Ok(error_response(id, &message)),
+            };
+            match pipeline.forget(&ScopeId(session.clone())) {
                 Ok(()) => response(
                     id,
                     json!({"content":[{"type":"text","text":json!({"session":session,"forgotten":true}).to_string()}]}),
@@ -198,6 +216,24 @@ fn tool_call(
         }
         _ => error_response(id, "unknown tool"),
     })
+}
+
+/// Read the required `text` argument of a tool that declares it.
+fn text_argument(args: &Value, tool: &str) -> Result<String, String> {
+    match optional_string(args, "text") {
+        Ok(Some(text)) => Ok(text),
+        Ok(None) => Err(format!("{tool} requires a string `text` argument")),
+        Err(message) => Err(message),
+    }
+}
+
+/// Read the explicit `session` that resolving and deleting tools require.
+fn required_session(args: &Value, tool: &str) -> Result<String, String> {
+    match optional_string(args, "session") {
+        Ok(Some(session)) => Ok(session),
+        Ok(None) => Err(format!("{tool} requires an explicit session")),
+        Err(message) => Err(message),
+    }
 }
 
 #[cfg(test)]

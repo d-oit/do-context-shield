@@ -72,7 +72,7 @@ Bounds one process-plugin response; the child is killed and reaped on timeout (`
 | `forget` | `[vault]`, `[process]` |
 | `mcp-stdio` | all sections except `[context]` (enforcement context arrives per `context.sanitize` argument) |
 
-The session scope never comes from the file: every command takes `--session` explicitly so mappings cannot leak across implicit scopes.
+The session scope never comes from the file: every command requires `--session` explicitly so mappings cannot leak across implicit scopes.
 
 ## Validation (fail closed)
 

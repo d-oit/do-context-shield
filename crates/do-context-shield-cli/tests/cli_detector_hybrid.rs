@@ -19,7 +19,7 @@ fn stderr_of(assert: &assert_cmd::assert::Assert) -> String {
 fn hybrid_without_model_dir_fails_closed() {
     let dir = temp_dir();
     let assert = cmd(dir.path())
-        .args(["sanitize", "--detector", "hybrid"])
+        .args(["sanitize", "--session", "s", "--detector", "hybrid"])
         .write_stdin("hello world")
         .assert()
         .failure();
