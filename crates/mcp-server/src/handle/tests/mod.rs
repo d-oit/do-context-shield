@@ -1,6 +1,8 @@
 use super::*;
 use do_context_shield_plugin_api::{Entity, JudgeError, Judgment, SemanticJudge, SemanticLabel};
 
+mod tool_surface;
+
 fn pipeline() -> PrivacyPipeline {
     let vault = match do_context_shield_plugin_registry::vault("memory") {
         Ok(vault) => vault,
@@ -22,7 +24,11 @@ fn pipeline() -> PrivacyPipeline {
 }
 
 fn request(pipeline: &mut PrivacyPipeline, body: &str) -> Option<Value> {
-    match handle_request(pipeline, body) {
+    request_with(pipeline, ToolSet::all(), body)
+}
+
+fn request_with(pipeline: &mut PrivacyPipeline, tools: ToolSet, body: &str) -> Option<Value> {
+    match handle_request(pipeline, tools, body) {
         Ok(response) => response,
         Err(error) => panic!("unexpected error: {error}"),
     }

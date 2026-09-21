@@ -4,6 +4,8 @@ use do_context_shield_core::PrivacyPipeline;
 use do_context_shield_plugin_api::{DataCategory, ProcessingContext, RecipientClass, ScopeId};
 use serde_json::{Value, json};
 
+use crate::{ToolName, ToolSet};
+
 const MODERN_VERSION: &str = "2026-07-28";
 const LEGACY_VERSION: &str = "2025-11-25";
 
@@ -71,6 +73,7 @@ fn optional_string(args: &Value, key: &str) -> Result<Option<String>, String> {
 
 pub(crate) fn handle_request(
     pipeline: &mut PrivacyPipeline,
+    tools: ToolSet,
     line: &str,
 ) -> Result<Option<Value>, Box<dyn std::error::Error>> {
     let request: Value = match serde_json::from_str(line.trim()) {
@@ -101,7 +104,7 @@ pub(crate) fn handle_request(
             }),
         ),
         "notifications/initialized" => return Ok(None),
-        "tools/list" => response(id, tools_list()),
+        "tools/list" => response(id, tools_list(tools)),
         "tools/call" => {
             let name = request
                 .pointer("/params/name")
@@ -111,41 +114,88 @@ pub(crate) fn handle_request(
                 .pointer("/params/arguments")
                 .cloned()
                 .unwrap_or_else(|| json!({}));
-            tool_call(pipeline, id, name, &args)?
+            tool_call(pipeline, tools, id, name, &args)?
         }
         _ => error_response(id, "unknown method"),
     };
     Ok(Some(result))
 }
 
-/// Tool catalogue. Returned in a fixed order so clients can cache reliably;
-/// `cacheScope` follows the 2026-07-28 `CacheableResult` vocabulary
-/// (`public`/`private`) because results are session-scoped.
-fn tools_list() -> Value {
+/// Tool catalogue. Only enabled tools are listed, in a fixed order so clients
+/// can cache reliably; `cacheScope` follows the 2026-07-28 `CacheableResult`
+/// vocabulary (`public`/`private`) because results are session-scoped.
+fn tools_list(tools: ToolSet) -> Value {
+    let catalogue: Vec<Value> = ToolName::ALL
+        .into_iter()
+        .filter(|tool| tools.contains(*tool))
+        .map(ToolName::schema)
+        .collect();
     json!({
-        "tools":[
-            {"name":"context.sanitize","description":"Detect and sanitize sensitive coding context locally. Optional recipient/data_category/purpose/jurisdiction arguments select the enforcement context; unknown values are rejected.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"},"recipient":{"type":"string","enum":["local","trusted","external","unknown"],"default":"external"},"data_category":{"type":"string","enum":["non_personal","personal","special_category"],"default":"personal"},"purpose":{"type":"string"},"jurisdiction":{"type":"string"}},"required":["text","session"]}},
-            {"name":"context.restore","description":"Restore locally stored placeholders in an explicit session. Requires `session`; there is no fallback scope for restore.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"}},"required":["text","session"]}},
-            {"name":"context.inspect","description":"Inspect detected sensitive entities (kind, byte span, confidence) without transforming them or returning the matched text.","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}},
-            {"name":"context.forget","description":"Delete all locally stored placeholders for an explicit session. Requires `session`; there is no fallback scope.","inputSchema":{"type":"object","properties":{"session":{"type":"string"}},"required":["session"]}}
-        ],
+        "tools": catalogue,
         "ttlMs":300_000,
         "cacheScope":"private"
     })
 }
 
-/// Dispatch one `tools/call`. Arguments are enforced, not just declared: a
-/// non-object `arguments`, or a missing/non-string `text` for the tools that
-/// declare it, is an error instead of a silent empty-input call. Sanitize
-/// still falls back to the `default` scope for older clients; restore and
-/// forget never do, because they resolve or delete raw values and must name
+impl ToolName {
+    /// Full JSON-RPC tool name.
+    const fn full(self) -> &'static str {
+        match self {
+            Self::Sanitize => "context.sanitize",
+            Self::Restore => "context.restore",
+            Self::Inspect => "context.inspect",
+            Self::Forget => "context.forget",
+        }
+    }
+
+    fn from_full(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|tool| tool.full() == name)
+    }
+
+    /// Catalogue entry: name, description, and input schema.
+    fn schema(self) -> Value {
+        match self {
+            Self::Sanitize => {
+                json!({"name":"context.sanitize","description":"Detect and sanitize sensitive coding context locally. Optional recipient/data_category/purpose/jurisdiction arguments select the enforcement context; unknown values are rejected.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"},"recipient":{"type":"string","enum":["local","trusted","external","unknown"],"default":"external"},"data_category":{"type":"string","enum":["non_personal","personal","special_category"],"default":"personal"},"purpose":{"type":"string"},"jurisdiction":{"type":"string"}},"required":["text","session"]}})
+            }
+            Self::Restore => {
+                json!({"name":"context.restore","description":"Restore locally stored placeholders in an explicit session. Requires `session`; there is no fallback scope for restore. Not exposed by default: results return to the calling model, so restore harness-side unless the boundary allows otherwise.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"}},"required":["text","session"]}})
+            }
+            Self::Inspect => {
+                json!({"name":"context.inspect","description":"Inspect detected sensitive entities (kind, byte span, confidence) without transforming them or returning the matched text.","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}})
+            }
+            Self::Forget => {
+                json!({"name":"context.forget","description":"Delete all locally stored placeholders for an explicit session. Requires `session`; there is no fallback scope.","inputSchema":{"type":"object","properties":{"session":{"type":"string"}},"required":["session"]}})
+            }
+        }
+    }
+}
+
+/// Dispatch one `tools/call`. A tool disabled by the server's [`ToolSet`] is
+/// rejected before any argument handling, and arguments are enforced, not just
+/// declared: a non-object `arguments`, or a missing/non-string `text` for the
+/// tools that declare it, is an error instead of a silent empty-input call.
+/// Sanitize still falls back to the `default` scope for older clients; restore
+/// and forget never do, because they resolve or delete raw values and must name
 /// their session explicitly.
 fn tool_call(
     pipeline: &mut PrivacyPipeline,
+    tools: ToolSet,
     id: Value,
     name: &str,
     args: &Value,
 ) -> Result<Value, Box<dyn std::error::Error>> {
+    if let Some(tool) = ToolName::from_full(name) {
+        if !tools.contains(tool) {
+            return Ok(error_response(
+                id,
+                &format!(
+                    "{name} is not enabled on this server (allow it with `--tools {}` or `--tools all`)",
+                    tool.short()
+                ),
+            ));
+        }
+    }
     if !args.is_object() {
         return Ok(error_response(id, "`arguments` must be a JSON object"));
     }

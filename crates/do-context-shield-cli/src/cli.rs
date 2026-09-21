@@ -2,6 +2,7 @@
 
 use clap::{Args, Parser, Subcommand};
 use do_context_shield_core::EntitySummary;
+use do_context_shield_mcp_server::ToolSet;
 use serde::Serialize;
 use std::path::PathBuf;
 
@@ -94,6 +95,12 @@ pub(crate) struct McpArgs {
     /// resolving (memory vault only).
     #[arg(long)]
     pub(crate) vault_ttl_seconds: Option<u64>,
+    /// Comma-separated MCP tools to expose: `sanitize`, `restore`, `inspect`,
+    /// `forget`, or `all`. Defaults to `sanitize,inspect`: MCP tool results
+    /// return to the calling model, so `restore` (which resolves raw values)
+    /// stays off the model-facing surface unless a client opts in.
+    #[arg(long, value_parser = parse_tools)]
+    pub(crate) tools: Option<ToolSet>,
     #[command(flatten)]
     pub(crate) store: VaultSelection,
     #[command(flatten)]
@@ -102,6 +109,11 @@ pub(crate) struct McpArgs {
     pub(crate) pipeline: PipelineSelection,
     #[command(flatten)]
     pub(crate) process: ProcessArgs,
+}
+
+/// Parse the `--tools` value into a [`ToolSet`].
+fn parse_tools(value: &str) -> Result<ToolSet, String> {
+    ToolSet::parse(value)
 }
 
 /// Detector plugin selection shared by sanitize, inspect, and mcp-stdio.
