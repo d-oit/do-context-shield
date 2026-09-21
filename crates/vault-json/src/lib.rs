@@ -118,7 +118,8 @@ impl JsonVault {
     }
 
     /// Reload state from disk so sequential processes observe each other's
-    /// inserts. Missing files mean empty state; corrupt files are errors.
+    /// inserts and deletions. Missing files mean empty state; corrupt files
+    /// are errors.
     ///
     /// The caller must already hold the exclusive [`Lock`].
     ///
@@ -130,6 +131,10 @@ impl JsonVault {
             let file = File::open(&self.path).map_err(|error| io_error(&error))?;
             self.state = serde_json::from_reader(BufReader::new(file))
                 .map_err(|error| json_error(&error))?;
+        } else {
+            // Deleted outside this process means empty: honoring the deletion
+            // beats resurrecting stale in-memory mappings.
+            self.state = State::default();
         }
         Ok(())
     }
@@ -144,14 +149,21 @@ impl JsonVault {
             }
         }
         let tmp = self.path.with_extension("json.tmp");
-        {
-            let file = restricted_file(&tmp)?;
-            serde_json::to_writer(BufWriter::new(file), &self.state)
-                .map_err(|error| json_error(&error))?;
-        }
+        let file = restricted_file(&tmp)?;
+        write_state(BufWriter::new(file), &self.state)?;
         fs::rename(&tmp, &self.path).map_err(|error| io_error(&error))?;
         Ok(())
     }
+}
+
+/// Serialize `state` and flush the writer, surfacing every I/O failure.
+///
+/// The flush is explicit on purpose: a `BufWriter` discards flush errors when
+/// it drops, which would let a failed write rename a truncated temporary file
+/// over a healthy vault while the caller still saw success.
+fn write_state<W: io::Write>(mut writer: W, state: &State) -> Result<(), VaultError> {
+    serde_json::to_writer(&mut writer, state).map_err(|error| json_error(&error))?;
+    writer.flush().map_err(|error| io_error(&error))
 }
 
 /// Create a file readable only by its owner (Unix); default creation elsewhere.
