@@ -4,6 +4,12 @@
 # do-harness local state and evidence artifacts
 .do-harness/
 
+# Local model exports and ONNX Runtime archives (paths docs/plugins.md creates
+# inside the checkout; they are hundreds of megabytes and never committed)
+/models/
+/ort.tgz
+/onnxruntime-*/
+
 # Cargo.lock is committed for this repo because it ships a binary (CLI).
 # Do not ignore it.
 
