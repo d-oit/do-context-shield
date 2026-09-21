@@ -42,6 +42,12 @@
     "category": "security"
   },
   {
+    "invariant": "Stage error text is scrubbed of the values the pipeline has seen (input plus detected entity values) before it leaves, so a plugin that formats raw input or an original value into its error cannot leak it to stderr, an MCP response, or a log",
+    "rationale": "Plugins are replaceable and their error strings are arbitrary; the pipeline, not the backend, owns the guarantee that raw values never cross the boundary",
+    "sensor": "cargo test -p do-context-shield-core (leaking_detector_error_is_scrubbed, leaking_judge_error_is_scrubbed, leaking_vault_error_is_scrubbed)",
+    "category": "security"
+  },
+  {
     "invariant": "Mappings are scoped by an explicit session id; restore resolves only tokens of the same scope and vault",
     "rationale": "Prevents cross-task placeholder resolution and leaks between concurrent agents",
     "sensor": "cargo test --workspace (scope-isolation tests in privacy-core, plugin-process, mcp-server)",

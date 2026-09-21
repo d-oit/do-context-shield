@@ -114,16 +114,26 @@ impl PrivacyPipeline {
         input: &str,
         context: &ProcessingContext,
     ) -> Result<SanitizeResult, PipelineError> {
-        let entities = validate_spans(input, &self.detector.detect(input)?)?;
+        let detected = self
+            .detector
+            .detect(input)
+            .map_err(|error| scrub_detector(error, &[input]))?;
+        let entities = validate_spans(input, &detected)?;
+        let sensitive = sensitive_values(input, &entities);
         let judgments = match &self.judge {
             Some(judge) => {
-                let judgments = judge.judge(input, &entities)?;
+                let judgments = judge
+                    .judge(input, &entities)
+                    .map_err(|error| scrub_judge(error, &sensitive))?;
                 validate_judgments(entities.len(), &judgments)?;
                 judgments
             }
             None => Vec::new(),
         };
-        let plan = self.policy.plan(&entities, &judgments, context)?;
+        let plan = self
+            .policy
+            .plan(&entities, &judgments, context)
+            .map_err(|error| scrub_policy(error, &sensitive))?;
         if plan
             .iter()
             .any(|planned| matches!(planned.action, Action::Block | Action::Review))
@@ -132,9 +142,10 @@ impl PrivacyPipeline {
                 "input blocked by policy".to_owned(),
             )));
         }
-        let TransformResult { text, .. } =
-            self.transformer
-                .transform(input, &plan, scope, self.vault.as_mut())?;
+        let TransformResult { text, .. } = self
+            .transformer
+            .transform(input, &plan, scope, self.vault.as_mut())
+            .map_err(|error| scrub_transform(error, &sensitive))?;
         Ok(SanitizeResult {
             text,
             entities: entities.iter().map(EntitySummary::from).collect(),
@@ -193,12 +204,11 @@ impl PrivacyPipeline {
     ///
     /// Returns [`PipelineError`] when detection fails.
     pub fn inspect(&self, input: &str) -> Result<Vec<EntitySummary>, PipelineError> {
-        Ok(self
+        let detected = self
             .detector
-            .detect(input)?
-            .iter()
-            .map(EntitySummary::from)
-            .collect())
+            .detect(input)
+            .map_err(|error| scrub_detector(error, &[input]))?;
+        Ok(detected.iter().map(EntitySummary::from).collect())
     }
 
     /// Delete every mapping stored for a session scope.
@@ -281,6 +291,57 @@ fn validate_spans(input: &str, entities: &[Entity]) -> Result<Vec<Entity>, Pipel
     }
     deduped.sort_by_key(|entity| (entity.start, entity.end));
     Ok(deduped)
+}
+
+/// The raw surfaces a stage has seen: the input plus every detected value.
+fn sensitive_values<'a>(input: &'a str, entities: &'a [Entity]) -> Vec<&'a str> {
+    std::iter::once(input)
+        .chain(entities.iter().map(|entity| entity.value.as_str()))
+        .collect()
+}
+
+/// Replace every occurrence of a sensitive value in stage error text.
+///
+/// Plugin error strings are arbitrary; the pipeline scrubs the values it has
+/// seen before an error leaves the boundary, so a backend that formats a raw
+/// value into its error cannot leak it into stderr, an MCP response, or a log.
+fn scrubbed(text: &str, sensitive: &[&str]) -> String {
+    let mut scrubbed = text.to_owned();
+    for value in sensitive {
+        if !value.is_empty() {
+            scrubbed = scrubbed.replace(value, "[redacted]");
+        }
+    }
+    scrubbed
+}
+
+/// Scrub a detector error against the input it saw.
+fn scrub_detector(error: DetectorError, sensitive: &[&str]) -> DetectorError {
+    match error {
+        DetectorError::Message(text) => DetectorError::Message(scrubbed(&text, sensitive)),
+    }
+}
+
+/// Scrub a policy error against the entities it saw.
+fn scrub_policy(error: PolicyError, sensitive: &[&str]) -> PolicyError {
+    match error {
+        PolicyError::Message(text) => PolicyError::Message(scrubbed(&text, sensitive)),
+    }
+}
+
+/// Scrub a transform error against the input and entities it saw.
+fn scrub_transform(error: TransformError, sensitive: &[&str]) -> TransformError {
+    match error {
+        TransformError::Message(text) => TransformError::Message(scrubbed(&text, sensitive)),
+    }
+}
+
+/// Scrub a judge error against the input and entities it saw.
+fn scrub_judge(error: JudgeError, sensitive: &[&str]) -> JudgeError {
+    match error {
+        JudgeError::Message(text) => JudgeError::Message(scrubbed(&text, sensitive)),
+        other => other,
+    }
 }
 
 #[cfg(test)]

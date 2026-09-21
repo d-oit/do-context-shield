@@ -67,6 +67,8 @@ checklist for changing them.
 - Process plugins fail closed on malformed responses, undecided entities,
   leftover values, and unresolvable placeholders.
 - Results and CLI/MCP `inspect` output never contain the matched text.
+- A plugin that formats the input or a detected value into its error cannot
+  leak it: stage error text is scrubbed of known values before it surfaces.
 - Restore is scope-limited: another session resolves nothing; `context.restore`
   requires an explicit session.
 - Policy `Action::Block` and `Action::Review` fail the pipeline before transform.
