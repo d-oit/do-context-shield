@@ -44,8 +44,9 @@ checklist for changing them.
    Abstention and a missing judgment fall back to the kind rule — never to
    keep. A judge returns labels and confidence only; it never returns spans or
    text.
-2. **Validate** stage output before use, fail closed: detector spans on UTF-8
-   boundaries with `value == input[start..end]`, within bounds, and resolved
+2. **Validate** stage output before use, fail closed: detector entities with a
+   non-empty kind and confidence in `0..=1`, spans on UTF-8 boundaries with
+   `value == input[start..end]`, within bounds, and resolved
    longest-span-wins; exactly one decision per entity; any `Action::Block` or
    `Action::Review` halts the pipeline; judgment indices in range and unique
    with confidence in `0..=1`; every emitted placeholder resolvable by the
@@ -71,8 +72,9 @@ checklist for changing them.
 - Policy `Action::Block` and `Action::Review` fail the pipeline before transform.
 - Special-category data to external recipients and personal data to unknown
   recipients fail closed (`Action::Block`).
-- Detector spans not on character boundaries, out of bounds, or mismatched to
-  the input fail the pipeline closed.
+- Detector entities with an empty kind or confidence outside `0..=1`, spans not
+  on character boundaries, out of bounds, or mismatched to the input fail the
+  pipeline closed.
 - Adapter context surfaces (MCP arguments, CLI flags) reject unknown
   recipient/data_category names or wrong types instead of silently downgrading
   to a weaker enforcement context.

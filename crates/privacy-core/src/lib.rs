@@ -225,7 +225,8 @@ impl PrivacyPipeline {
 
 /// Validate detector output before the judge and policy see it.
 ///
-/// Every span must fall on UTF-8 character boundaries, stay within the input,
+/// Every entity must carry a non-empty kind and a confidence in `0..=1`, and
+/// every span must fall on UTF-8 character boundaries, stay within the input,
 /// and carry the value the input actually holds at that span. Overlaps are
 /// resolved longest-span-wins: entities are ordered by start (widest first)
 /// and any entity overlapping an already-kept one is dropped, so the
@@ -251,6 +252,18 @@ fn validate_spans(input: &str, entities: &[Entity]) -> Result<Vec<Entity>, Pipel
             return Err(PipelineError::Detector(DetectorError::Message(
                 "entity value does not match the input at the declared span".to_owned(),
             )));
+        }
+        if entity.kind.trim().is_empty() {
+            return Err(PipelineError::Detector(DetectorError::Message(format!(
+                "entity span {}..{} carries an empty kind",
+                entity.start, entity.end
+            ))));
+        }
+        if !(0.0..=1.0).contains(&entity.confidence) {
+            return Err(PipelineError::Detector(DetectorError::Message(format!(
+                "entity confidence {} for kind `{}` is outside 0..=1",
+                entity.confidence, entity.kind
+            ))));
         }
         validated.push(entity.clone());
     }
