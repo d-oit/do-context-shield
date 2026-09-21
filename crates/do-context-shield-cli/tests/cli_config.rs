@@ -24,6 +24,12 @@ fn write_config(path: &Path, content: &str) {
     }
 }
 
+/// `path` as a TOML basic-string literal: backslashes are escape characters,
+/// so Windows paths must be doubled or TOML fails with a unicode-escape error.
+fn toml_literal(path: &Path) -> String {
+    format!("\"{}\"", path.display().to_string().replace('\\', "\\\\"))
+}
+
 #[test]
 fn config_file_selects_plugins() {
     let dir = temp_dir();
@@ -32,8 +38,8 @@ fn config_file_selects_plugins() {
     write_config(
         &config,
         &format!(
-            "[plugins]\njudge = \"heuristics\"\n\n[vault]\nvault_file = \"{}\"\n",
-            vault.display()
+            "[plugins]\njudge = \"heuristics\"\n\n[vault]\nvault_file = {}\n",
+            toml_literal(&vault)
         ),
     );
 

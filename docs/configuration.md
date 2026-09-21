@@ -104,6 +104,8 @@ vault = "json"
 vault_file = "/home/user/.local/share/do-context-shield/vault.json"
 ```
 
+Path values are TOML basic strings, so a Windows path needs its backslashes doubled (`vault_file = "C:\\Users\\me\\vault.json"`) or a literal string (`vault_file = 'C:\Users\me\vault.json'`); a single-backslash path fails to parse.
+
 MCP server with a local judge and a bounded memory vault:
 
 ```toml
