@@ -126,6 +126,12 @@
     "category": "architecture"
   },
   {
+    "invariant": "JSON vault persistence surfaces every write failure before renaming, so a failed flush can never replace a healthy vault file or report success; a vault file deleted outside the process reloads as empty instead of resurrecting stale mappings",
+    "rationale": "A BufWriter discards flush errors when it drops, which silently corrupted the vault on ENOSPC/I/O failure while the insert reported success; and honoring an external deletion is what keeps the on-disk file the source of truth for sequential processes",
+    "sensor": "cargo test -p do-context-shield-vault-json (write_state_surfaces_flush_failures, failed_write_keeps_the_existing_vault, externally_deleted_vault_starts_over)",
+    "category": "architecture"
+  },
+  {
     "invariant": "MCP tools reside in the context.* namespace and context.restore strictly requires an explicit session",
     "rationale": "Restoration resolves raw values and must never default to a shared or implicit session scope",
     "sensor": "cargo test -p do-context-shield-mcp-server",
