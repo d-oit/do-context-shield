@@ -261,6 +261,64 @@ fn unknown_tool_method_and_malformed_json_are_errors() {
 }
 
 #[test]
+fn missing_or_non_string_text_is_rejected() {
+    // A malformed call must not silently sanitize an empty string.
+    let mut pipeline = pipeline();
+    for (name, arguments) in [
+        ("context.sanitize", r#"{"session":"s"}"#),
+        ("context.restore", r#"{"text":42,"session":"s"}"#),
+        ("context.inspect", "{}"),
+    ] {
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"{name}","arguments":{arguments}}}}}"#
+        );
+        let response = request(&mut pipeline, &body);
+        let Some(value) = response else {
+            panic!("expected a response for {body}");
+        };
+        assert!(value.get("error").is_some(), "expected error in {value}");
+        assert!(
+            value.get("result").is_none(),
+            "expected no result in {value}"
+        );
+    }
+}
+
+#[test]
+fn non_object_arguments_is_rejected() {
+    let mut pipeline = pipeline();
+    let body = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"context.sanitize","arguments":"alice@example.com"}}"#;
+    let response = request(&mut pipeline, body);
+    let Some(value) = response else {
+        panic!("expected a response");
+    };
+    let message = value
+        .pointer("/error/message")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    assert!(message.contains("arguments"), "{value}");
+    assert!(
+        value.get("result").is_none(),
+        "expected no result in {value}"
+    );
+}
+
+#[test]
+fn non_string_session_is_rejected() {
+    let mut pipeline = pipeline();
+    let body = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"context.restore","arguments":{"text":"__DO_PRIVATE_EMAIL_1__","session":5}}}"#;
+    let response = request(&mut pipeline, body);
+    let Some(value) = response else {
+        panic!("expected a response");
+    };
+    let message = value
+        .pointer("/error/message")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    assert!(message.contains("session"), "{value}");
+}
+
+#[test]
 fn sanitize_context_recipient_reaches_the_policy() {
     let mut pipeline = pipeline();
     let kept = content_text(context_sanitize(

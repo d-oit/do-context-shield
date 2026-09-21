@@ -19,7 +19,14 @@ fn invalid_subcommand_exits_2() {
 fn invalid_vault_combination_exits_1() {
     let dir = temp_dir();
     cmd(dir.path())
-        .args(["sanitize", "--vault", "memory", "--vault-file"])
+        .args([
+            "sanitize",
+            "--session",
+            "s",
+            "--vault",
+            "memory",
+            "--vault-file",
+        ])
         .arg(dir.path().join("vault.json"))
         .write_stdin("")
         .assert()
@@ -33,9 +40,22 @@ fn invalid_vault_combination_exits_1() {
 fn missing_vault_file_for_json_vault_exits_1() {
     let dir = temp_dir();
     cmd(dir.path())
-        .args(["sanitize", "--vault", "json"])
+        .args(["sanitize", "--session", "s", "--vault", "json"])
         .write_stdin("")
         .assert()
         .code(1)
         .stderr(predicates::str::contains("requires a vault file"));
+}
+
+#[test]
+fn session_is_required_exits_2() {
+    let dir = temp_dir();
+    for command in ["sanitize", "restore", "forget"] {
+        cmd(dir.path())
+            .arg(command)
+            .write_stdin("alice@example.com")
+            .assert()
+            .code(2)
+            .stderr(predicates::str::contains("--session"));
+    }
 }

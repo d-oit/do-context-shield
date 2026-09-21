@@ -144,6 +144,12 @@
     "category": "security"
   },
   {
+    "invariant": "Adapter argument surfaces are enforced, not just declared: CLI sanitize/restore/forget require an explicit --session, and MCP tools/call rejects a non-object `arguments` or a missing/non-string `text` instead of silently operating on empty input",
+    "rationale": "An implicit session scope lets concurrent tasks resolve each other's placeholders, and a silent empty-input success hides a malformed client call behind a plausible response",
+    "sensor": "cargo test -p do-context-shield (tests/cli_errors.rs session_is_required_exits_2) + cargo test -p do-context-shield-mcp-server (missing_or_non_string_text_is_rejected, non_object_arguments_is_rejected)",
+    "category": "contracts"
+  },
+  {
     "invariant": "Session mappings are deletable through explicit forget surfaces (MCP context.forget, CLI forget) that require a session, and a process vault must confirm deletion with deleted=true or the call fails closed",
     "rationale": "Retention must be bounded and a child that silently ignores a wipe would leave raw values resolvable",
     "sensor": "cargo test -p do-context-shield-core -p do-context-shield-plugin-process -p do-context-shield-mcp-server",

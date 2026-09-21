@@ -6,10 +6,10 @@ use common::{cmd, temp_dir};
 use std::ffi::OsString;
 use std::path::Path;
 
-/// `sanitize` with the given CLI arguments, `input` on stdin.
+/// `sanitize --session cfg-test` with the given CLI arguments, `input` on stdin.
 fn sanitize(dir: &Path, args: &[OsString], input: &str) -> String {
     let assert = cmd(dir)
-        .arg("sanitize")
+        .args(["sanitize", "--session", "cfg-test"])
         .args(args)
         .write_stdin(input)
         .assert()
@@ -72,6 +72,7 @@ fn config_unknown_field_exits_nonzero() {
         .arg("--config")
         .arg(&config)
         .arg("sanitize")
+        .args(["--session", "cfg-test"])
         .write_stdin("")
         .assert()
         .code(1)
