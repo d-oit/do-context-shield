@@ -13,6 +13,16 @@ include = ["src/**/*", "Cargo.toml"]
 name = "do-context-shield"
 path = "src/main.rs"
 
+[features]
+# Build the CLI with the GLiNER2 ONNX backend enabled. The model-backed
+# end-to-end test target below additionally needs ORT_DYLIB_PATH and
+# DO_CONTEXT_SHIELD_E2E_MODEL_DIR at run time (see docs/plugins.md).
+gliner2 = ["do-context-shield-detector-gliner2/gliner2"]
+
+[[test]]
+name = "cli_model_e2e"
+required-features = ["gliner2"]
+
 [lints]
 workspace = true
 
