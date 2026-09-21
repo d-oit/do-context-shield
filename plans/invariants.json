@@ -180,9 +180,9 @@
     "category": "architecture"
   },
   {
-    "invariant": "CI runs the workspace tests on Linux with --all-features and on macOS and Windows with default features, so platform-specific breakage is caught before merge",
-    "rationale": "The CLI and MCP server ship as cross-platform binaries; Linux-only CI silently missed a Windows TOML path-escaping defect the first matrix run surfaced",
-    "sensor": "GitHub CI: the `test` job (Linux, --all-features) and the `cross-platform` matrix (macos-latest, windows-latest, --no-fail-fast)",
+    "invariant": "CI runs the workspace tests on Linux with --all-features and on macOS and Windows with default features plus `cargo check --workspace --all-features --all-targets`, so platform-specific breakage in both default and feature-gated code is caught before merge",
+    "rationale": "The CLI and MCP server ship as cross-platform binaries; Linux-only CI silently missed a Windows TOML path-escaping defect the first matrix run surfaced, and the native feature-gated path (gliner2/ort/tokenizers) previously only ever compiled on Linux, so a Windows/macOS build break could only surface after merge",
+    "sensor": "GitHub CI: the `test` job (Linux, --all-features) and the `cross-platform` matrix (macos-latest, windows-latest: cargo test --workspace --no-fail-fast then cargo check --workspace --all-features --all-targets)",
     "category": "verification"
   },
   {

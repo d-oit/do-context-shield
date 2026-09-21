@@ -61,6 +61,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --no-fail-fast
+      # The Linux jobs compile --all-features; the matrix must too, so the
+      # feature-gated gliner2/ort path is platform-checked before merge.
+      - name: Check feature-gated code
+        run: cargo check --workspace --all-features --all-targets
 
   audit:
     name: Security audit
