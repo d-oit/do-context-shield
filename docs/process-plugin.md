@@ -9,7 +9,7 @@ Every method shares the same driver:
 - One response line, capped at 8 MiB.
 - `--process-timeout-ms` (default 30 000) bounds the wait for that line; the child is killed and reaped on timeout, on every other error path, and after it has answered.
 - A non-zero exit fails even when a response line was printed.
-- stderr is discarded and never logged, and error messages never echo input values.
+- stderr is discarded and never logged, and error messages never echo input values. The pipeline additionally scrubs the input and detected values from any stage error text before it reaches a caller, so a backend cannot leak a value through an error.
 - A command line is split on whitespace; quoting and shell expansion are not supported. Point the flag at a wrapper script for anything more elaborate. A missing or blank command fails at startup, not on the first call.
 
 Common rules:

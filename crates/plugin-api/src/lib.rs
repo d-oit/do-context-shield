@@ -75,6 +75,10 @@ pub use context::{DataCategory, ProcessingContext, RecipientClass};
 #[derive(Debug, Error)]
 pub enum DetectorError {
     /// Detector configuration or runtime error.
+    ///
+    /// The text is surfaced to callers; it must not embed raw input or
+    /// original values. The pipeline scrubs the values it knows, but the
+    /// contract belongs to the plugin.
     #[error("detector error: {0}")]
     Message(String),
 }
@@ -83,6 +87,10 @@ pub enum DetectorError {
 #[derive(Debug, Error)]
 pub enum PolicyError {
     /// Policy configuration or runtime error.
+    ///
+    /// The text is surfaced to callers; it must not embed raw input or
+    /// original values. The pipeline scrubs the values it knows, but the
+    /// contract belongs to the plugin.
     #[error("policy error: {0}")]
     Message(String),
 }
@@ -91,6 +99,10 @@ pub enum PolicyError {
 #[derive(Debug, Error)]
 pub enum TransformError {
     /// Transformation failure.
+    ///
+    /// The text is surfaced to callers; it must not embed raw input or
+    /// original values. The pipeline scrubs the values it knows, but the
+    /// contract belongs to the plugin.
     #[error("transform error: {0}")]
     Message(String),
 }
@@ -99,6 +111,10 @@ pub enum TransformError {
 #[derive(Debug, Error)]
 pub enum VaultError {
     /// Vault operation failure.
+    ///
+    /// The text is surfaced to callers; it must not embed raw input or
+    /// original values. The pipeline scrubs the values it knows, but the
+    /// contract belongs to the plugin.
     #[error("vault error: {0}")]
     Message(String),
 }
@@ -306,6 +322,10 @@ impl Judgment {
 #[derive(Debug, Error)]
 pub enum JudgeError {
     /// Judge configuration or runtime error.
+    ///
+    /// The text is surfaced to callers; it must not embed raw input or
+    /// original values. The pipeline scrubs the values it knows, but the
+    /// contract belongs to the plugin.
     #[error("judge error: {0}")]
     Message(String),
     /// A judgment referenced a candidate index outside the candidate list.
