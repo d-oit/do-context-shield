@@ -74,7 +74,9 @@ printf '%s' 'Email Alice at alice@example.com' \
 Expected shape:
 
 ```text
-Email Alice at __DO_PRIVATE_EMAIL_1__
+Email Alice at __DO_PRIVATE_EMAIL_1_9F3A2C7B5D1E4F08__
 ```
+
+The trailing hex is per-mapping entropy: tokens cannot be guessed from other tokens, and `restore` resolves only the exact tokens your vault minted.
 
 The agent may send that sanitized value to the selected model. A long-running MCP server keeps mappings in-process; separate CLI processes require the same explicit `--vault-file` for restoration.

@@ -17,7 +17,7 @@ Common rules:
 - `scope` is the caller's session scope string.
 - `start` / `end` are UTF-8 byte offsets into the exact input named in the request; `start < end` is required and both offsets must fall on character boundaries.
 - Kind labels are trimmed, lowercased, and have spaces replaced by underscores (`API Key` becomes `api_key`); the default policy matches kinds by lowercase substring.
-- Placeholders must have the pipeline shape `__DO_PRIVATE_<INNER>__` with a non-empty ASCII alphanumeric/underscore `<INNER>`; anything else cannot be resolved by `restore`.
+- Placeholders must have the pipeline shape `__DO_PRIVATE_<INNER>__` with a non-empty ASCII alphanumeric/underscore `<INNER>`; anything else cannot be resolved by `restore`. The built-in vaults append 16 hex characters of per-mapping entropy (e.g. `__DO_PRIVATE_EMAIL_1_9F3A2C7B5D1E4F08__`), so tokens cannot be guessed from other tokens; the shape rule above is what `restore` enforces.
 
 ## detect
 
@@ -181,7 +181,7 @@ Offline checks need no model: `python3 examples/laya-judge.py --self-test` runs 
 printf '%s' 'meet alice@personalmail.net' \
   | do-context-shield sanitize --session s1 \
       --judge process --judge-command "python3 examples/laya-judge.py --stub"
-# -> meet __DO_PRIVATE_EMAIL_1__
+# -> meet __DO_PRIVATE_EMAIL_1_9F3A2C7B5D1E4F08__
 ```
 
 Trust and quality notes: the sidecar sees raw candidate values by design (same as `judge-heuristics`), so point `LAYA_MODEL` only at a local, trusted checkpoint — inference is offline CPU. The model card warns that Laya ships over-confident (mean ECE 0.466; refitting temperatures on your own data brings it to 0.081) and that `choice` questions should stay under ~20 options (five criteria here). The policy keeps `test`/`business` values at ≥ 0.90 confidence, so treat keep decisions as provisional until the checkpoint is validated on your data. With an older `transformers` plus TensorFlow installed in the same environment, its import-time probe can deadlock — run with `USE_TF=0` in that case.

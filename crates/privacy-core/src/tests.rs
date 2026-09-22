@@ -30,7 +30,8 @@ fn sanitize_preserves_repeated_identity() {
         Ok(value) => value,
         Err(error) => panic!("unexpected error: {error}"),
     };
-    assert_eq!(result.text.matches("__DO_PRIVATE_EMAIL_1__").count(), 2);
+    let token = first_placeholder(&result.text);
+    assert_eq!(result.text.matches(&token).count(), 2);
     assert!(!result.text.contains("alice@example.com"));
 }
 
@@ -130,6 +131,19 @@ fn sanitize_err(pipeline: &mut PrivacyPipeline, input: &str) -> PipelineError {
     }
 }
 
+/// The first minted placeholder in `text`.
+fn first_placeholder(text: &str) -> String {
+    const PREFIX: &str = "__DO_PRIVATE_";
+    let Some(start) = text.find(PREFIX) else {
+        panic!("no placeholder in {text}");
+    };
+    let rest = &text[start + PREFIX.len()..];
+    let Some(end) = rest.find("__") else {
+        panic!("unterminated placeholder in {text}");
+    };
+    text[start..start + PREFIX.len() + end + 2].to_owned()
+}
+
 #[test]
 fn judge_labels_flow_into_policy() {
     let mut pipeline = judged(FixedJudge(Judgment::Labeled {
@@ -146,7 +160,10 @@ fn judge_labels_flow_into_policy() {
 fn abstaining_judge_falls_back_to_the_kind_rules() {
     let mut pipeline = judged(FixedJudge(Judgment::Abstain { index: 0 }));
     let result = sanitize_ok(&mut pipeline, "alice@example.com");
-    assert!(result.text.contains("__DO_PRIVATE_EMAIL_1__"), "{result:?}");
+    assert!(
+        result.text.starts_with("__DO_PRIVATE_EMAIL_1_"),
+        "{result:?}"
+    );
 }
 
 #[test]
@@ -157,7 +174,10 @@ fn low_confidence_judgment_is_not_trusted() {
         confidence: 0.5,
     }));
     let result = sanitize_ok(&mut pipeline, "alice@example.com");
-    assert!(result.text.contains("__DO_PRIVATE_EMAIL_1__"), "{result:?}");
+    assert!(
+        result.text.starts_with("__DO_PRIVATE_EMAIL_1_"),
+        "{result:?}"
+    );
 }
 
 #[test]
@@ -394,7 +414,10 @@ fn overlapping_spans_resolved_to_longest() {
     let result = sanitize_ok(&mut pipeline, "alice@example.com");
     assert_eq!(result.entities.len(), 1, "{result:?}");
     assert_eq!(result.entities[0].kind, "email");
-    assert!(result.text.contains("__DO_PRIVATE_EMAIL_1__"), "{result:?}");
+    assert!(
+        result.text.starts_with("__DO_PRIVATE_EMAIL_1_"),
+        "{result:?}"
+    );
     assert!(!result.text.contains("PERSON"), "{result:?}");
 }
 

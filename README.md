@@ -47,14 +47,14 @@ Each implementation is replaceable by name through `plugin-registry`. The core d
 
 ```bash
 do-context-shield sanitize --session work-1 < prompt.txt
-printf '%s' '__DO_PRIVATE_EMAIL_1__' | do-context-shield restore --session work-1 --vault-file ~/.local/share/do-context-shield/vault.json
+printf '%s' '__DO_PRIVATE_EMAIL_1_9F3A2C7B5D1E4F08__' | do-context-shield restore --session work-1 --vault-file ~/.local/share/do-context-shield/vault.json
 printf '%s' 'contact me at alice@example.com' | do-context-shield inspect
 printf '%s' 'contact me at alice@example.com' | do-context-shield sanitize --session work-1 --vault-file ~/.local/share/do-context-shield/vault.json
 
 do-context-shield mcp-stdio --vault-file ~/.local/share/do-context-shield/vault.json
 ```
 
-`restore` only resolves tokens held by the same local vault/session. Nothing leaves the process unless a caller explicitly sends sanitized text onward. The optional JSON vault contains original values by design; protect that local file and use it only when cross-process restoration is required.
+`restore` only resolves tokens held by the same local vault/session, and only the exact token the vault minted: every mapping carries per-mapping entropy, so a fabricated `__DO_PRIVATE_*__` string does not resolve. Nothing leaves the process unless a caller explicitly sends sanitized text onward. The optional JSON vault contains original values by design; protect that local file and use it only when cross-process restoration is required.
 
 A `do-context-shield.toml` in the working directory, `$HOME/.config/do-context-shield/config.toml`, or the path passed with `--config` supplies defaults for plugin selection, vault, enforcement context, and the process timeout; explicitly passed CLI flags override it. Unknown fields and unknown plugin names are rejected at startup. See `docs/configuration.md` for the reference and `do-context-shield.toml.example` for a starting point.
 

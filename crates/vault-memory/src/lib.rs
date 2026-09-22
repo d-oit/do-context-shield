@@ -1,6 +1,6 @@
 //! In-memory session-scoped vault.
 
-use do_context_shield_plugin_api::{Mapping, ScopeId, Vault, VaultError};
+use do_context_shield_plugin_api::{Mapping, ScopeId, Vault, VaultError, mint_placeholder};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -10,7 +10,7 @@ pub struct MemoryVault {
     // Keyed by (scope, kind, original): the same value detected under
     // different kinds must yield distinct kind-tagged tokens.
     mappings: HashMap<(String, String, String), Entry>,
-    counters: HashMap<(String, String), usize>,
+    counters: HashMap<(String, String), u64>,
     /// Optional lifetime after which a mapping stops resolving.
     ttl: Option<Duration>,
 }
@@ -55,12 +55,12 @@ impl Vault for MemoryVault {
         self.mappings.remove(&key);
 
         let counter_key = (scope.0.clone(), kind.to_owned());
-        let next = self
+        let next = *self
             .counters
             .entry(counter_key)
             .and_modify(|value| *value += 1)
             .or_insert(1);
-        let token = format!("__DO_PRIVATE_{}_{}__", kind.to_ascii_uppercase(), next);
+        let token = mint_placeholder(kind, next)?;
         let mapping = Mapping {
             kind: kind.to_owned(),
             original: original.to_owned(),
@@ -124,6 +124,15 @@ mod tests {
         }
     }
 
+    /// Assert `token` is a minted placeholder for `kind`/`counter`.
+    fn assert_token(token: &str, kind: &str, counter: u64) {
+        let prefix = format!("__DO_PRIVATE_{kind}_{counter}_");
+        assert!(
+            token.starts_with(&prefix),
+            "`{token}` does not start with `{prefix}`"
+        );
+    }
+
     #[test]
     fn same_value_under_different_kinds_gets_distinct_tokens() {
         let mut vault = MemoryVault::default();
@@ -147,8 +156,9 @@ mod tests {
     #[test]
     fn scopes_are_isolated() {
         let mut vault = MemoryVault::default();
-        // Counters are per scope+kind, so identical inputs in different
-        // scopes may share a token string; isolation lives in `resolve`.
+        // Counters are per scope+kind and every mapping mints its own entropy,
+        // so identical inputs in different scopes get distinct tokens;
+        // isolation still lives in `resolve`.
         let email = stored(&mut vault, &scope("one"), "email", "alice@example.com");
         let person = stored(&mut vault, &scope("two"), "person", "alice@example.com");
         for (scope, token) in [
@@ -178,7 +188,29 @@ mod tests {
         );
         // The deleted scope starts from a fresh counter.
         let recreated = stored(&mut vault, &doomed, "email", "alice@example.com");
-        assert_eq!(recreated.token, "__DO_PRIVATE_EMAIL_1__");
+        assert_token(&recreated.token, "EMAIL", 1);
+        assert_ne!(gone.token, recreated.token, "fresh entropy after deletion");
+    }
+
+    #[test]
+    fn fabricated_tokens_do_not_resolve() {
+        let mut vault = MemoryVault::default();
+        let session = scope("s");
+        let mapping = stored(&mut vault, &session, "email", "alice@example.com");
+        // A guessed counter without the minted entropy does not resolve, so a
+        // model cannot enumerate session values it was never shown.
+        assert_eq!(resolved(&vault, &session, "__DO_PRIVATE_EMAIL_1__"), None);
+        assert_eq!(
+            resolved(&vault, &session, "__DO_PRIVATE_EMAIL_1_0000000000000000__"),
+            None
+        );
+        assert_eq!(
+            resolved(&vault, &session, &mapping.token),
+            Some(mapping.clone())
+        );
+        // Scopes never share a token for the same value and kind.
+        let second = stored(&mut vault, &scope("other"), "email", "alice@example.com");
+        assert_ne!(mapping.token, second.token);
     }
 
     #[test]

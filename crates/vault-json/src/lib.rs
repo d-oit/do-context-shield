@@ -1,6 +1,6 @@
 //! Explicit opt-in JSON-file vault for CLI-to-CLI workflows.
 
-use do_context_shield_plugin_api::{Mapping, ScopeId, Vault, VaultError};
+use do_context_shield_plugin_api::{Mapping, ScopeId, Vault, VaultError, mint_placeholder};
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
@@ -23,7 +23,7 @@ struct MappingRecord {
 struct CounterRecord {
     scope: String,
     kind: String,
-    value: usize,
+    value: u64,
 }
 
 /// Advisory lock over the vault file, released when dropped.
@@ -233,7 +233,7 @@ impl Vault for JsonVault {
         let mapping = Mapping {
             kind: kind.to_owned(),
             original: original.to_owned(),
-            token: format!("__DO_PRIVATE_{}_{}__", kind.to_ascii_uppercase(), next),
+            token: mint_placeholder(kind, next)?,
         };
         self.state.mappings.push(MappingRecord {
             scope: scope.0.clone(),

@@ -32,7 +32,11 @@ fn default_tool_set_exposes_only_sanitize_and_inspect() {
 fn disabled_tools_are_rejected_with_guidance() {
     let mut pipeline = pipeline();
     for body in [
-        tool_call("context.restore", "__DO_PRIVATE_EMAIL_1__", Some("s")),
+        tool_call(
+            "context.restore",
+            "__DO_PRIVATE_EMAIL_1_9F3A2C7B5D1E4F08__",
+            Some("s"),
+        ),
         tool_call("context.forget", "", Some("s")),
     ] {
         let response = request_with(&mut pipeline, ToolSet::model_facing(), &body);

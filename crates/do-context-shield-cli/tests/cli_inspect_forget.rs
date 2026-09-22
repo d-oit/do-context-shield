@@ -92,7 +92,7 @@ fn forget_clears_vault_session() {
     let dir = temp_dir();
     let vault = vault_path(dir.path());
     let sanitized = sanitize(dir.path(), &vault, "gone", "alice@example.com");
-    assert_eq!(sanitized, "__DO_PRIVATE_EMAIL_1__");
+    common::assert_placeholder(&sanitized, "EMAIL", 1);
     forget(dir.path(), &vault, "gone");
     // The mapping is purged from the file, so the placeholder stays unresolved.
     let restored = restore(dir.path(), &vault, "gone", &sanitized);
@@ -105,7 +105,7 @@ fn forget_preserves_other_sessions() {
     let vault = vault_path(dir.path());
     let first = sanitize(dir.path(), &vault, "s1", "alice@example.com");
     let second = sanitize(dir.path(), &vault, "s2", "bob@example.com");
-    assert_eq!(second, "__DO_PRIVATE_EMAIL_1__");
+    common::assert_placeholder(&second, "EMAIL", 1);
     forget(dir.path(), &vault, "s1");
     let still_resolvable = restore(dir.path(), &vault, "s2", &second);
     assert_eq!(still_resolvable, "bob@example.com");

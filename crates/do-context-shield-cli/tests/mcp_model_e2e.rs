@@ -178,10 +178,15 @@ fn hybrid_detector_over_stdio_with_a_real_model() {
         "context.sanitize",
         &json!({"text": "Jane Doe, SSN 123-45-6789.", "session": "m1"}),
     )));
-    assert_eq!(
-        sanitized,
-        "__DO_PRIVATE_FULL_NAME_1__, SSN __DO_PRIVATE_SSN_1__."
+    assert!(
+        sanitized.starts_with("__DO_PRIVATE_FULL_NAME_1_"),
+        "{sanitized}"
     );
+    assert!(
+        sanitized.contains(", SSN __DO_PRIVATE_SSN_1_"),
+        "{sanitized}"
+    );
+    assert!(sanitized.ends_with("__."), "{sanitized}");
     assert!(!sanitized.contains("Jane Doe"), "{sanitized}");
     assert!(!sanitized.contains("123-45-6789"), "{sanitized}");
     session.close();

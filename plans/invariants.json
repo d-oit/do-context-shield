@@ -60,6 +60,12 @@
     "category": "contracts"
   },
   {
+    "invariant": "Placeholder tokens embed 64 bits of OS entropy per mapping (`__DO_PRIVATE_<KIND>_<N>_<16 hex>__`), so a fabricated or guessed `__DO_PRIVATE_*__` string never resolves and tokens cannot be enumerated from other tokens in the same scope",
+    "rationale": "`restore` substitutes any token that matches a stored mapping; with predictable tokens a hostile model could enumerate session values it was never shown, or trick a harness into restoring fabricated placeholders. Per-mapping entropy makes guessing infeasible while repeated entities keep one stable pseudonym through the vault lookup.",
+    "sensor": "cargo test -p do-context-shield-vault-memory -p do-context-shield-vault-json (fabricated_tokens_do_not_resolve) + cargo test -p do-context-shield-plugin-api",
+    "category": "security"
+  },
+  {
     "invariant": "Process plugins fail closed: malformed response, invalid span, undecided entity, leftover value, unresolvable placeholder, or non-zero exit stops the call instead of passing text through",
     "rationale": "A permissive plugin turns the privacy boundary into a passthrough",
     "sensor": "cargo test -p do-context-shield-plugin-process",

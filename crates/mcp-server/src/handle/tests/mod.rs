@@ -55,6 +55,15 @@ fn content_text(response: Option<Value>) -> String {
         .to_owned()
 }
 
+/// Assert `text` starts with a minted placeholder for `kind`/`counter`.
+fn assert_placeholder(text: &str, kind: &str, counter: u64) {
+    let prefix = format!("__DO_PRIVATE_{kind}_{counter}_");
+    assert!(
+        text.starts_with(&prefix),
+        "`{text}` does not start with `{prefix}`"
+    );
+}
+
 /// Tool call with extra raw JSON argument fragments appended after `session`
 /// (e.g. `,"recipient":"local"`).
 fn tool_call_with_context(name: &str, text: &str, extra: &str) -> String {
@@ -189,7 +198,7 @@ fn sanitize_without_session_falls_back_to_default_scope() {
         &mut pipeline,
         &tool_call("context.sanitize", "alice@example.com", None),
     ));
-    assert!(sanitized.contains("__DO_PRIVATE_EMAIL_1__"), "{sanitized}");
+    assert_placeholder(&sanitized, "EMAIL", 1);
 }
 
 #[test]
@@ -247,7 +256,7 @@ fn judge_labels_reach_the_policy() {
         &mut plain,
         &tool_call("context.sanitize", "alice@example.com", Some("s")),
     ));
-    assert_eq!(replaced, "__DO_PRIVATE_EMAIL_1__");
+    assert_placeholder(&replaced, "EMAIL", 1);
 }
 
 #[test]
@@ -371,7 +380,7 @@ fn sanitize_context_purpose_and_jurisdiction_are_accepted() {
         "alice@example.com",
         r#","purpose":"support","jurisdiction":"DE""#,
     ));
-    assert_eq!(sanitized, "__DO_PRIVATE_EMAIL_1__");
+    assert_placeholder(&sanitized, "EMAIL", 1);
 }
 
 #[test]
@@ -423,7 +432,7 @@ fn forget_deletes_the_session_mappings() {
         &mut pipeline,
         &tool_call("context.sanitize", "alice@example.com", Some("s")),
     ));
-    assert_eq!(sanitized, "__DO_PRIVATE_EMAIL_1__");
+    assert_placeholder(&sanitized, "EMAIL", 1);
 
     let forgotten = content_text(request(&mut pipeline, &forget_call(Some("s"))));
     assert!(forgotten.contains(r#""forgotten":true"#), "{forgotten}");

@@ -38,6 +38,19 @@ fn raw_pii_is_absent_from_sanitized_output() {
     assert!(!result.entities.is_empty(), "{result:?}");
 }
 
+/// The first minted placeholder in `text`.
+fn first_placeholder(text: &str) -> String {
+    const PREFIX: &str = "__DO_PRIVATE_";
+    let Some(start) = text.find(PREFIX) else {
+        panic!("no placeholder in {text}");
+    };
+    let rest = &text[start + PREFIX.len()..];
+    let Some(end) = rest.find("__") else {
+        panic!("unterminated placeholder in {text}");
+    };
+    text[start..start + PREFIX.len() + end + 2].to_owned()
+}
+
 #[test]
 fn stable_placeholders_preserve_repeated_entity_identity() {
     let mut pipeline = pipeline();
@@ -47,11 +60,8 @@ fn stable_placeholders_preserve_repeated_entity_identity() {
         "mail alice@example.com then alice@example.com",
         &ProcessingContext::default(),
     ));
-    assert_eq!(
-        result.text.matches("__DO_PRIVATE_EMAIL_1__").count(),
-        2,
-        "{result:?}"
-    );
+    let token = first_placeholder(&result.text);
+    assert_eq!(result.text.matches(&token).count(), 2, "{result:?}");
 }
 
 #[test]
@@ -136,7 +146,10 @@ fn context_default_is_safe() {
     let result =
         unwrap_ok(pipeline.sanitize(&scope, "alice@example.com", &ProcessingContext::default()));
     assert!(!result.text.contains("alice@example.com"), "{result:?}");
-    assert!(result.text.contains("__DO_PRIVATE_EMAIL_1__"), "{result:?}");
+    assert!(
+        result.text.starts_with("__DO_PRIVATE_EMAIL_1_"),
+        "{result:?}"
+    );
 }
 
 #[test]
