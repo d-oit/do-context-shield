@@ -95,16 +95,24 @@ impl Vault for ProcessVault {
         };
         let response: GetOrInsertResponse = self.request(&request)?;
         if !is_placeholder_token(&response.token) {
-            return Err(VaultError::Message(format!(
-                "process vault returned the token `{}` that `restore` cannot resolve",
-                response.token
-            )));
+            return Err(VaultError::Message(
+                "process vault returned a token that `restore` cannot resolve".to_owned(),
+            ));
         }
-        Ok(Mapping {
+        let mapping = Mapping {
             kind: kind.to_owned(),
             original: original.to_owned(),
             token: response.token,
-        })
+        };
+        match self.resolve(scope, &mapping.token)? {
+            Some(resolved) if resolved == mapping => Ok(mapping),
+            Some(_) => Err(VaultError::Message(
+                "process vault resolved the token to a different mapping".to_owned(),
+            )),
+            None => Err(VaultError::Message(
+                "process vault returned a token that could not be resolved".to_owned(),
+            )),
+        }
     }
 
     /// Ask the configured child to resolve a placeholder within a scope.

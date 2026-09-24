@@ -68,8 +68,10 @@ pub struct Mapping {
 }
 
 mod context;
+mod placeholder;
 
 pub use context::{DataCategory, ProcessingContext, RecipientClass};
+pub use placeholder::{is_minted_placeholder_token, is_placeholder_token, mint_placeholder};
 
 /// Detector failures.
 #[derive(Debug, Error)]
@@ -224,49 +226,6 @@ pub trait Vault: Send + Sync {
     }
 }
 
-/// Whether `token` has the `__DO_PRIVATE_<INNER>__` placeholder shape that
-/// the pipeline's `restore` resolves through a vault.
-///
-/// `<INNER>` must be non-empty and ASCII alphanumeric or `_`, so
-/// `__DO_PRIVATE_EMAIL_1_9F3A2C7B5D1E4F08__` and `__DO_PRIVATE_REDACTED__`
-/// qualify.
-#[must_use]
-pub fn is_placeholder_token(token: &str) -> bool {
-    let Some(inner) = token
-        .strip_prefix("__DO_PRIVATE_")
-        .and_then(|rest| rest.strip_suffix("__"))
-    else {
-        return false;
-    };
-    !inner.is_empty() && inner.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-}
-
-/// Mint a fresh placeholder token for one mapping.
-///
-/// The token carries an unguessable 64-bit suffix, so tokens cannot be
-/// enumerated from other tokens of the same scope and a fabricated
-/// `__DO_PRIVATE_*__` string — in a model reply, say — does not resolve to a
-/// stored value. Stability is the vault's job: the same `(scope, kind,
-/// original)` mapping keeps returning the token minted on its first insert.
-///
-/// # Errors
-///
-/// Returns [`VaultError`] when the system entropy source is unavailable; the
-/// vault must fail the insert rather than mint a predictable token.
-pub fn mint_placeholder(kind: &str, counter: u64) -> Result<String, VaultError> {
-    let mut suffix = [0u8; 8];
-    getrandom::fill(&mut suffix).map_err(|error| {
-        VaultError::Message(format!(
-            "cannot obtain entropy for a placeholder token ({error})"
-        ))
-    })?;
-    let entropy = u64::from_be_bytes(suffix);
-    Ok(format!(
-        "__DO_PRIVATE_{}_{counter}_{entropy:016X}__",
-        kind.to_ascii_uppercase()
-    ))
-}
-
 /// Whether `kind` names a credential that must be redacted, never pseudonymized.
 #[must_use]
 pub fn is_secret_kind(kind: &str) -> bool {
@@ -416,7 +375,9 @@ pub fn validate_judgments(len: usize, judgments: &[Judgment]) -> Result<(), Judg
 
 #[cfg(test)]
 mod tests {
-    use super::{is_placeholder_token, is_secret_kind, mint_placeholder};
+    use super::{
+        is_minted_placeholder_token, is_placeholder_token, is_secret_kind, mint_placeholder,
+    };
 
     #[test]
     fn minted_tokens_are_shaped_and_unguessable() {
@@ -425,12 +386,26 @@ mod tests {
             Err(error) => panic!("unexpected error: {error}"),
         };
         assert!(is_placeholder_token(&first), "{first}");
+        assert!(is_minted_placeholder_token(&first), "{first}");
         assert!(first.starts_with("__DO_PRIVATE_FULL_NAME_1_"), "{first}");
         let second = match mint_placeholder("full_name", 1) {
             Ok(token) => token,
             Err(error) => panic!("unexpected error: {error}"),
         };
         assert_ne!(first, second, "each mapping mints its own entropy");
+    }
+
+    #[test]
+    fn invalid_kinds_cannot_be_minted() {
+        for kind in ["email__x", "email-address", "ü-email", "_email", "email_"] {
+            assert!(
+                mint_placeholder(kind, 1).is_err(),
+                "kind `{kind}` must not produce an unrestorable token"
+            );
+        }
+        assert!(!is_placeholder_token("__DO_PRIVATE_EMAIL__X__"));
+        assert!(is_placeholder_token("__DO_PRIVATE_REDACTED__"));
+        assert!(!is_minted_placeholder_token("__DO_PRIVATE_EMAIL_1__"));
     }
 
     #[test]

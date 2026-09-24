@@ -205,6 +205,8 @@ fn externally_deleted_vault_starts_over() {
         Ok(()) => {}
         Err(error) => panic!("cannot remove the vault file: {error}"),
     }
+    // Reads also honor external deletion instead of serving the cached mapping.
+    assert_eq!(resolved(&vault, &scope, &first.token), None);
     // Writes reload the file first: a vault deleted outside this process is
     // empty, so the counter restarts instead of resurrecting stale mappings.
     let second = stored(&mut vault, &scope, "email", "bob@example.com");
@@ -214,6 +216,59 @@ fn externally_deleted_vault_starts_over() {
         "fresh entropy for the new mapping"
     );
     assert_eq!(vault.state.mappings.len(), 1, "stale mappings survived");
+    cleanup(&path);
+}
+
+#[test]
+fn legacy_tokens_are_not_resolved_and_are_rotated_on_reinsert() {
+    let path = temp_path();
+    let legacy = serde_json::json!({
+        "mappings": [{
+            "scope": "s",
+            "mapping": {
+                "kind": "email",
+                "original": "alice@example.com",
+                "token": "__DO_PRIVATE_EMAIL_1__"
+            }
+        }],
+        "counters": [{"scope": "s", "kind": "email", "value": 1}]
+    });
+    let bytes = match serde_json::to_vec(&legacy) {
+        Ok(bytes) => bytes,
+        Err(error) => panic!("cannot serialize legacy vault: {error}"),
+    };
+    if let Err(error) = fs::write(&path, bytes) {
+        panic!("cannot write legacy vault: {error}");
+    }
+
+    let mut vault = open(&path);
+    let legacy_token = "__DO_PRIVATE_EMAIL_1__";
+    assert_eq!(resolved(&vault, &scope("s"), legacy_token), None);
+
+    let replacement = stored(&mut vault, &scope("s"), "email", "alice@example.com");
+    assert_token(&replacement.token, "EMAIL", 2);
+    assert_ne!(replacement.token, legacy_token);
+    assert_eq!(resolved(&vault, &scope("s"), legacy_token), None);
+    assert_eq!(
+        resolved(&vault, &scope("s"), &replacement.token),
+        Some(replacement)
+    );
+    cleanup(&path);
+}
+
+#[test]
+fn an_existing_instance_observes_external_scope_deletion() {
+    let path = temp_path();
+    let mut first = open(&path);
+    let mapping = stored(&mut first, &scope("s"), "email", "alice@example.com");
+
+    let mut second = open(&path);
+    match second.delete_scope(&scope("s")) {
+        Ok(()) => {}
+        Err(error) => panic!("unexpected error: {error}"),
+    }
+
+    assert_eq!(resolved(&first, &scope("s"), &mapping.token), None);
     cleanup(&path);
 }
 

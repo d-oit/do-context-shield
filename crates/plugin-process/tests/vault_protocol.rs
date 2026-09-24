@@ -75,6 +75,26 @@ fn rejects_a_token_restore_cannot_resolve() {
 }
 
 #[test]
+fn rejects_a_well_shaped_token_that_cannot_be_resolved() {
+    let mut vault = vault("vault-unresolvable");
+    let message = match vault.get_or_insert(&scope("s1"), "email", "alice@example.com") {
+        Ok(_) => panic!("expected an error, got a mapping"),
+        Err(error) => error.to_string(),
+    };
+    assert!(message.contains("could not be resolved"), "got: {message}");
+}
+
+#[test]
+fn rejects_a_token_resolved_to_a_different_mapping() {
+    let mut vault = vault("vault-wrong-mapping");
+    let message = match vault.get_or_insert(&scope("s1"), "email", "alice@example.com") {
+        Ok(_) => panic!("expected an error, got a mapping"),
+        Err(error) => error.to_string(),
+    };
+    assert!(message.contains("different mapping"), "got: {message}");
+}
+
+#[test]
 fn rejects_a_token_echo_mismatch() {
     let vault = vault("vault-wrong-token");
     let message = match vault.resolve(&scope("s1"), TOKEN) {

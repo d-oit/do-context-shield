@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Vault token lifecycle: legacy JSON mappings are no longer accepted as guessable aliases, long-lived JSON vaults observe cross-process deletions, process-vault inserts require an exact resolution round-trip, and invalid entity kinds fail closed before emitting unrestorable tokens.
 - Raw-value egress: `SanitizeResult` and CLI/MCP `private.inspect` output now report entities as `EntitySummary` (kind, byte span, confidence) instead of `Entity`, so no pipeline result, CLI output, or MCP tool response repeats the matched text back to the caller; `SanitizeResult.mappings` (whose only payload was `Mapping.original`) was removed. The no-raw-values invariant is now machine-checked by the privacy-invariants and MCP tests.
 - Dependency policy: `cargo-deny` and `cargo-audit` now pass on the all-features graph — the reviewed `paste` exception (RUSTSEC-2024-0436, via `tokenizers` behind the `gliner2` feature) is documented in `deny.toml` and `.cargo/audit.toml`, and ISC joins the license allow-list for `libloading` (`ort` load-dynamic).
 - `--vault-file` combined with `--vault memory` or `--vault process` is rejected instead of silently ignored, and a process transformer's text-consistency errors (leftover or dropped values) are reported ahead of vault lookup failures.

@@ -54,7 +54,7 @@ printf '%s' 'contact me at alice@example.com' | do-context-shield sanitize --ses
 do-context-shield mcp-stdio --vault-file ~/.local/share/do-context-shield/vault.json
 ```
 
-`restore` only resolves tokens held by the same local vault/session, and only the exact token the vault minted: every mapping carries per-mapping entropy, so a fabricated `__DO_PRIVATE_*__` string does not resolve. Nothing leaves the process unless a caller explicitly sends sanitized text onward. The optional JSON vault contains original values by design; protect that local file and use it only when cross-process restoration is required.
+`restore` only resolves tokens held by the same local vault/session, and only the exact token the vault minted. The built-in memory and JSON vaults add per-mapping entropy, so a fabricated `__DO_PRIVATE_*__` string does not resolve; process vaults own their token policy and must be trusted local plugins. Nothing leaves the process unless a caller explicitly sends sanitized text onward. The optional JSON vault contains original values by design; protect that local file and use it only when cross-process restoration is required.
 
 A `do-context-shield.toml` in the working directory, `$HOME/.config/do-context-shield/config.toml`, or the path passed with `--config` supplies defaults for plugin selection, vault, enforcement context, and the process timeout; explicitly passed CLI flags override it. Unknown fields and unknown plugin names are rejected at startup. See `docs/configuration.md` for the reference and `do-context-shield.toml.example` for a starting point.
 

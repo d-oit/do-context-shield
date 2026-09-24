@@ -17,7 +17,7 @@ Common rules:
 - `scope` is the caller's session scope string.
 - `start` / `end` are UTF-8 byte offsets into the exact input named in the request; `start < end` is required and both offsets must fall on character boundaries.
 - Kind labels are trimmed, lowercased, and have spaces replaced by underscores (`API Key` becomes `api_key`); the default policy matches kinds by lowercase substring.
-- Placeholders must have the pipeline shape `__DO_PRIVATE_<INNER>__` with a non-empty ASCII alphanumeric/underscore `<INNER>`; anything else cannot be resolved by `restore`. The built-in vaults append 16 hex characters of per-mapping entropy (e.g. `__DO_PRIVATE_EMAIL_1_9F3A2C7B5D1E4F08__`), so tokens cannot be guessed from other tokens; the shape rule above is what `restore` enforces.
+- Placeholders must have the pipeline shape `__DO_PRIVATE_<INNER>__` where `<INNER>` starts and ends with an ASCII alphanumeric and contains only ASCII alphanumerics and single underscores; anything else cannot be resolved by `restore`. The built-in memory and JSON vaults append 16 hex characters of per-mapping entropy (e.g. `__DO_PRIVATE_EMAIL_1_9F3A2C7B5D1E4F08__`), so tokens cannot be guessed from other tokens. A process vault owns its token policy: the host verifies the shape and resolution round-trip, but cannot prove that a child used a CSPRNG; configure only a trusted local child.
 
 ## detect
 
@@ -136,8 +136,8 @@ A miss is `{"mapping":null}`.
 {"deleted":true}
 ```
 
-- The child owns the mapping store. The pipeline keeps no vault state and starts one child per operation, so token stability across calls is whatever that store provides; a stateless child re-issues tokens per call and breaks `restore`.
-- `get_or_insert` must return a token `restore` can resolve, and `vault_resolve` hits must echo the requested token and carry kind and original.
+- The child owns the mapping store. The pipeline keeps no vault state and starts one child per protocol operation; a `vault_get_or_insert` is followed by a separate `vault_resolve` validation request, so token stability across calls is whatever that store provides and a stateless child re-issues tokens per call and breaks `restore`.
+- `get_or_insert` must return a token `restore` can resolve. The adapter immediately performs a `vault_resolve` round-trip and rejects a missing or mismatched mapping; `vault_resolve` hits must echo the requested token and carry the exact kind and original.
 - `vault_delete_scope` backs `forget` (MCP `context.forget`, CLI `forget`) and must answer `{"deleted":true}` after removing every mapping and counter for that scope; any other answer (including `{"deleted":false}`) fails the call closed. `expire` stays a no-op for a process vault — retention is the child's policy.
 
 ## Selection
