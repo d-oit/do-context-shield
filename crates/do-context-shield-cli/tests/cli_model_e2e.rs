@@ -72,10 +72,11 @@ fn gliner2_sanitizes_multibyte_input() {
         .assert()
         .success();
     let stdout = stdout_of(&assert);
-    assert_eq!(
-        stdout,
-        "Grüße von __DO_PRIVATE_FULL_NAME_1__, __DO_PRIVATE_EMAIL_1__."
-    );
+    assert!(stdout.starts_with("Grüße von "), "{stdout}");
+    assert!(stdout.ends_with('.'), "{stdout}");
+    common::assert_contains_placeholder(&stdout, "FULL_NAME", 1);
+    common::assert_contains_placeholder(&stdout, "EMAIL", 1);
+    assert!(!stdout.contains("Jane Doe"), "{stdout}");
     assert!(!stdout.contains("jane@example.com"), "{stdout}");
 }
 
@@ -102,10 +103,10 @@ fn gliner2_finds_tail_entities_in_chunked_input() {
         .assert()
         .success();
     let stdout = stdout_of(&assert);
-    assert_eq!(
-        stdout,
-        format!("{filler}Contact __DO_PRIVATE_FULL_NAME_1__ at __DO_PRIVATE_EMAIL_1__.")
-    );
+    assert!(stdout.starts_with(&format!("{filler}Contact ")), "{stdout}");
+    assert!(stdout.ends_with('.'), "{stdout}");
+    common::assert_contains_placeholder(&stdout, "FULL_NAME", 1);
+    common::assert_contains_placeholder(&stdout, "EMAIL", 1);
 }
 
 #[test]
@@ -129,10 +130,11 @@ fn hybrid_merges_regex_and_model_spans() {
         .assert()
         .success();
     let stdout = stdout_of(&assert);
-    assert_eq!(
-        stdout,
-        "__DO_PRIVATE_FULL_NAME_1__, SSN __DO_PRIVATE_SSN_1__, card __DO_PRIVATE_CREDIT_CARD_1__."
-    );
+    assert!(stdout.starts_with("__DO_PRIVATE_FULL_NAME_1_"), "{stdout}");
+    assert!(stdout.contains(", SSN "), "{stdout}");
+    assert!(stdout.ends_with('.'), "{stdout}");
+    common::assert_contains_placeholder(&stdout, "SSN", 1);
+    common::assert_contains_placeholder(&stdout, "CREDIT_CARD", 1);
     assert!(!stdout.contains("123-45-6789"), "{stdout}");
     assert!(!stdout.contains("4111 1111 1111 1111"), "{stdout}");
 }

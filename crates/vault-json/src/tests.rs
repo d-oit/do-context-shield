@@ -42,6 +42,15 @@ fn cleanup(path: &PathBuf) {
     fs::remove_file(path.with_extension("json.tmp")).ok();
 }
 
+/// Assert `token` is a minted placeholder for `kind`/`counter`.
+fn assert_token(token: &str, kind: &str, counter: u64) {
+    let prefix = format!("__DO_PRIVATE_{kind}_{counter}_");
+    assert!(
+        token.starts_with(&prefix),
+        "`{token}` does not start with `{prefix}`"
+    );
+}
+
 #[test]
 fn mappings_survive_reopen_and_share_counters() {
     let path = temp_path();
@@ -60,7 +69,7 @@ fn mappings_survive_reopen_and_share_counters() {
     }
     let second = stored(&mut reopened, &scope, "email", "bob@example.com");
     assert_ne!(first.token, second.token);
-    assert!(second.token.ends_with("_2__"));
+    assert_token(&second.token, "EMAIL", 2);
     cleanup(&path);
 }
 
@@ -107,7 +116,7 @@ fn delete_scope_persists_and_reloads() {
     );
     // The deleted scope's counter is gone, so it restarts at 1.
     let reissued = stored(&mut reopened, &doomed, "email", "carol@example.com");
-    assert_eq!(reissued.token, "__DO_PRIVATE_EMAIL_1__");
+    assert_token(&reissued.token, "EMAIL", 1);
     cleanup(&path);
 }
 
@@ -191,7 +200,7 @@ fn externally_deleted_vault_starts_over() {
     let scope = scope("s");
     let mut vault = open(&path);
     let first = stored(&mut vault, &scope, "email", "alice@example.com");
-    assert_eq!(first.token, "__DO_PRIVATE_EMAIL_1__");
+    assert_token(&first.token, "EMAIL", 1);
     match fs::remove_file(&path) {
         Ok(()) => {}
         Err(error) => panic!("cannot remove the vault file: {error}"),
@@ -199,8 +208,35 @@ fn externally_deleted_vault_starts_over() {
     // Writes reload the file first: a vault deleted outside this process is
     // empty, so the counter restarts instead of resurrecting stale mappings.
     let second = stored(&mut vault, &scope, "email", "bob@example.com");
-    assert_eq!(second.token, "__DO_PRIVATE_EMAIL_1__");
+    assert_token(&second.token, "EMAIL", 1);
+    assert_ne!(
+        first.token, second.token,
+        "fresh entropy for the new mapping"
+    );
     assert_eq!(vault.state.mappings.len(), 1, "stale mappings survived");
+    cleanup(&path);
+}
+
+#[test]
+fn fabricated_tokens_do_not_resolve() {
+    let path = temp_path();
+    let mut vault = open(&path);
+    let session = scope("s");
+    let mapping = stored(&mut vault, &session, "email", "alice@example.com");
+    // A guessed counter without the minted entropy does not resolve, so a
+    // model cannot enumerate session values it was never shown.
+    assert_eq!(resolved(&vault, &session, "__DO_PRIVATE_EMAIL_1__"), None);
+    assert_eq!(
+        resolved(&vault, &session, "__DO_PRIVATE_EMAIL_1_0000000000000000__"),
+        None
+    );
+    assert_eq!(
+        resolved(&vault, &session, &mapping.token),
+        Some(mapping.clone())
+    );
+    // Scopes never share a token for the same value and kind.
+    let second = stored(&mut vault, &scope("other"), "email", "alice@example.com");
+    assert_ne!(mapping.token, second.token);
     cleanup(&path);
 }
 
@@ -255,6 +291,6 @@ fn failed_write_keeps_the_existing_vault() {
     );
     // The surviving file kept the counter, so the next write continues at 2.
     let next = stored(&mut reopened, &scope, "email", "carol@example.com");
-    assert_eq!(next.token, "__DO_PRIVATE_EMAIL_2__");
+    assert_token(&next.token, "EMAIL", 2);
     cleanup(&path);
 }

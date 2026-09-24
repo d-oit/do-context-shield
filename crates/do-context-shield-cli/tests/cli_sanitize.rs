@@ -49,7 +49,7 @@ fn sanitize_replaces_pii_in_stdout() {
         "test1",
         "contact alice@example.com",
     );
-    assert_eq!(sanitized, "contact __DO_PRIVATE_EMAIL_1__");
+    common::assert_contains_placeholder(&sanitized, "EMAIL", 1);
 }
 
 #[test]
@@ -81,7 +81,7 @@ fn restore_across_sessions_is_isolated() {
     let dir = temp_dir();
     let vault = vault_path(dir.path());
     let sanitized = sanitize(dir.path(), &vault, "s1", "alice@example.com");
-    assert_eq!(sanitized, "__DO_PRIVATE_EMAIL_1__");
+    common::assert_placeholder(&sanitized, "EMAIL", 1);
     // The mapping lives in `s1` only, so `s2` cannot resolve the placeholder.
     let untouched = restore(dir.path(), &vault, "s2", &sanitized);
     assert_eq!(untouched, sanitized);

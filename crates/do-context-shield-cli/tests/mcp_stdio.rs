@@ -8,6 +8,8 @@ use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
+mod common;
+
 /// One running `mcp-stdio` server with piped stdio.
 struct McpSession {
     child: Child,
@@ -177,7 +179,7 @@ fn sanitize_restore_round_trip_over_stdio() {
         "context.sanitize",
         &json!({"text": "alice@example.com", "session": "s1"}),
     )));
-    assert_eq!(sanitized, "__DO_PRIVATE_EMAIL_1__");
+    common::assert_placeholder(&sanitized, "EMAIL", 1);
     let restored = content_text(&session.send(&tool_call(
         "context.restore",
         &json!({"text": &sanitized, "session": "s1"}),
@@ -239,7 +241,7 @@ fn forget_over_stdio() {
         "context.sanitize",
         &json!({"text": "alice@example.com", "session": "f1"}),
     )));
-    assert_eq!(sanitized, "__DO_PRIVATE_EMAIL_1__");
+    common::assert_placeholder(&sanitized, "EMAIL", 1);
     let forgotten =
         content_text(&session.send(&tool_call("context.forget", &json!({"session": "f1"}))));
     assert!(forgotten.contains(r#""forgotten":true"#), "{forgotten}");

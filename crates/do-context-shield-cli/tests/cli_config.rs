@@ -59,7 +59,7 @@ fn config_file_selects_plugins() {
         &[OsString::from("--vault-file"), vault.into()],
         "test@example.com",
     );
-    assert_eq!(control, "__DO_PRIVATE_EMAIL_1__");
+    common::assert_placeholder(&control, "EMAIL", 1);
 }
 
 #[test]
@@ -101,5 +101,5 @@ fn cli_flag_overrides_config() {
         ],
         "alice@example.com",
     );
-    assert_eq!(sanitized, "__DO_PRIVATE_EMAIL_1__");
+    common::assert_placeholder(&sanitized, "EMAIL", 1);
 }

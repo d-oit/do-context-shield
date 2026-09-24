@@ -1,6 +1,40 @@
 //! Helpers shared by the binary-level CLI integration tests.
 
+// Each test binary uses only a subset of the shared helpers.
+#![allow(dead_code)]
+
 use std::path::Path;
+
+/// Assert `text` is exactly one minted placeholder for `kind`/`counter`
+/// (`__DO_PRIVATE_<KIND>_<counter>_<16 hex>__`).
+pub fn assert_placeholder(text: &str, kind: &str, counter: u64) {
+    let prefix = format!("__DO_PRIVATE_{kind}_{counter}_");
+    let Some(rest) = text.strip_prefix(&prefix) else {
+        panic!("`{text}` does not start with `{prefix}`");
+    };
+    assert_token_entropy(rest, text);
+}
+
+/// Assert `text` contains a minted placeholder for `kind`/`counter`.
+pub fn assert_contains_placeholder(text: &str, kind: &str, counter: u64) {
+    let prefix = format!("__DO_PRIVATE_{kind}_{counter}_");
+    let Some(start) = text.find(&prefix) else {
+        panic!("`{text}` does not contain `{prefix}`");
+    };
+    assert_token_entropy(&text[start + prefix.len()..], text);
+}
+
+/// The remainder after a placeholder prefix: 16 hex characters and `__`.
+fn assert_token_entropy(rest: &str, text: &str) {
+    let Some(entropy) = rest.strip_suffix("__") else {
+        panic!("`{text}` is missing the closing `__`");
+    };
+    assert_eq!(entropy.len(), 16, "unexpected token entropy in `{text}`");
+    assert!(
+        entropy.chars().all(|c| c.is_ascii_hexdigit()),
+        "unexpected token entropy in `{text}`"
+    );
+}
 
 /// The compiled `do-context-shield` binary, started with a hermetic working
 /// directory and `$HOME` so an ambient `do-context-shield.toml` or

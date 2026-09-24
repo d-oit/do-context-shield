@@ -86,5 +86,5 @@ fn abstained_email_is_pseudonymized() {
     }
     let dir = temp_dir();
     let sanitized = sanitize_with_laya(dir.path(), "meet alice@personalmail.net");
-    assert_eq!(sanitized, "meet __DO_PRIVATE_EMAIL_1__");
+    common::assert_contains_placeholder(&sanitized, "EMAIL", 1);
 }

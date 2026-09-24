@@ -10,7 +10,7 @@
       "kind": "explicit",
       "assertions": [
         "contains:.agents/skills/private-data/SKILL.md|sanitize --session issue-123",
-        "contains:.agents/skills/private-data/SKILL.md|__DO_PRIVATE_EMAIL_1__",
+        "contains:.agents/skills/private-data/SKILL.md|__DO_PRIVATE_EMAIL_1_9F3A2C7B5D1E4F08__",
         "contains:.agents/skills/private-data/SKILL.md|Expected shape"
       ]
     },
