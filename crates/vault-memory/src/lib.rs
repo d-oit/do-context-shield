@@ -1,6 +1,8 @@
 //! In-memory session-scoped vault.
 
-use do_context_shield_plugin_api::{Mapping, ScopeId, Vault, VaultError, mint_placeholder};
+use do_context_shield_plugin_api::{
+    Mapping, ScopeId, Vault, VaultError, is_minted_placeholder_token, mint_placeholder,
+};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -81,7 +83,10 @@ impl Vault for MemoryVault {
             .mappings
             .iter()
             .find(|((saved_scope, _, _), entry)| {
-                saved_scope == &scope.0 && entry.mapping.token == token && !self.expired(entry)
+                saved_scope == &scope.0
+                    && entry.mapping.token == token
+                    && is_minted_placeholder_token(&entry.mapping.token)
+                    && !self.expired(entry)
             })
             .map(|(_, entry)| entry.mapping.clone()))
     }

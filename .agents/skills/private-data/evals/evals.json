@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "Sanitize this text for session issue-123 before sending it to a hosted model:\n\nEmail Alice at alice@example.com",
-      "expected_output": "Run do-context-shield sanitize --session issue-123 locally, send only the sanitized text, and expect an __DO_PRIVATE_EMAIL_1__ placeholder instead of the address.",
+      "expected_output": "Run do-context-shield sanitize --session issue-123 locally, send only the sanitized text, and expect an __DO_PRIVATE_EMAIL_1_<16 hex characters>__ placeholder instead of the address.",
       "files": [],
       "dim": "effectiveness",
       "kind": "explicit",

@@ -58,6 +58,16 @@ case "$mode" in
     esac ;;
   vault-delete-refused) printf '%s\n' '{"deleted":false}' ;;
   vault-bad-token)   printf '%s\n' '{"token":"NOT_A_PLACEHOLDER"}' ;;
+  vault-unresolvable)
+    case "$request" in
+      *vault_get_or_insert*) printf '%s\n' '{"token":"__DO_PRIVATE_EMAIL_1__"}' ;;
+      *) printf '%s\n' '{"mapping":null}' ;;
+    esac ;;
+  vault-wrong-mapping)
+    case "$request" in
+      *vault_get_or_insert*) printf '%s\n' '{"token":"__DO_PRIVATE_EMAIL_1__"}' ;;
+      *) printf '%s\n' '{"mapping":{"kind":"phone","original":"bob@example.com","token":"__DO_PRIVATE_EMAIL_1__"}}' ;;
+    esac ;;
   vault-wrong-token) printf '%s\n' '{"mapping":{"kind":"email","original":"alice@example.com","token":"__DO_PRIVATE_EMAIL_9__"}}' ;;
   vault-miss)        printf '%s\n' '{"mapping":null}' ;;
   # shared

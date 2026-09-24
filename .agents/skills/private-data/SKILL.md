@@ -35,6 +35,7 @@ Use `do-context-shield` as a local privacy boundary when coding context may cont
 - Treat secrets as redacted data, not reversible pseudonyms.
 - Add `--judge heuristics` to keep high-confidence test-domain values (e.g. `alice@example.com`) and role addresses (e.g. `support@acme.com`) unchanged; secrets stay redacted regardless of judge output.
 - Keep one stable session id per agent task so repeated entities get stable pseudonyms.
+- The built-in memory and JSON vaults add per-mapping entropy. A process vault owns its token policy; configure only a trusted local child and do not assume the host can enforce unguessability for it.
 - Set the destination explicitly on `sanitize`: `--recipient local` (or the MCP `recipient` argument) keeps non-secret values for a same-device step, and `--data-category special_category` blocks health/biometric-class data addressed to external recipients; omitting both keeps the conservative `external`/`personal` defaults.
 - When a task is done, delete its mappings: call `do-context-shield forget --session <same-session-id>` (or `context.forget` when the server is started with `--tools all`) so the local vault stops holding original values. Long-running MCP servers can also bound mapping lifetime with `--vault-ttl-seconds`.
 - Do not assume regex detection is complete. For names, addresses, source-code secrets, or domain-specific entities, install a stronger detector plugin (see `plugin-development` skill).

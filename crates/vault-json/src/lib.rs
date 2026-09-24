@@ -1,6 +1,8 @@
 //! Explicit opt-in JSON-file vault for CLI-to-CLI workflows.
 
-use do_context_shield_plugin_api::{Mapping, ScopeId, Vault, VaultError, mint_placeholder};
+use do_context_shield_plugin_api::{
+    Mapping, ScopeId, Vault, VaultError, is_minted_placeholder_token, mint_placeholder,
+};
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
@@ -117,6 +119,33 @@ impl JsonVault {
         }
     }
 
+    /// Load state from disk while the caller holds the appropriate lock.
+    ///
+    /// Missing files mean empty state; corrupt files are errors.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError`] when the vault file cannot be read or parsed.
+    fn load_state(path: &Path) -> Result<State, VaultError> {
+        if path.exists() {
+            let file = File::open(path).map_err(|error| io_error(&error))?;
+            serde_json::from_reader(BufReader::new(file)).map_err(|error| json_error(&error))
+        } else {
+            Ok(State::default())
+        }
+    }
+
+    /// Read a current state snapshot while holding a shared lock.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError`] when the lock or vault file cannot be read or
+    /// parsed.
+    fn read_state(path: &Path) -> Result<State, VaultError> {
+        let _lock = Lock::shared(path)?;
+        Self::load_state(path)
+    }
+
     /// Reload state from disk so sequential processes observe each other's
     /// inserts and deletions. Missing files mean empty state; corrupt files
     /// are errors.
@@ -127,16 +156,34 @@ impl JsonVault {
     ///
     /// Returns [`VaultError`] when the vault file cannot be read or parsed.
     fn reload_locked(&mut self) -> Result<(), VaultError> {
-        if self.path.exists() {
-            let file = File::open(&self.path).map_err(|error| io_error(&error))?;
-            self.state = serde_json::from_reader(BufReader::new(file))
-                .map_err(|error| json_error(&error))?;
-        } else {
-            // Deleted outside this process means empty: honoring the deletion
-            // beats resurrecting stale in-memory mappings.
-            self.state = State::default();
-        }
+        self.state = Self::load_state(&self.path)?;
         Ok(())
+    }
+
+    /// Reserve the next counter for a scope and kind.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError`] when the persisted counter is exhausted.
+    fn next_counter(&mut self, scope: &ScopeId, kind: &str) -> Result<u64, VaultError> {
+        if let Some(record) = self
+            .state
+            .counters
+            .iter_mut()
+            .find(|record| record.scope == scope.0 && record.kind == kind)
+        {
+            record.value = record.value.checked_add(1).ok_or_else(|| {
+                VaultError::Message("vault counter exhausted for this scope and kind".to_owned())
+            })?;
+            Ok(record.value)
+        } else {
+            self.state.counters.push(CounterRecord {
+                scope: scope.0.clone(),
+                kind: kind.to_owned(),
+                value: 1,
+            });
+            Ok(1)
+        }
     }
 
     /// Write state through a temporary file and an atomic rename.
@@ -205,31 +252,26 @@ impl Vault for JsonVault {
         let _lock = Lock::exclusive(&self.path)?;
         // Reload so sequential CLI processes share counters and mappings.
         self.reload_locked()?;
-        if let Some(existing) = self.state.mappings.iter().find(|record| {
+        if let Some(index) = self.state.mappings.iter().position(|record| {
             record.scope == scope.0
                 && record.mapping.kind == kind
                 && record.mapping.original == original
         }) {
-            return Ok(existing.mapping.clone());
+            if is_minted_placeholder_token(&self.state.mappings[index].mapping.token) {
+                return Ok(self.state.mappings[index].mapping.clone());
+            }
+            // A vault created before entropy-bearing tokens was introduced
+            // must never keep its guessable token as a live alias. Rotate the
+            // mapping on first use and make the old token permanently miss.
+            let next = self.next_counter(scope, kind)?;
+            let token = mint_placeholder(kind, next)?;
+            self.state.mappings[index].mapping.token = token;
+            let mapping = self.state.mappings[index].mapping.clone();
+            self.persist_locked()?;
+            return Ok(mapping);
         }
 
-        let counter = self
-            .state
-            .counters
-            .iter_mut()
-            .find(|record| record.scope == scope.0 && record.kind == kind);
-        let next = if let Some(record) = counter {
-            record.value += 1;
-            record.value
-        } else {
-            self.state.counters.push(CounterRecord {
-                scope: scope.0.clone(),
-                kind: kind.to_owned(),
-                value: 1,
-            });
-            1
-        };
-
+        let next = self.next_counter(scope, kind)?;
         let mapping = Mapping {
             kind: kind.to_owned(),
             original: original.to_owned(),
@@ -244,12 +286,16 @@ impl Vault for JsonVault {
     }
 
     fn resolve(&self, scope: &ScopeId, token: &str) -> Result<Option<Mapping>, VaultError> {
-        Ok(self
-            .state
+        let state = Self::read_state(&self.path)?;
+        Ok(state
             .mappings
-            .iter()
-            .find(|record| record.scope == scope.0 && record.mapping.token == token)
-            .map(|record| record.mapping.clone()))
+            .into_iter()
+            .find(|record| {
+                record.scope == scope.0
+                    && record.mapping.token == token
+                    && is_minted_placeholder_token(&record.mapping.token)
+            })
+            .map(|record| record.mapping))
     }
 
     fn delete_scope(&mut self, scope: &ScopeId) -> Result<(), VaultError> {
