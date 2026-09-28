@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `deps` sensor: the dependency closure is checked for network clients, TLS stacks, and hosted-model SDKs (`Cargo.lock`, which covers every feature including `gliner2`), because "nothing leaves the process" was only review-enforced. The closure currently contains none of them; the ban list is overridable with `DO_HARNESS_FORBIDDEN_DEPS` for the sensor's own negative tests.
+
 - Initial privacy boundary: regex detector, default policy, pseudonymize transformer, memory/JSON vaults.
 - CLI (`sanitize`, `restore`, `inspect`, `mcp-stdio`) and MCP JSON-RPC stdio adapter.
 - Agent skills (`.agents/skills/private-data`, `.agents/skills/plugin-development`, indexed in `.agents/SKILLS.md`).
