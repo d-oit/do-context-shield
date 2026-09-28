@@ -90,3 +90,54 @@ pub fn temp_dir() -> tempfile::TempDir {
         Err(error) => panic!("cannot create a temp directory: {error}"),
     }
 }
+
+/// The configured ONNX Runtime and model directory, or `None` when the
+/// model-backed tests should skip.
+///
+/// Both `ORT_DYLIB_PATH` (the runtime pinned in `docs/plugins.md`) and
+/// `DO_CONTEXT_SHIELD_E2E_MODEL_DIR` (an absolute fragment export) are needed.
+/// Neither set: skip with a note. Only the model directory set: fail, because
+/// that is a half-configured run rather than an unconfigured one. CI sets
+/// `DO_HARNESS_REQUIRE_ORT=1` after provisioning the runtime, which turns an
+/// unset runtime into a failure so a broken download cannot silently skip the
+/// runtime-backed tests.
+pub fn model_setup() -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+    let (ort, model) = (
+        std::env::var_os("ORT_DYLIB_PATH"),
+        std::env::var_os("DO_CONTEXT_SHIELD_E2E_MODEL_DIR"),
+    );
+    assert!(
+        !(ort.is_none() && model.is_some()),
+        "DO_CONTEXT_SHIELD_E2E_MODEL_DIR is set but ORT_DYLIB_PATH is not; provide both or neither"
+    );
+    assert!(
+        !(ort.is_none() && std::env::var("DO_HARNESS_REQUIRE_ORT").is_ok_and(|value| value == "1")),
+        "DO_HARNESS_REQUIRE_ORT=1 but ORT_DYLIB_PATH is unset; CI must provision the pinned ONNX Runtime (docs/plugins.md)"
+    );
+    let (Some(ort), Some(model)) = (ort, model) else {
+        eprintln!(
+            "skip: set ORT_DYLIB_PATH and DO_CONTEXT_SHIELD_E2E_MODEL_DIR to run the model-backed E2E tests"
+        );
+        return None;
+    };
+    let (ort, model) = (
+        std::path::PathBuf::from(ort),
+        std::path::PathBuf::from(model),
+    );
+    assert!(
+        ort.is_file(),
+        "ORT_DYLIB_PATH is not a file: {}",
+        ort.display()
+    );
+    assert!(
+        model.is_absolute(),
+        "DO_CONTEXT_SHIELD_E2E_MODEL_DIR must be absolute (the binary runs in a temp directory): {}",
+        model.display()
+    );
+    assert!(
+        model.is_dir(),
+        "DO_CONTEXT_SHIELD_E2E_MODEL_DIR is not a directory: {}",
+        model.display()
+    );
+    Some((ort, model))
+}

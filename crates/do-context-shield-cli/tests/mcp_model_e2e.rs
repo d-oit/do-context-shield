@@ -10,40 +10,11 @@
 
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
-/// The configured runtime and model directory, or `None` when the test should
-/// skip. A partially configured setup fails loudly instead of skipping.
-fn model_setup() -> Option<(PathBuf, PathBuf)> {
-    let (ort, model) = if let (Some(ort), Some(model)) = (
-        std::env::var_os("ORT_DYLIB_PATH"),
-        std::env::var_os("DO_CONTEXT_SHIELD_E2E_MODEL_DIR"),
-    ) {
-        (PathBuf::from(ort), PathBuf::from(model))
-    } else {
-        eprintln!(
-            "skip: set ORT_DYLIB_PATH and DO_CONTEXT_SHIELD_E2E_MODEL_DIR to run the model-backed E2E tests"
-        );
-        return None;
-    };
-    assert!(
-        ort.is_file(),
-        "ORT_DYLIB_PATH is not a file: {}",
-        ort.display()
-    );
-    assert!(
-        model.is_absolute(),
-        "DO_CONTEXT_SHIELD_E2E_MODEL_DIR must be absolute (the server runs in a temp directory): {}",
-        model.display()
-    );
-    assert!(
-        model.is_dir(),
-        "DO_CONTEXT_SHIELD_E2E_MODEL_DIR is not a directory: {}",
-        model.display()
-    );
-    Some((ort, model))
-}
+mod common;
+use common::model_setup;
 
 /// `path` as a TOML basic-string literal: backslashes are escape characters,
 /// so Windows paths must be doubled or TOML fails with a unicode-escape error.

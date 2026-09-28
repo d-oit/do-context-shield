@@ -11,40 +11,7 @@
 
 mod common;
 
-use common::{cmd, temp_dir};
-use std::path::PathBuf;
-
-/// The configured runtime and model directory, or `None` when the tests should
-/// skip. A partially configured setup fails loudly instead of skipping.
-fn model_setup() -> Option<(PathBuf, PathBuf)> {
-    let (ort, model) = if let (Some(ort), Some(model)) = (
-        std::env::var_os("ORT_DYLIB_PATH"),
-        std::env::var_os("DO_CONTEXT_SHIELD_E2E_MODEL_DIR"),
-    ) {
-        (PathBuf::from(ort), PathBuf::from(model))
-    } else {
-        eprintln!(
-            "skip: set ORT_DYLIB_PATH and DO_CONTEXT_SHIELD_E2E_MODEL_DIR to run the model-backed E2E tests"
-        );
-        return None;
-    };
-    assert!(
-        ort.is_file(),
-        "ORT_DYLIB_PATH is not a file: {}",
-        ort.display()
-    );
-    assert!(
-        model.is_absolute(),
-        "DO_CONTEXT_SHIELD_E2E_MODEL_DIR must be absolute (the binary runs in a temp directory): {}",
-        model.display()
-    );
-    assert!(
-        model.is_dir(),
-        "DO_CONTEXT_SHIELD_E2E_MODEL_DIR is not a directory: {}",
-        model.display()
-    );
-    Some((ort, model))
-}
+use common::{cmd, model_setup, temp_dir};
 
 /// Captured stdout as text.
 fn stdout_of(assert: &assert_cmd::assert::Assert) -> String {
