@@ -3,7 +3,8 @@ name: harness
 description: >
   Map this repository's feedforward guides and feedback sensors, and run the
   self-correction protocol when a computational sensor fires. Use when a sensor
-  fails (fmt, check, clippy, test, loc, skills, deps, audit, commitlint),
+  fails (fmt, check, clippy, test, loc, shellcheck, hooks, skills, deps, audit,
+  commitlint),
   before committing, or when setting up agent context for a task.
   Triggers: "harness", "sensor fire", "CI failure", "quality gates",
   "self-correction".
@@ -44,6 +45,7 @@ Agent = Model + Harness. Feedforward guides (this skill, `AGENTS.md`, `CONTRIBUT
 | test | `cargo test --workspace` (`--all-features` in CI) | pre-push, CI | fix the test; update it first when behavior changes intentionally |
 | loc | `bash scripts/check-loc.sh` | pre-commit, CI | decompose at 450 LOC; extract a module or a `<module>_tests.rs` |
 | shellcheck | `bash scripts/check-shellcheck.sh` | pre-push, CI | fix the finding (SC2059: keep `printf` format strings constant, values as arguments) |
+| hooks | `bash scripts/check-hooks.sh` | pre-push, CI | mirror the new sensor in the hand-written hook, make `.githooks/*` executable, or unpick the double hook mode (`core.hooksPath` vs `.git/hooks`) |
 | skills | `bash scripts/check-skills.sh` | pre-push | fix frontmatter/evals; see skill-creator |
 | deps | `bash scripts/check-deps.sh` | pre-push, CI | license allow-list, crates.io only, no wildcards, and the offline ban list (`Cargo.lock` must contain no network client, TLS stack, or hosted-model SDK); check feature-gated trees explicitly |
 | audit | `bash scripts/check-audit.sh` | CI | resolve or document the advisory in `deny.toml` / `.cargo/audit.toml` |
