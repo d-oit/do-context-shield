@@ -93,3 +93,41 @@ fn sanitize_no_entities_passes_through() {
     let sanitized = sanitize(dir.path(), &vault_path(dir.path()), "plain", "hello world");
     assert_eq!(sanitized, "hello world");
 }
+
+#[test]
+fn explicit_json_vault_selection_round_trips() {
+    let dir = temp_dir();
+    let vault = vault_path(dir.path());
+    let original = "contact alice@example.com";
+
+    let sanitized = cmd(dir.path())
+        .args([
+            "sanitize",
+            "--session",
+            "json1",
+            "--vault",
+            "json",
+            "--vault-file",
+        ])
+        .arg(&vault)
+        .write_stdin(original)
+        .assert()
+        .success();
+    let sanitized = stdout_of(&sanitized);
+    common::assert_contains_placeholder(&sanitized, "EMAIL", 1);
+
+    let restored = cmd(dir.path())
+        .args([
+            "restore",
+            "--session",
+            "json1",
+            "--vault",
+            "json",
+            "--vault-file",
+        ])
+        .arg(&vault)
+        .write_stdin(sanitized.as_str())
+        .assert()
+        .success();
+    assert_eq!(stdout_of(&restored), original);
+}
