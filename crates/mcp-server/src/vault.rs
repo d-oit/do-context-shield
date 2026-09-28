@@ -6,7 +6,7 @@ use crate::ServerConfig;
 use do_context_shield_plugin_api::Vault;
 use do_context_shield_plugin_process::ProcessVault;
 use do_context_shield_vault_memory::MemoryVault;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 /// Build the mapping vault from the server configuration.
@@ -45,7 +45,7 @@ pub(crate) fn build_vault(
                 "vault `json` requires a vault file (`vault_file` or `--vault-file <path>`)",
             )?;
             let key_file = config.vault_key_file.take();
-            json_vault(path, key_file.as_deref())?
+            json_vault(&path, key_file.as_deref())?
         }
         Some("memory") => {
             if config.vault_file.is_some() {
@@ -64,7 +64,7 @@ pub(crate) fn build_vault(
             if let Some(path) = config.vault_file.take() {
                 reject_ttl(ttl, "json")?;
                 let key_file = config.vault_key_file.take();
-                json_vault(path, key_file.as_deref())?
+                json_vault(&path, key_file.as_deref())?
             } else if config.vault_key_file.is_some() {
                 return Err(
                     "`vault_key_file` (`--vault-key-file`) requires a vault file (`vault_file` or `--vault-file <path>`) for the JSON vault"
@@ -85,11 +85,12 @@ pub(crate) fn build_vault(
 /// Returns an error when the key file cannot be read or the vault file cannot
 /// be opened in the selected format.
 fn json_vault(
-    path: PathBuf,
+    path: &Path,
     key_file: Option<&Path>,
 ) -> Result<Box<dyn Vault>, Box<dyn std::error::Error>> {
-    let vault = do_context_shield_vault_json::JsonVault::open_with_key_file(path, key_file)?;
-    Ok(Box::new(vault))
+    Ok(do_context_shield_plugin_registry::json_vault(
+        path, key_file,
+    )?)
 }
 
 /// A vault key file alongside a vault that cannot encrypt at rest.
@@ -123,6 +124,7 @@ fn memory_vault(ttl_seconds: Option<u64>) -> Box<dyn Vault> {
 mod tests {
     use super::*;
     use do_context_shield_plugin_process::DEFAULT_TIMEOUT_MS;
+    use std::path::PathBuf;
 
     #[test]
     fn vault_ttl_is_rejected_for_non_memory_vaults() {

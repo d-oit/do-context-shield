@@ -504,7 +504,6 @@ dependencies = [
  "do-context-shield-plugin-api",
  "do-context-shield-plugin-process",
  "do-context-shield-plugin-registry",
- "do-context-shield-vault-json",
  "do-context-shield-vault-memory",
  "serde_json",
 ]
@@ -542,7 +541,9 @@ dependencies = [
  "do-context-shield-transformer-generalize",
  "do-context-shield-transformer-mask",
  "do-context-shield-transformer-pseudonymize",
+ "do-context-shield-vault-json",
  "do-context-shield-vault-memory",
+ "tempfile",
  "thiserror",
 ]
 

@@ -29,5 +29,9 @@ do-context-shield-policy-default.workspace = true
 do-context-shield-transformer-generalize.workspace = true
 do-context-shield-transformer-mask.workspace = true
 do-context-shield-transformer-pseudonymize.workspace = true
+do-context-shield-vault-json.workspace = true
 do-context-shield-vault-memory.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

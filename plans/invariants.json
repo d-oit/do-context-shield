@@ -26,7 +26,7 @@
   {
     "invariant": "Every detector, judge, policy, transformer, and vault implementation stays replaceable behind plugin-api traits",
     "rationale": "Capabilities must remain swappable and testable in isolation",
-    "sensor": "cargo check --workspace (implementations compile against plugin-api) + review of new capability crates",
+    "sensor": "cargo check --workspace (implementations compile against plugin-api) + cargo test -p do-context-shield-plugin-registry (known_names_construct, json_vault_is_registered_and_needs_its_path, regex_name_detects_and_hybrid_name_pairs_it_with_the_model) + review of new capability crates",
     "category": "architecture"
   },
   {
