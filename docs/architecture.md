@@ -15,7 +15,7 @@ No provider SDK belongs in the runtime core.
 
 A plugin is selected by logical name in `plugin-registry`. Detection, policy, transformation, and storage all ship compiled-in implementations, which keeps the ABI surface small and portable.
 
-Any of them can instead run behind a process protocol (newline-delimited JSON over stdin/stdout, `docs/process-plugin.md`) rather than a Rust dynamic-library ABI: `crates/plugin-process` provides detector, judge, policy, transformer, and vault adapters that drive a user-configured local executable, so an implementation stays replaceable across Rust, compiler, and libc versions — and across languages.
+Any of them can instead run behind a process protocol (newline-delimited JSON over stdin/stdout, `docs/process-plugin.md`) rather than a Rust dynamic-library ABI: `crates/plugin-process` provides detector, judge, policy, transformer, and vault adapters that drive a user-configured local executable, so an implementation stays replaceable across Rust, compiler, and libc versions — and across languages. The CLI exposes them per subcommand rather than everywhere: `sanitize` and `mcp-stdio` carry the detector/policy/transformer/judge selection plus `--vault`, `inspect` carries the detector selection, and `restore`/`forget` carry the vault selection — every subcommand takes `--process-timeout-ms`.
 
 ## Semantic judging
 
