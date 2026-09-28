@@ -22,6 +22,26 @@ fn default_labels_cover_42_pii_types() {
 }
 
 #[test]
+fn credential_labels_are_secret_kinds() {
+    // A credential label outside `is_secret_kind` would be pseudonymized into
+    // a reversible vault mapping instead of redacted. `card_expiry` is an
+    // expiry date, not a credential, so it stays pseudonymizable.
+    use do_context_shield_plugin_api::is_secret_kind;
+    for kind in PII_LABELS_42 {
+        let credential = [
+            "api_key",
+            "access_token",
+            "card_cvv",
+            "password",
+            "recovery_code",
+            "secret",
+        ]
+        .contains(&kind);
+        assert_eq!(is_secret_kind(kind), credential, "{kind}");
+    }
+}
+
+#[test]
 fn canonical_kind_normalizes_labels() {
     assert_eq!(canonical_kind("email"), "email");
     assert_eq!(canonical_kind(" Phone Number "), "phone_number");

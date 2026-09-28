@@ -72,6 +72,9 @@ checklist for changing them.
 - Restore is scope-limited: another session resolves nothing; `context.restore`
   requires an explicit session.
 - Policy `Action::Block` and `Action::Review` fail the pipeline before transform.
+- A policy that returns fewer decisions than entities, substitutes a kind or
+  span, or keeps/pseudonymizes a secret-kind entity fails the call
+  (`PipelineError::Policy`).
 - Special-category data to external recipients and personal data to unknown
   recipients fail closed (`Action::Block`).
 - Detector entities with an empty kind or confidence outside `0..=1`, spans not

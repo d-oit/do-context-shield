@@ -78,15 +78,15 @@
     "category": "security"
   },
   {
-    "invariant": "Process plugins fail closed: malformed response, invalid span, undecided entity, leftover value, unresolvable placeholder, or non-zero exit stops the call instead of passing text through",
+    "invariant": "Process plugins fail closed: malformed response, invalid span, undecided entity, leftover value, unresolvable placeholder, a response past the 8 MiB cap, or non-zero exit stops the call instead of passing text through",
     "rationale": "A permissive plugin turns the privacy boundary into a passthrough",
     "sensor": "cargo test -p do-context-shield-plugin-process",
     "category": "security"
   },
   {
-    "invariant": "MCP stdio tools/list stays in fixed order with ttlMs/cacheScope metadata, and the server/discover and initialize paths resolve to identical tool behavior",
+    "invariant": "MCP stdio tools/list stays in fixed order with ttlMs/cacheScope metadata, the server/discover and initialize paths resolve to identical tool behavior, server/discover carries resultType, a request `_meta.protocolVersion` is read (a missing one only warns, never rejects), and tool executions report failures as `isError` results while protocol failures (malformed JSON-RPC, unknown method/tool, non-object arguments, disabled tool) stay JSON-RPC errors",
     "rationale": "Clients cache tool lists; order and metadata drift breaks that contract silently",
-    "sensor": "cargo test -p do-context-shield-mcp-server",
+    "sensor": "cargo test -p do-context-shield-mcp-server + cargo test -p do-context-shield (tests/mcp_stdio.rs: tool_failure_is_an_iserror_result, meta_version_warning_goes_to_stderr_for_legacy_requests)",
     "category": "contracts"
   },
   {
@@ -174,7 +174,7 @@
     "category": "contracts"
   },
   {
-    "invariant": "The MCP surface defaults to the model-safe tool set: `mcp-stdio` exposes only `context.sanitize` and `context.inspect` unless `--tools` opts into `restore`/`forget`/`all`, because MCP tool results return to the calling model and a model-driven restore hands raw values into the context the boundary protects",
+    "invariant": "The MCP surface defaults to the model-safe tool set: `mcp-stdio` exposes only `context.sanitize` and `context.inspect` unless `--tools`, `DO_CONTEXT_SHIELD_TOOLS`, or `[plugins] tools` opts into `restore`/`forget`/`all` (CLI flag > environment > file > default), because MCP tool results return to the calling model and a model-driven restore hands raw values into the context the boundary protects",
     "rationale": "Restore resolves raw values and forget destroys mappings; exposing them to a prompt-injected model lets it un-sanitize text it holds or destroy the harness's ability to restore. The fail-closed default keeps the model-facing surface non-revealing, and the CLI remains the harness-side restore path.",
     "sensor": "cargo test -p do-context-shield-mcp-server + cargo test -p do-context-shield (tests/mcp_stdio.rs, tests/cli_errors.rs)",
     "category": "security"
@@ -188,7 +188,7 @@
   {
     "invariant": "Adapter argument surfaces are enforced, not just declared: CLI sanitize/restore/forget require an explicit --session, and MCP tools/call rejects a non-object `arguments` or a missing/non-string `text` instead of silently operating on empty input",
     "rationale": "An implicit session scope lets concurrent tasks resolve each other's placeholders, and a silent empty-input success hides a malformed client call behind a plausible response",
-    "sensor": "cargo test -p do-context-shield (tests/cli_errors.rs session_is_required_exits_2) + cargo test -p do-context-shield-mcp-server (missing_or_non_string_text_is_rejected, non_object_arguments_is_rejected)",
+    "sensor": "cargo test -p do-context-shield (tests/cli_errors.rs session_is_required_exits_2) + cargo test -p do-context-shield-mcp-server (errors::argument_validation_failures_are_iserror_results, errors::unknown_method_malformed_json_and_bad_params_are_protocol_errors)",
     "category": "contracts"
   },
   {
@@ -198,9 +198,9 @@
     "category": "security"
   },
   {
-    "invariant": "The configuration file may only select known plugins and context names; unknown fields or values fail startup, and a CLI flag outranks the file, which outranks the built-in default",
-    "rationale": "A config typo must never silently select a weaker plugin, and effective settings must not depend on which clap default happened to be compiled in",
-    "sensor": "cargo test -p do-context-shield (config module tests: unknown field/value rejected, CLI-over-config precedence)",
+    "invariant": "The configuration file may only select known plugins and context names; unknown fields or values fail startup, and precedence is CLI flag > DO_CONTEXT_SHIELD_* environment variable > file value > built-in default, with every source validated the same way",
+    "rationale": "A config typo must never silently select a weaker plugin, and effective settings must not depend on which clap default happened to be compiled in or which source supplied a value",
+    "sensor": "cargo test -p do-context-shield --bins (config module tests: unknown field/value rejected, CLI-over-config precedence, tools validation) + cargo test -p do-context-shield --test cli_config (env-over-file, flag-over-env, invalid env override, auto-discovery)",
     "category": "security"
   },
   {
@@ -250,5 +250,11 @@
     "rationale": "The library-level protocol tests prove the plugin, not the adapter: a refactor that dropped a flag-to-wiring path would keep CI green while the shipped binary silently used a built-in plugin or the default context",
     "sensor": "cargo test -p do-context-shield (tests/cli_process_plugins.rs, tests/cli_context.rs, tests/cli_config.rs, tests/cli_errors.rs, tests/cli_sanitize.rs)",
     "category": "verification"
+  },
+  {
+    "invariant": "The pipeline validates the policy plan before transforming: exactly one decision per detected entity, on the same kind and span, and a secret-kind entity is `Redact` (or `Block`/`Review`, which fail the call)",
+    "rationale": "A plan that drops an entity leaves its raw value in the sanitized output, and a reversible action on a credential stores it in the vault instead of redacting it, so both defeat the boundary no matter how correct the policy was for the entities it did decide",
+    "sensor": "cargo test -p do-context-shield-core (tests::policy::short_plan_fails_closed, tests::policy::substituted_decision_fails_closed, tests::policy::reversible_action_on_secret_fails_closed)",
+    "category": "security"
   }
 ]

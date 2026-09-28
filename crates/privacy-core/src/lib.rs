@@ -1,9 +1,9 @@
 //! Privacy pipeline independent of any LLM provider or agent runtime.
 
 use do_context_shield_plugin_api::{
-    Action, Detector, DetectorError, Entity, JudgeError, Policy, PolicyError, ProcessingContext,
-    ScopeId, SemanticJudge, TransformError, TransformResult, Transformer, Vault, VaultError,
-    is_placeholder_token, resolve_overlaps, validate_judgments,
+    Action, Detector, DetectorError, Entity, JudgeError, PlannedEntity, Policy, PolicyError,
+    ProcessingContext, ScopeId, SemanticJudge, TransformError, TransformResult, Transformer, Vault,
+    VaultError, is_placeholder_token, is_secret_kind, resolve_overlaps, validate_judgments,
 };
 use serde::{Deserialize, Serialize};
 
@@ -100,9 +100,11 @@ impl PrivacyPipeline {
     /// Detect and sanitize text in a session scope under an enforcement context.
     ///
     /// Detector output is validated (character boundaries, bounds, value
-    /// match, overlaps) before the judge and policy see it. A plan containing
-    /// [`Action::Block`] or [`Action::Review`] fails the call instead of
-    /// producing text.
+    /// match, overlaps) before the judge and policy see it. The policy plan is
+    /// validated too: exactly one decision per detected entity, on the same
+    /// kind and span, with secret-kind entities redacted and never kept or
+    /// pseudonymized. A plan containing [`Action::Block`] or [`Action::Review`]
+    /// fails the call instead of producing text.
     ///
     /// # Errors
     ///
@@ -134,6 +136,7 @@ impl PrivacyPipeline {
             .policy
             .plan(&entities, &judgments, context)
             .map_err(|error| scrub_policy(error, &sensitive))?;
+        validate_plan(&entities, &plan)?;
         if plan
             .iter()
             .any(|planned| matches!(planned.action, Action::Block | Action::Review))
@@ -278,6 +281,52 @@ fn validate_spans(input: &str, entities: &[Entity]) -> Result<Vec<Entity>, Pipel
     }
 
     Ok(resolve_overlaps(validated))
+}
+
+/// Validate the policy plan against the entity list it was asked to decide.
+///
+/// The policy contract is exactly one decision per detected entity, for the
+/// same kind and span; a plan that drops an entity would let its raw value
+/// pass through undecided. A secret-kind entity must be redacted (or blocked
+/// or sent to review), never kept or pseudonymized into a reversible vault
+/// mapping.
+///
+/// # Errors
+///
+/// Returns [`PipelineError::Policy`] when the plan length differs from the
+/// entity list, a decision substitutes another kind or span, or a secret-kind
+/// entity carries a reversible action.
+fn validate_plan(entities: &[Entity], plan: &[PlannedEntity]) -> Result<(), PipelineError> {
+    if plan.len() != entities.len() {
+        return Err(PipelineError::Policy(PolicyError::Message(format!(
+            "policy returned {} decisions for {} entities",
+            plan.len(),
+            entities.len()
+        ))));
+    }
+    for (planned, entity) in plan.iter().zip(entities) {
+        if planned.entity.kind != entity.kind
+            || planned.entity.start != entity.start
+            || planned.entity.end != entity.end
+        {
+            return Err(PipelineError::Policy(PolicyError::Message(format!(
+                "policy decision does not match the detected entity at {}..{}",
+                entity.start, entity.end
+            ))));
+        }
+        if is_secret_kind(&entity.kind)
+            && !matches!(
+                planned.action,
+                Action::Redact | Action::Block | Action::Review
+            )
+        {
+            return Err(PipelineError::Policy(PolicyError::Message(format!(
+                "secret-kind entity must be redacted: {}",
+                entity.kind
+            ))));
+        }
+    }
+    Ok(())
 }
 
 /// The raw surfaces a stage has seen: the input plus every detected value.

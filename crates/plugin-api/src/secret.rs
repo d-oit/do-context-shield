@@ -1,0 +1,58 @@
+//! Credential-kind taxonomy behind the fail-closed redaction rule.
+
+/// Whether `kind` names a credential that must be redacted, never pseudonymized.
+#[must_use]
+pub fn is_secret_kind(kind: &str) -> bool {
+    kind.contains("key")
+        || kind.contains("secret")
+        || kind.contains("token")
+        || kind.contains("password")
+        || kind == "card_cvv"
+        || kind == "recovery_code"
+        || kind == "jwt"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_secret_kind;
+
+    #[test]
+    fn credential_kinds_are_secrets() {
+        for kind in [
+            "access_token",
+            "api_key",
+            "aws_access_key",
+            "card_cvv",
+            "generic_secret",
+            "github_token",
+            "google_api_key",
+            "jwt",
+            "password",
+            "private_key",
+            "recovery_code",
+            "slack_token",
+            "user_password",
+        ] {
+            assert!(is_secret_kind(kind), "{kind}");
+        }
+    }
+
+    #[test]
+    fn personal_kinds_are_not_secrets() {
+        for kind in [
+            "account_number",
+            "card_expiry",
+            "date_of_birth",
+            "email",
+            "iban",
+            "ip_address",
+            "passport",
+            "phone",
+            "transaction_date",
+            "us_bank_routing",
+            "us_drivers_license",
+        ] {
+            assert!(!is_secret_kind(kind), "{kind}");
+        }
+    }
+}

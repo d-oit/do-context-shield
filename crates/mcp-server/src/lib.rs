@@ -355,6 +355,43 @@ mod tests {
     use super::*;
 
     #[test]
+    fn vault_ttl_is_rejected_for_non_memory_vaults() {
+        for name in ["json", "process"] {
+            let mut config = ServerConfig {
+                vault: Some(name.to_owned()),
+                vault_command: Some("does-not-matter".to_owned()),
+                vault_ttl_seconds: Some(60),
+                ..ServerConfig::default()
+            };
+            let error = match build_vault(&mut config, Duration::from_millis(DEFAULT_TIMEOUT_MS)) {
+                Ok(_) => panic!("expected the TTL to be rejected for `{name}`"),
+                Err(error) => error.to_string(),
+            };
+            assert!(error.contains("requires the memory vault"), "{error}");
+        }
+
+        // A lone `vault_file` selects the JSON vault, which has no lifetime policy.
+        let mut config = ServerConfig {
+            vault_file: Some(PathBuf::from("/nonexistent/vault.json")),
+            vault_ttl_seconds: Some(60),
+            ..ServerConfig::default()
+        };
+        let error = match build_vault(&mut config, Duration::from_millis(DEFAULT_TIMEOUT_MS)) {
+            Ok(_) => panic!("expected the TTL to be rejected for a JSON vault file"),
+            Err(error) => error.to_string(),
+        };
+        assert!(error.contains("requires the memory vault"), "{error}");
+
+        // The memory vault is the one vault a TTL applies to.
+        let mut config = ServerConfig {
+            vault: Some("memory".to_owned()),
+            vault_ttl_seconds: Some(60),
+            ..ServerConfig::default()
+        };
+        assert!(build_vault(&mut config, Duration::from_millis(DEFAULT_TIMEOUT_MS)).is_ok());
+    }
+
+    #[test]
     fn tool_set_parses_lists_and_rejects_unknown_names() {
         assert_eq!(ToolSet::parse("all"), Ok(ToolSet::all()));
         let partial = match ToolSet::parse("sanitize, forget") {

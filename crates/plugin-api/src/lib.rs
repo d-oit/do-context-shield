@@ -69,10 +69,12 @@ pub struct Mapping {
 
 mod context;
 mod placeholder;
+mod secret;
 mod spans;
 
 pub use context::{DataCategory, ProcessingContext, RecipientClass};
 pub use placeholder::{is_minted_placeholder_token, is_placeholder_token, mint_placeholder};
+pub use secret::is_secret_kind;
 pub use spans::resolve_overlaps;
 
 /// Detector failures.
@@ -232,17 +234,6 @@ pub trait Vault: Send + Sync {
     }
 }
 
-/// Whether `kind` names a credential that must be redacted, never pseudonymized.
-#[must_use]
-pub fn is_secret_kind(kind: &str) -> bool {
-    kind.contains("key")
-        || kind.contains("secret")
-        || kind == "password"
-        || kind == "github_token"
-        || kind == "slack_token"
-        || kind == "jwt"
-}
-
 /// Semantic role assigned by a judge to one detected candidate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SemanticLabel {
@@ -381,9 +372,7 @@ pub fn validate_judgments(len: usize, judgments: &[Judgment]) -> Result<(), Judg
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        is_minted_placeholder_token, is_placeholder_token, is_secret_kind, mint_placeholder,
-    };
+    use super::{is_minted_placeholder_token, is_placeholder_token, mint_placeholder};
 
     #[test]
     fn minted_tokens_are_shaped_and_unguessable() {
@@ -412,36 +401,5 @@ mod tests {
         assert!(!is_placeholder_token("__DO_PRIVATE_EMAIL__X__"));
         assert!(is_placeholder_token("__DO_PRIVATE_REDACTED__"));
         assert!(!is_minted_placeholder_token("__DO_PRIVATE_EMAIL_1__"));
-    }
-
-    #[test]
-    fn credential_kinds_are_secrets() {
-        for kind in [
-            "api_key",
-            "aws_access_key",
-            "generic_secret",
-            "github_token",
-            "google_api_key",
-            "jwt",
-            "password",
-            "private_key",
-            "slack_token",
-        ] {
-            assert!(is_secret_kind(kind), "{kind}");
-        }
-    }
-
-    #[test]
-    fn personal_kinds_are_not_secrets() {
-        for kind in [
-            "date_of_birth",
-            "email",
-            "passport",
-            "phone",
-            "us_bank_routing",
-            "us_drivers_license",
-        ] {
-            assert!(!is_secret_kind(kind), "{kind}");
-        }
     }
 }

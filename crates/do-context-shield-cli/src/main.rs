@@ -240,7 +240,7 @@ fn run_forget(args: ForgetArgs, config: &config::Config) -> Result<(), Box<dyn s
 }
 
 fn run_mcp(args: McpArgs, config: &config::Config) -> Result<(), Box<dyn std::error::Error>> {
-    let tools = args.tools.unwrap_or_default();
+    let tools = config::resolve_tools(args.tools, config)?;
     let resolved = config::resolve(
         config::CliSelection {
             detector: args.detector,

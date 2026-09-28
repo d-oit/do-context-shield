@@ -14,7 +14,26 @@ Paths in the file are literal: environment variables and `~` are not expanded.
 
 ## Precedence
 
-CLI flag > file value > built-in default. A flag passed for one invocation therefore overrides the file without editing it.
+CLI flag > environment variable > file value > built-in default. A flag passed for one invocation therefore overrides the file without editing it, and the environment overrides below cover container/CI deployments that cannot mount a file.
+
+## Environment overrides
+
+Every variable is optional; an unset or empty variable keeps the file value. Values are validated exactly like file values, with the error naming the variable.
+
+| Variable | Field |
+| --- | --- |
+| `DO_CONTEXT_SHIELD_DETECTOR` | `[plugins] detector` |
+| `DO_CONTEXT_SHIELD_POLICY` | `[plugins] policy` |
+| `DO_CONTEXT_SHIELD_TRANSFORMER` | `[plugins] transformer` |
+| `DO_CONTEXT_SHIELD_JUDGE` | `[plugins] judge` |
+| `DO_CONTEXT_SHIELD_TOOLS` | `[plugins] tools` (`mcp-stdio` only) |
+| `DO_CONTEXT_SHIELD_VAULT` | `[vault] vault` |
+| `DO_CONTEXT_SHIELD_VAULT_FILE` | `[vault] vault_file` |
+| `DO_CONTEXT_SHIELD_VAULT_TTL_SECONDS` | `[vault] vault_ttl_seconds` |
+| `DO_CONTEXT_SHIELD_RECIPIENT` | `[context] recipient` |
+| `DO_CONTEXT_SHIELD_DATA_CATEGORY` | `[context] data_category` |
+| `DO_CONTEXT_SHIELD_PURPOSE` | `[context] purpose` |
+| `DO_CONTEXT_SHIELD_JURISDICTION` | `[context] jurisdiction` |
 
 ## Reference
 
@@ -26,6 +45,7 @@ CLI flag > file value > built-in default. A flag passed for one invocation there
 | `policy` | `default`, `process` | `default` | |
 | `transformer` | `pseudonymize`, `process` | `pseudonymize` | |
 | `judge` | `heuristics`, `process` | unset | judging is optional and off by default |
+| `tools` | `sanitize`, `restore`, `inspect`, `forget`, `all` (comma-separated) | `sanitize,inspect` | `mcp-stdio` only; pins the exposed MCP tool surface in the file (equivalent to `--tools`) |
 | `model_dir` | path | unset | `gliner2`/`hybrid` ONNX export directory |
 | `detector_command` | command line | unset | required with `detector = "process"` |
 | `policy_command` | command line | unset | required with `policy = "process"` |
@@ -70,7 +90,7 @@ Bounds one process-plugin response; the child is killed and reaped on timeout (`
 | `restore` | `[vault]`, `[process]`; the plugin selections are still merged into the pipeline, but restore only resolves placeholders |
 | `inspect` | detector keys of `[plugins]` (`detector`, `model_dir`, `detector_command`) and `[process]`; the vault is constructed but not queried |
 | `forget` | `[vault]`, `[process]` |
-| `mcp-stdio` | all sections except `[context]` (enforcement context arrives per `context.sanitize` argument) |
+| `mcp-stdio` | all sections except `[context]` (enforcement context arrives per `context.sanitize` argument); `[plugins] tools` sets the exposed tool surface |
 
 The session scope never comes from the file: the vault-scoping commands (`sanitize`, `restore`, `forget`) require `--session` explicitly so mappings cannot leak across implicit scopes.
 
@@ -80,6 +100,7 @@ Startup fails, naming the offending field, when
 
 - the file contains an unknown key,
 - a plugin, recipient, or data-category name is unknown (the error lists the accepted values),
+- the `[plugins] tools` list is empty or names an unknown tool (the error lists the accepted values),
 - the `[vault]` combination cannot select one consistent vault:
   - `vault = "json"` without `vault_file`,
   - `vault_file` together with `vault = "memory"` or `vault = "process"`,

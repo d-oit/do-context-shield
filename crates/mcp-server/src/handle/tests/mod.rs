@@ -1,6 +1,7 @@
 use super::*;
 use do_context_shield_plugin_api::{Entity, JudgeError, Judgment, SemanticJudge, SemanticLabel};
 
+mod errors;
 mod tool_surface;
 
 fn pipeline() -> PrivacyPipeline {
@@ -95,6 +96,34 @@ fn discover_advertises_modern_and_legacy() {
         .unwrap_or_else(|| panic!("missing supportedVersions in {value}"));
     assert!(versions.iter().any(|version| version == MODERN_VERSION));
     assert!(versions.iter().any(|version| version == LEGACY_VERSION));
+    assert_eq!(
+        value.pointer("/result/resultType").and_then(Value::as_str),
+        Some("object"),
+        "{value}"
+    );
+}
+
+#[test]
+fn meta_version_is_read_and_optional() {
+    let mut pipeline = pipeline();
+    // A modern request carries `_meta.protocolVersion`; it is answered.
+    let modern = request(
+        &mut pipeline,
+        r#"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"protocolVersion":"2026-07-28","clientCapabilities":{}}}}"#,
+    );
+    let Some(value) = modern else {
+        panic!("expected a response");
+    };
+    assert!(value.get("result").is_some(), "{value}");
+    // A pre-2026 request without `_meta` is warned about but still answered.
+    let legacy = request(
+        &mut pipeline,
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}"#,
+    );
+    let Some(value) = legacy else {
+        panic!("expected a response");
+    };
+    assert!(value.get("result").is_some(), "{value}");
 }
 
 #[test]
@@ -202,19 +231,6 @@ fn sanitize_without_session_falls_back_to_default_scope() {
 }
 
 #[test]
-fn restore_without_session_is_rejected() {
-    let mut pipeline = pipeline();
-    let response = request(
-        &mut pipeline,
-        &tool_call("context.restore", "__DO_PRIVATE_EMAIL_1__", None),
-    );
-    let Some(value) = response else {
-        panic!("expected an error response");
-    };
-    assert!(value.get("error").is_some(), "expected error in {value}");
-}
-
-#[test]
 fn inspect_reports_entities_as_json() {
     let mut pipeline = pipeline();
     let text = content_text(request(
@@ -260,80 +276,6 @@ fn judge_labels_reach_the_policy() {
 }
 
 #[test]
-fn unknown_tool_method_and_malformed_json_are_errors() {
-    let mut pipeline = pipeline();
-    for body in [
-        tool_call("context.nope", "x", None),
-        r#"{"jsonrpc":"2.0","id":2,"method":"bogus/method","params":{}}"#.to_owned(),
-        r#"{"jsonrpc": broken"#.to_owned(),
-    ] {
-        let response = request(&mut pipeline, &body);
-        let Some(value) = response else {
-            panic!("expected an error response for {body}");
-        };
-        assert!(value.get("error").is_some(), "expected error in {value}");
-    }
-}
-
-#[test]
-fn missing_or_non_string_text_is_rejected() {
-    // A malformed call must not silently sanitize an empty string.
-    let mut pipeline = pipeline();
-    for (name, arguments) in [
-        ("context.sanitize", r#"{"session":"s"}"#),
-        ("context.restore", r#"{"text":42,"session":"s"}"#),
-        ("context.inspect", "{}"),
-    ] {
-        let body = format!(
-            r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"{name}","arguments":{arguments}}}}}"#
-        );
-        let response = request(&mut pipeline, &body);
-        let Some(value) = response else {
-            panic!("expected a response for {body}");
-        };
-        assert!(value.get("error").is_some(), "expected error in {value}");
-        assert!(
-            value.get("result").is_none(),
-            "expected no result in {value}"
-        );
-    }
-}
-
-#[test]
-fn non_object_arguments_is_rejected() {
-    let mut pipeline = pipeline();
-    let body = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"context.sanitize","arguments":"alice@example.com"}}"#;
-    let response = request(&mut pipeline, body);
-    let Some(value) = response else {
-        panic!("expected a response");
-    };
-    let message = value
-        .pointer("/error/message")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    assert!(message.contains("arguments"), "{value}");
-    assert!(
-        value.get("result").is_none(),
-        "expected no result in {value}"
-    );
-}
-
-#[test]
-fn non_string_session_is_rejected() {
-    let mut pipeline = pipeline();
-    let body = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"context.restore","arguments":{"text":"__DO_PRIVATE_EMAIL_1__","session":5}}}"#;
-    let response = request(&mut pipeline, body);
-    let Some(value) = response else {
-        panic!("expected a response");
-    };
-    let message = value
-        .pointer("/error/message")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    assert!(message.contains("session"), "{value}");
-}
-
-#[test]
 fn sanitize_context_recipient_reaches_the_policy() {
     let mut pipeline = pipeline();
     let kept = content_text(context_sanitize(
@@ -351,8 +293,13 @@ fn sanitize_context_recipient_reaches_the_policy() {
     let Some(value) = blocked else {
         panic!("expected a response");
     };
+    assert_eq!(
+        value.pointer("/result/isError").and_then(Value::as_bool),
+        Some(true),
+        "{value}"
+    );
     let message = value
-        .pointer("/error/message")
+        .pointer("/result/content/0/text")
         .and_then(Value::as_str)
         .unwrap_or_default();
     assert!(message.contains("blocked by policy"), "{value}");
@@ -369,7 +316,12 @@ fn sanitize_context_data_category_reaches_the_policy() {
     let Some(value) = blocked else {
         panic!("expected a response");
     };
-    assert!(value.get("error").is_some(), "{value}");
+    assert_eq!(
+        value.pointer("/result/isError").and_then(Value::as_bool),
+        Some(true),
+        "{value}"
+    );
+    assert!(value.get("error").is_none(), "{value}");
 }
 
 #[test]
@@ -383,27 +335,6 @@ fn sanitize_context_purpose_and_jurisdiction_are_accepted() {
     assert_placeholder(&sanitized, "EMAIL", 1);
 }
 
-#[test]
-fn invalid_context_args_fail_closed() {
-    let mut pipeline = pipeline();
-    for extra in [
-        r#","recipient":"boss""#,
-        r#","data_category":"health""#,
-        r#","recipient":42"#,
-        r#","data_category":true"#,
-        r#","purpose":42"#,
-    ] {
-        let response = context_sanitize(&mut pipeline, "alice@example.com", extra);
-        let Some(value) = response else {
-            panic!("expected an error response for {extra}");
-        };
-        assert!(
-            value.get("error").is_some(),
-            "expected error for {extra} in {value}"
-        );
-    }
-}
-
 /// `context.forget` call with an optional session argument.
 fn forget_call(session: Option<&str>) -> String {
     let session_arg = match session {
@@ -413,16 +344,6 @@ fn forget_call(session: Option<&str>) -> String {
     format!(
         r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"context.forget","arguments":{{{session_arg}}}}}}}"#
     )
-}
-
-#[test]
-fn forget_requires_an_explicit_session() {
-    let mut pipeline = pipeline();
-    let response = request(&mut pipeline, &forget_call(None));
-    let Some(value) = response else {
-        panic!("expected a response");
-    };
-    assert!(value.get("error").is_some(), "{value}");
 }
 
 #[test]

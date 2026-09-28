@@ -36,15 +36,35 @@ fn assert_token_entropy(rest: &str, text: &str) {
     );
 }
 
+/// Every environment variable the binary reads. Cleared by [`cmd`] so an
+/// ambient value can never change a test.
+pub const CONFIG_ENV_VARS: [&str; 12] = [
+    "DO_CONTEXT_SHIELD_DATA_CATEGORY",
+    "DO_CONTEXT_SHIELD_DETECTOR",
+    "DO_CONTEXT_SHIELD_JUDGE",
+    "DO_CONTEXT_SHIELD_JURISDICTION",
+    "DO_CONTEXT_SHIELD_POLICY",
+    "DO_CONTEXT_SHIELD_PURPOSE",
+    "DO_CONTEXT_SHIELD_RECIPIENT",
+    "DO_CONTEXT_SHIELD_TOOLS",
+    "DO_CONTEXT_SHIELD_TRANSFORMER",
+    "DO_CONTEXT_SHIELD_VAULT",
+    "DO_CONTEXT_SHIELD_VAULT_FILE",
+    "DO_CONTEXT_SHIELD_VAULT_TTL_SECONDS",
+];
+
 /// The compiled `do-context-shield` binary, started with a hermetic working
-/// directory and `$HOME` so an ambient `do-context-shield.toml` or
-/// `$HOME/.config/do-context-shield/config.toml` can never change a test.
+/// directory, `$HOME`, and `DO_CONTEXT_SHIELD_*` environment so an ambient
+/// `do-context-shield.toml` or config override can never change a test.
 pub fn cmd(dir: &Path) -> assert_cmd::Command {
     let mut command = match assert_cmd::Command::cargo_bin("do-context-shield") {
         Ok(command) => command,
         Err(error) => panic!("binary `do-context-shield` is not built: {error}"),
     };
     command.current_dir(dir).env("HOME", dir);
+    for name in CONFIG_ENV_VARS {
+        command.env_remove(name);
+    }
     command
 }
 

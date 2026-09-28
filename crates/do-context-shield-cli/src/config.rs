@@ -1,15 +1,19 @@
 //! File-based configuration (`do-context-shield.toml`).
 //!
-//! Every field is optional: an omitted field keeps the built-in default, and a
-//! CLI flag passed on the command line overrides the file value. Unknown
+//! Every field is optional: an omitted field keeps the built-in default, a
+//! `DO_CONTEXT_SHIELD_*` environment variable (see [`env`]) overrides the file
+//! value, and a CLI flag passed on the command line overrides both. Unknown
 //! fields and unknown plugin names are rejected so that a typo cannot silently
 //! change which plugin guards the privacy boundary.
 
 use crate::cli::{ContextArgs, DetectorSelection, PipelineSelection, ProcessArgs, VaultSelection};
+use do_context_shield_mcp_server::ToolSet;
 use do_context_shield_plugin_api::{DataCategory, ProcessingContext, RecipientClass};
 use do_context_shield_plugin_process::DEFAULT_TIMEOUT_MS;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
+
+mod env;
 
 /// File name auto-discovered in the working directory.
 const CONFIG_FILE_NAME: &str = "do-context-shield.toml";
@@ -52,6 +56,7 @@ pub(crate) struct Plugins {
     pub(crate) policy: Option<String>,
     pub(crate) transformer: Option<String>,
     pub(crate) judge: Option<String>,
+    pub(crate) tools: Option<String>,
     pub(crate) model_dir: Option<PathBuf>,
     pub(crate) detector_command: Option<String>,
     pub(crate) policy_command: Option<String>,
@@ -86,20 +91,34 @@ pub(crate) struct ProcessConfig {
     pub(crate) timeout_ms: Option<u64>,
 }
 
-/// Load the configuration file.
+/// Load the configuration file, then apply environment overrides.
 ///
 /// Search order: the explicit `--config <path>`, then `./do-context-shield.toml`,
 /// then `$HOME/.config/do-context-shield/config.toml`. Without a file the
-/// configuration is empty and every field keeps its built-in default.
+/// configuration is empty and every field keeps its built-in default. A
+/// `DO_CONTEXT_SHIELD_*` environment variable (see [`env`]) overrides the file
+/// value; a CLI flag still overrides both.
 ///
 /// # Errors
 ///
 /// Returns an error when a configuration file exists but cannot be read or
-/// parsed, or when an explicit path cannot be read.
+/// parsed, when an explicit path cannot be read, or when an environment
+/// override is not a valid value.
 pub(crate) fn load(explicit: Option<&Path>) -> Result<Config, Box<dyn std::error::Error>> {
-    if let Some(path) = explicit {
-        return read(path);
-    }
+    let mut config = match explicit {
+        Some(path) => read(path)?,
+        None => read_discovered()?,
+    };
+    env::apply(&mut config)?;
+    Ok(config)
+}
+
+/// The first existing auto-discovery candidate, else an empty configuration.
+///
+/// # Errors
+///
+/// Returns an error when a discovered file cannot be read or parsed.
+fn read_discovered() -> Result<Config, Box<dyn std::error::Error>> {
     let candidates = [Some(PathBuf::from(CONFIG_FILE_NAME)), home_config_path()];
     for candidate in candidates.into_iter().flatten() {
         if candidate.is_file() {
@@ -168,6 +187,10 @@ pub(crate) fn validate(config: &Config) -> Result<(), Box<dyn std::error::Error>
         if let Some(value) = value {
             validate_choice(value, field, allowed)?;
         }
+    }
+    if let Some(tools) = plugins.tools.as_deref() {
+        ToolSet::parse(tools)
+            .map_err(|error| format!("config: invalid `tools` value `{tools}`: {error}"))?;
     }
     validate_vault(&config.vault)
 }
@@ -365,6 +388,27 @@ pub(crate) fn resolve(cli: CliSelection, config: &Config) -> Resolved {
 fn pick(cli: Option<String>, file: Option<&str>, default: &str) -> String {
     cli.or_else(|| file.map(str::to_owned))
         .unwrap_or_else(|| default.to_owned())
+}
+
+/// MCP tool surface: the `--tools` flag, else the configured list, else the
+/// model-facing default.
+///
+/// # Errors
+///
+/// Returns an error when the configured value is not a valid tool list. The
+/// file and environment are validated at load time, so this fires only for a
+/// configuration built in-process without validation.
+pub(crate) fn resolve_tools(
+    cli: Option<ToolSet>,
+    config: &Config,
+) -> Result<ToolSet, Box<dyn std::error::Error>> {
+    match cli {
+        Some(tools) => Ok(tools),
+        None => match config.plugins.tools.as_deref() {
+            Some(list) => Ok(ToolSet::parse(list)?),
+            None => Ok(ToolSet::default()),
+        },
+    }
 }
 
 #[cfg(test)]
