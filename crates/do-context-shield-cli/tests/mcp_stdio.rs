@@ -442,3 +442,49 @@ fn meta_version_warning_goes_to_stderr_for_legacy_requests() {
         "expected exactly one legacy warning, got stderr: {stderr}"
     );
 }
+
+/// The documented "MCP server with a local judge and a bounded memory vault"
+/// example: both values come from the configuration file, not from flags.
+#[test]
+fn config_file_supplies_the_judge_and_the_vault_ttl() {
+    let dir = match tempfile::tempdir() {
+        Ok(dir) => dir,
+        Err(error) => panic!("cannot create a temp directory: {error}"),
+    };
+    let config = dir.path().join("do-context-shield.toml");
+    if let Err(error) = std::fs::write(
+        &config,
+        "[plugins]\njudge = \"heuristics\"\n\n[vault]\nvault_ttl_seconds = 1\n",
+    ) {
+        panic!("cannot write the config file: {error}");
+    }
+    let Some(config_path) = config.to_str() else {
+        panic!("config path is not valid UTF-8");
+    };
+    let mut session = McpSession::start_with(&["--config", config_path, "--tools", "all"]);
+
+    // `example.com` is a reserved documentation domain, so the file-selected
+    // heuristic judge labels the address `Test` and the policy keeps it.
+    let kept = content_text(&session.send(&tool_call(
+        "context.sanitize",
+        &json!({"text": "test@example.com", "session": "cfg-judge"}),
+    )));
+    assert_eq!(kept, "test@example.com");
+
+    // The file's `vault_ttl_seconds` bounds the mapping: once it elapses the
+    // placeholder no longer resolves, inside this single server process.
+    // A non-reserved domain, so the same judge does not keep it: the TTL is
+    // observed on a value that really is pseudonymized.
+    let tokenized = content_text(&session.send(&tool_call(
+        "context.sanitize",
+        &json!({"text": "alice@corp-mail.com", "session": "cfg-ttl"}),
+    )));
+    common::assert_placeholder(&tokenized, "EMAIL", 1);
+    std::thread::sleep(std::time::Duration::from_millis(1_200));
+    let restored = content_text(&session.send(&tool_call(
+        "context.restore",
+        &json!({"text": &tokenized, "session": "cfg-ttl"}),
+    )));
+    assert_eq!(restored, tokenized);
+    session.close();
+}
