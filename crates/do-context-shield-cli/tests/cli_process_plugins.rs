@@ -183,7 +183,9 @@ fn missing_process_command_fails_at_startup() {
 #[test]
 fn process_timeout_flag_bounds_each_call() {
     let dir = temp_dir();
-    let command = process_command("hang");
+    // A plain `sleep` keeps the hanging child a single process: the fixture's
+    // `hang` mode runs `sleep` under a shell, and on Windows the surviving
+    // descendant delays the test harness's pipe drain, not the CLI.
     let started = Instant::now();
     cmd(dir.path())
         .args([
@@ -193,8 +195,8 @@ fn process_timeout_flag_bounds_each_call() {
             "--policy",
             "process",
             "--policy-command",
+            "sleep 30",
         ])
-        .arg(&command)
         .args(["--process-timeout-ms", "200"])
         .write_stdin("alice@example.com")
         .assert()
