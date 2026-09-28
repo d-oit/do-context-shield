@@ -5,7 +5,7 @@
 
 use crate::ProcessConfig;
 use crate::protocol;
-use do_context_shield_plugin_api::{Detector, DetectorError, Entity};
+use do_context_shield_plugin_api::{Detector, DetectorError, Entity, resolve_overlaps};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -76,7 +76,7 @@ impl Detector for ProcessDetector {
             .map_err(DetectorError::Message)?;
         let response: Response =
             protocol::decode("detector", &line).map_err(DetectorError::Message)?;
-        Ok(dedupe_overlaps(validate_entities(
+        Ok(resolve_overlaps(validate_entities(
             input,
             &response.entities,
         )?))
@@ -165,22 +165,4 @@ fn invalid_span(kind: &str, start: usize, end: usize) -> DetectorError {
     DetectorError::Message(format!(
         "process detector returned an invalid span {start}..{end} for kind `{kind}`"
     ))
-}
-
-/// Resolve overlapping entities longest-span-wins, keeping the first reported
-/// entity for identical spans (mirroring `detector-regex` and `detector-gliner2`).
-fn dedupe_overlaps(mut entities: Vec<Entity>) -> Vec<Entity> {
-    entities.sort_by_key(|entity| (entity.start, usize::MAX - entity.end));
-    let mut deduped = Vec::with_capacity(entities.len());
-    for entity in entities {
-        if deduped
-            .iter()
-            .any(|saved: &Entity| entity.start < saved.end && saved.start < entity.end)
-        {
-            continue;
-        }
-        deduped.push(entity);
-    }
-    deduped.sort_by_key(|entity: &Entity| (entity.start, entity.end));
-    deduped
 }

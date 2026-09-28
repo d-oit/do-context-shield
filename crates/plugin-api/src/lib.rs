@@ -69,9 +69,11 @@ pub struct Mapping {
 
 mod context;
 mod placeholder;
+mod spans;
 
 pub use context::{DataCategory, ProcessingContext, RecipientClass};
 pub use placeholder::{is_minted_placeholder_token, is_placeholder_token, mint_placeholder};
+pub use spans::resolve_overlaps;
 
 /// Detector failures.
 #[derive(Debug, Error)]
@@ -122,6 +124,10 @@ pub enum VaultError {
 }
 
 /// Detect sensitive entities in text.
+///
+/// A detector may report overlapping candidates; [`resolve_overlaps`] applies
+/// the shared longest-span-wins rule, and the pipeline re-validates the result
+/// before the judge and policy see it.
 pub trait Detector: Send + Sync {
     /// Return detected entities.
     ///

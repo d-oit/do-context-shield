@@ -11,6 +11,7 @@ case "$mode" in
   detect-overlap)  printf '%s\n' '{"entities":[{"kind":"person","start":0,"end":5},{"kind":"email","start":0,"end":17}]}' ;;
   detect-mismatch) printf '%s\n' '{"entities":[{"kind":"email","start":0,"end":17,"value":"bob@example.com"}]}' ;;
   detect-badspan)  printf '%s\n' '{"entities":[{"kind":"person","start":1,"end":3}]}' ;;
+  detect-late-long) printf '%s\n' '{"entities":[{"kind":"person","start":0,"end":2},{"kind":"api_key","start":1,"end":12}]}' ;;
   # policy
   plan-ok)      printf '%s\n' '{"plan":[{"index":0,"action":"pseudonymize"}]}' ;;
   plan-two)     printf '%s\n' '{"plan":[{"index":0,"action":"pseudonymize"},{"index":1,"action":"redact"}]}' ;;

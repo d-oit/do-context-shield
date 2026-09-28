@@ -3,7 +3,7 @@
 use do_context_shield_plugin_api::{
     Action, Detector, DetectorError, Entity, JudgeError, Policy, PolicyError, ProcessingContext,
     ScopeId, SemanticJudge, TransformError, TransformResult, Transformer, Vault, VaultError,
-    is_placeholder_token, validate_judgments,
+    is_placeholder_token, resolve_overlaps, validate_judgments,
 };
 use serde::{Deserialize, Serialize};
 
@@ -238,9 +238,8 @@ impl PrivacyPipeline {
 /// Every entity must carry a non-empty kind and a confidence in `0..=1`, and
 /// every span must fall on UTF-8 character boundaries, stay within the input,
 /// and carry the value the input actually holds at that span. Overlaps are
-/// resolved longest-span-wins: entities are ordered by start (widest first)
-/// and any entity overlapping an already-kept one is dropped, so the
-/// transformer never sees overlapping ranges.
+/// resolved by [`resolve_overlaps`] (longest-span-wins, equal lengths keeping
+/// the detector's order), so the transformer never sees overlapping ranges.
 fn validate_spans(input: &str, entities: &[Entity]) -> Result<Vec<Entity>, PipelineError> {
     let mut validated = Vec::with_capacity(entities.len());
     for entity in entities {
@@ -278,19 +277,7 @@ fn validate_spans(input: &str, entities: &[Entity]) -> Result<Vec<Entity>, Pipel
         validated.push(entity.clone());
     }
 
-    validated.sort_by_key(|entity| (entity.start, std::cmp::Reverse(entity.end)));
-    let mut deduped: Vec<Entity> = Vec::with_capacity(validated.len());
-    for entity in validated {
-        if deduped
-            .iter()
-            .any(|kept| entity.start < kept.end && kept.start < entity.end)
-        {
-            continue;
-        }
-        deduped.push(entity);
-    }
-    deduped.sort_by_key(|entity| (entity.start, entity.end));
-    Ok(deduped)
+    Ok(resolve_overlaps(validated))
 }
 
 /// The raw surfaces a stage has seen: the input plus every detected value.

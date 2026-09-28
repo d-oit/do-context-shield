@@ -43,6 +43,18 @@ fn decode_applies_threshold_and_dedup() {
 }
 
 #[test]
+fn decode_keeps_the_longest_overlapping_span() {
+    // `api_key` starts inside `person` and covers far more text; keeping the
+    // leftmost span instead of the longest would drop the secret.
+    let input = "we BCDEFGHIJ";
+    let spans = [span("person", 0, 2, 0.9), span("api_key", 1, 12, 0.9)];
+    let entities = decode_spans(input, &spans, 0.5);
+    assert_eq!(entities.len(), 1);
+    assert_eq!(entities[0].kind, "api_key");
+    assert_eq!(entities[0].value, "e BCDEFGHIJ");
+}
+
+#[test]
 fn decode_rejects_non_char_boundaries() {
     let input = "grüße";
     // End inside a multi-byte character …
