@@ -55,7 +55,7 @@ cargo test -p do-context-shield --features gliner2 --test cli_model_e2e --test m
 
 - `model.onnx`: graph inputs `input_ids` and `attention_mask` (`int64`, batch 1), returning per-token logits shaped `[1, seq_len, num_labels]` as its first output and requiring no further inputs such as `token_type_ids`.
 - `tokenizer.json`: tokenization adds the export's special tokens; their `(0, 0)` offsets are skipped while decoding.
-- `config.json`: `id2label` defines the entity kinds. Tags are BIO (`B-`/`I-`/`O`) and are canonicalized to snake_case kinds (`B-first_name` → `first_name`). Without an `id2label` map the built-in 42-type GLiNER2-PII taxonomy (`PII_LABELS_42`) is assumed.
+- `config.json`: `id2label` defines the entity kinds and is required for this layout — the map's keys are class indices, its values BIO tags (`B-`/`I-`/`O`), canonicalized to snake_case kinds (`B-first_name` → `first_name`). A missing `config.json`, invalid JSON, or a map without a single index/tag pair fails closed: decoding without tag names maps every token to `O`, which would report a clean scan instead of an error. (The `PII_LABELS_42` default covers the fragment layout above, where the labels are the schema.)
 
 Adjacent same-kind tags merge into one span (word-level exports tag every subtoken with `B-`), scores are a sigmoid of the winning logit, and spans below the default 0.5 threshold or overlapping a longer span are dropped.
 

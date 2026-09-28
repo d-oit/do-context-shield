@@ -20,6 +20,10 @@ path = "src/main.rs"
 gliner2 = ["do-context-shield-detector-gliner2/gliner2"]
 
 [[test]]
+name = "cli_detector_gliner2"
+required-features = ["gliner2"]
+
+[[test]]
 name = "cli_model_e2e"
 required-features = ["gliner2"]
 
