@@ -3,58 +3,79 @@
 use crate::RawSpan;
 use do_context_shield_plugin_api::DetectorError;
 
+/// Error text for the single-file backend, never carrying input or model data.
+fn backend_error(what: &str) -> DetectorError {
+    DetectorError::Message(format!("gliner2 onnx backend: {what}"))
+}
+
+/// Entity labels of a single-file export, ordered by class index.
+///
+/// `config.json` is part of the layout and its `id2label` object is the only
+/// source of tag names: decoding a model whose tags are unknown maps every
+/// token to `O`, so a misconfigured export would report a clean scan with zero
+/// entities instead of failing. Absent file, unreadable file, invalid JSON, or
+/// a map without a single index/BIO-tag pair is therefore an error.
+///
+/// # Errors
+///
+/// Returns [`DetectorError`] when `config_path` does not exist, cannot be read,
+/// is not valid JSON, or carries no usable `id2label` entry.
+fn load_id2label(config_path: &std::path::Path) -> Result<Vec<String>, DetectorError> {
+    if !config_path.is_file() {
+        return Err(backend_error("config.json not found in model_dir"));
+    }
+    let raw = std::fs::read_to_string(config_path)
+        .map_err(|_| backend_error("cannot read config.json"))?;
+    let value: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|_| backend_error("config.json is not valid JSON"))?;
+    let mut pairs: Vec<(usize, String)> = Vec::new();
+    if let Some(map) = value.get("id2label").and_then(serde_json::Value::as_object) {
+        for (id, label) in map {
+            if let (Ok(index), Some(name)) =
+                (id.parse::<usize>(), label.as_str().map(ToString::to_string))
+            {
+                pairs.push((index, name));
+            }
+        }
+    }
+    if pairs.is_empty() {
+        return Err(backend_error(
+            "config.json has no usable `id2label` map (class index -> BIO tag)",
+        ));
+    }
+    pairs.sort_by_key(|pair| pair.0);
+    Ok(pairs.into_iter().map(|pair| pair.1).collect())
+}
+
 /// Run a single-file token-classification ONNX model and BIO-decode logits.
 ///
-/// Expected layout: `model.onnx`, `tokenizer.json`, `config.json` carrying an
-/// `id2label` map.
+/// Expected layout: `model.onnx`, `tokenizer.json`, and a `config.json`
+/// carrying an `id2label` map of class indices to BIO tags.
 pub(crate) fn detect(
     model_dir: &std::path::Path,
-    labels: &[String],
     input: &str,
 ) -> Result<Vec<RawSpan>, DetectorError> {
     use ort::session::builder::GraphOptimizationLevel;
 
-    let map_err = |what: &str| DetectorError::Message(format!("gliner2 onnx backend: {what}"));
     let model_path = model_dir.join("model.onnx");
     let tokenizer_path = model_dir.join("tokenizer.json");
-    let config_path = model_dir.join("config.json");
     if !model_path.is_file() {
-        return Err(map_err("model.onnx not found in model_dir"));
+        return Err(backend_error("model.onnx not found in model_dir"));
     }
     if !tokenizer_path.is_file() {
-        return Err(map_err("tokenizer.json not found in model_dir"));
+        return Err(backend_error("tokenizer.json not found in model_dir"));
     }
-
-    let id2label: Vec<String> = if config_path.is_file() {
-        let raw = std::fs::read_to_string(&config_path)
-            .map_err(|_| map_err("cannot read config.json"))?;
-        let value: serde_json::Value =
-            serde_json::from_str(&raw).map_err(|_| map_err("config.json is not valid JSON"))?;
-        let mut pairs: Vec<(usize, String)> = Vec::new();
-        if let Some(map) = value.get("id2label").and_then(serde_json::Value::as_object) {
-            for (id, label) in map {
-                if let (Ok(index), Some(name)) =
-                    (id.parse::<usize>(), label.as_str().map(ToString::to_string))
-                {
-                    pairs.push((index, name));
-                }
-            }
-        }
-        pairs.sort_by_key(|pair| pair.0);
-        pairs.into_iter().map(|pair| pair.1).collect()
-    } else {
-        labels.to_vec()
-    };
+    let id2label = load_id2label(&model_dir.join("config.json"))?;
 
     let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path)
-        .map_err(|_| map_err("cannot load tokenizer.json"))?;
+        .map_err(|_| backend_error("cannot load tokenizer.json"))?;
     // Exported token-classification models expect their special tokens
     // (`[CLS]`/`[SEP]` and friends); omitting them shifts the encoder out of
     // its training distribution and produces misaligned spans. Special-token
     // offsets are `(0, 0)` and are skipped during decoding.
     let encoding = tokenizer
         .encode(input, true)
-        .map_err(|_| map_err("tokenization failed"))?;
+        .map_err(|_| backend_error("tokenization failed"))?;
     let ids: Vec<i64> = encoding.get_ids().iter().map(|id| i64::from(*id)).collect();
     let mask: Vec<i64> = encoding
         .get_attention_mask()
@@ -69,34 +90,36 @@ pub(crate) fn detect(
 
     let intra_threads = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
     let builder = ort::session::Session::builder()
-        .map_err(|_| map_err("cannot create ONNX session builder"))?;
+        .map_err(|_| backend_error("cannot create ONNX session builder"))?;
     let mut session = builder
         .with_optimization_level(GraphOptimizationLevel::Level3)
-        .map_err(|_| map_err("cannot set optimization level"))?
+        .map_err(|_| backend_error("cannot set optimization level"))?
         .with_intra_threads(intra_threads)
-        .map_err(|_| map_err("cannot set thread count"))?
+        .map_err(|_| backend_error("cannot set thread count"))?
         .commit_from_file(&model_path)
-        .map_err(|_| map_err("cannot load model.onnx; check ORT_DYLIB_PATH with load-dynamic"))?;
+        .map_err(|_| {
+            backend_error("cannot load model.onnx; check ORT_DYLIB_PATH with load-dynamic")
+        })?;
 
     let id_value = ort::value::Value::from_array((vec![1_usize, seq_len], ids))
-        .map_err(|_| map_err("bad input tensor"))?;
+        .map_err(|_| backend_error("bad input tensor"))?;
     let mask_value = ort::value::Value::from_array((vec![1_usize, seq_len], mask))
-        .map_err(|_| map_err("bad mask tensor"))?;
+        .map_err(|_| backend_error("bad mask tensor"))?;
     let outputs = session
         .run(ort::inputs!["input_ids" => id_value, "attention_mask" => mask_value])
-        .map_err(|_| map_err("inference failed"))?;
+        .map_err(|_| backend_error("inference failed"))?;
     let Some((_name, value)) = outputs.into_iter().next() else {
-        return Err(map_err("model returned no outputs"));
+        return Err(backend_error("model returned no outputs"));
     };
     let (shape, flat) = value
         .try_extract_tensor::<f32>()
-        .map_err(|_| map_err("logits are not an f32 tensor"))?;
+        .map_err(|_| backend_error("logits are not an f32 tensor"))?;
     let num_labels = id2label.len();
     if num_labels == 0
         || shape.num_elements() != seq_len * num_labels
         || flat.len() != seq_len * num_labels
     {
-        return Err(map_err("unexpected logits shape"));
+        return Err(backend_error("unexpected logits shape"));
     }
 
     Ok(bio_decode(seq_len, num_labels, flat, &offsets, &id2label))
@@ -180,7 +203,92 @@ fn push_span(spans: &mut Vec<RawSpan>, label: String, start: usize, end: usize, 
 
 #[cfg(test)]
 mod tests {
-    use super::bio_decode;
+    use super::{bio_decode, load_id2label};
+
+    /// `config.json` with `contents`, or no file at all, inside a fresh
+    /// temporary directory.
+    fn config_dir(contents: Option<&str>) -> tempfile::TempDir {
+        let dir = match tempfile::tempdir() {
+            Ok(dir) => dir,
+            Err(error) => panic!("cannot create a temp directory: {error}"),
+        };
+        if let Some(contents) = contents {
+            let path = dir.path().join("config.json");
+            if let Err(error) = std::fs::write(&path, contents) {
+                panic!("cannot write {}: {error}", path.display());
+            }
+        }
+        dir
+    }
+
+    #[test]
+    fn id2label_is_ordered_by_class_index() {
+        let dir = config_dir(Some(
+            r#"{"id2label":{"2":"B-city","0":"B-name","1":"I-name"}}"#,
+        ));
+        let labels = match load_id2label(&dir.path().join("config.json")) {
+            Ok(labels) => labels,
+            Err(error) => panic!("expected labels, got error: {error}"),
+        };
+        assert_eq!(labels, ["B-name", "I-name", "B-city"]);
+    }
+
+    #[test]
+    fn unusable_id2label_fails_closed() {
+        // Decoding without tag names maps every token to `O`, so a
+        // misconfigured export would look like a clean scan.
+        for contents in [
+            r#"{"model_type":"bert"}"#,
+            r#"{"id2label":{"name":"B-name"}}"#,
+            r#"{"id2label":["B-name","O"]}"#,
+            r#"{"id2label":{"0":7}}"#,
+        ] {
+            let dir = config_dir(Some(contents));
+            let error = match load_id2label(&dir.path().join("config.json")) {
+                Ok(labels) => panic!("expected an error for {contents}, got {labels:?}"),
+                Err(error) => error.to_string(),
+            };
+            assert!(error.contains("no usable `id2label`"), "got: {error}");
+        }
+    }
+
+    #[test]
+    fn missing_config_json_fails_closed() {
+        let dir = config_dir(None);
+        let error = match load_id2label(&dir.path().join("config.json")) {
+            Ok(labels) => panic!("expected an error, got {labels:?}"),
+            Err(error) => error.to_string(),
+        };
+        assert!(
+            error.contains("config.json not found in model_dir"),
+            "got: {error}"
+        );
+    }
+
+    #[test]
+    fn invalid_config_json_fails_closed() {
+        let dir = config_dir(Some("not json"));
+        let error = match load_id2label(&dir.path().join("config.json")) {
+            Ok(labels) => panic!("expected an error, got {labels:?}"),
+            Err(error) => error.to_string(),
+        };
+        assert!(error.contains("not valid JSON"), "got: {error}");
+    }
+
+    #[test]
+    fn decoding_without_tag_names_reports_no_entities() {
+        // The trap `load_id2label` exists for: an empty label list maps every
+        // token to `O`, so a misconfigured export decodes to zero entities and
+        // would look like a clean scan.
+        let offsets = [(0, 0), (0, 4), (0, 0)];
+        #[rustfmt::skip]
+        let logits = [
+            0.0, 9.0,
+            9.0, 0.0,
+            0.0, 9.0,
+        ];
+        assert!(bio_decode(offsets.len(), 2, &logits, &offsets, &[]).is_empty());
+    }
 
     fn labels() -> Vec<String> {
         ["B-name", "I-name", "B-city", "I-city", "O"]

@@ -222,7 +222,7 @@ impl Detector for Gliner2Detector {
         }
         #[cfg(feature = "gliner2")]
         {
-            let spans = onnx::detect(&model_dir, &self.config.labels, input)?;
+            let spans = onnx::detect(&model_dir, input)?;
             Ok(decode_spans(input, &spans, self.config.threshold))
         }
         #[cfg(not(feature = "gliner2"))]

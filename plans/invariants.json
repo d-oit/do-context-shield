@@ -90,9 +90,9 @@
     "category": "contracts"
   },
   {
-    "invariant": "GLiNER2 stays behind the opt-in gliner2 feature, requires a local model directory, and fails closed without one",
-    "rationale": "Heavy ONNX dependencies must not burden the default build, and models are never fetched automatically",
-    "sensor": "cargo check -p do-context-shield-detector-gliner2 --features gliner2 (feature build; not part of the default suite)",
+    "invariant": "GLiNER2 stays behind the opt-in gliner2 feature, requires a local model directory, and fails closed without one — including a single-file export whose `config.json` is missing or carries no usable `id2label` map, which would otherwise decode every token as `O` and report zero entities",
+    "rationale": "Heavy ONNX dependencies must not burden the default build, models are never fetched automatically, and a misconfigured export must never look like a clean scan",
+    "sensor": "cargo test -p do-context-shield-detector-gliner2 --features gliner2 (feature tests: id2label fail-closed, layout rejection; the Linux CI job runs them via --all-features) + cargo check -p do-context-shield-detector-gliner2 --features gliner2 (feature build; not part of the default suite)",
     "category": "architecture"
   },
   {
