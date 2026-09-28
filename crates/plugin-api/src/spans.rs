@@ -8,20 +8,16 @@ use crate::Entity;
 /// kind, a loose shape swallowed by a wider one). The widest span wins: it is
 /// kept and every span it overlaps is dropped, so a later span displaces a
 /// shorter one it covers. Spans of equal length keep the order the detector
-/// returned them in, which is what lets a detector's specificity order decide
-/// equal-span ties. The result is sorted by start and end and carries no
-/// overlapping spans.
+/// returned them in (the sort is stable and compares length only), which is
+/// what lets a detector's specificity order decide equal-span ties — including
+/// equal-length spans at different positions, which overlap each other.
+/// The result is sorted by start and end and carries no overlapping spans.
 ///
 /// A span whose `end` precedes its `start` counts as empty rather than
 /// panicking; bounds and character-boundary validation stay with the caller.
 #[must_use]
 pub fn resolve_overlaps(mut entities: Vec<Entity>) -> Vec<Entity> {
-    entities.sort_by_key(|entity| {
-        (
-            std::cmp::Reverse(entity.end.saturating_sub(entity.start)),
-            entity.start,
-        )
-    });
+    entities.sort_by_key(|entity| std::cmp::Reverse(entity.end.saturating_sub(entity.start)));
     let mut kept: Vec<Entity> = Vec::with_capacity(entities.len());
     for entity in entities {
         let overlaps = kept
@@ -72,6 +68,18 @@ mod tests {
         assert_eq!(kinds(&email_first), ["email"]);
         let phone_first = resolve_overlaps(vec![entity("phone", 0, 17), entity("email", 0, 17)]);
         assert_eq!(kinds(&phone_first), ["phone"]);
+    }
+
+    #[test]
+    fn equal_length_overlaps_keep_the_reported_order_not_the_leftmost() {
+        // Same length, different positions, overlapping each other: the
+        // detector's order decides (detector-regex relies on it for its SPECS
+        // precedence, privacy-core and plugin-process for theirs), so the
+        // reported-first span wins even when the other starts earlier.
+        let later_first = resolve_overlaps(vec![entity("phone", 3, 8), entity("email", 0, 5)]);
+        assert_eq!(kinds(&later_first), ["phone"]);
+        let earlier_first = resolve_overlaps(vec![entity("email", 0, 5), entity("phone", 3, 8)]);
+        assert_eq!(kinds(&earlier_first), ["email"]);
     }
 
     #[test]
