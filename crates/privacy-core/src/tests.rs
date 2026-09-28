@@ -421,6 +421,21 @@ fn overlapping_spans_resolved_to_longest() {
     assert!(!result.text.contains("PERSON"), "{result:?}");
 }
 
+#[test]
+fn a_later_span_that_is_longer_displaces_a_shorter_overlapping_one() {
+    // `api_key` starts inside `person` and covers far more text. Keeping the
+    // leftmost span instead of the longest leaves the secret's tail in the
+    // sanitized output.
+    let mut pipeline = with_detector(vec![
+        entity("person", 0, 2, "we"),
+        entity("api_key", 1, 12, "e BCDEFGHIJ"),
+    ]);
+    let result = sanitize_ok(&mut pipeline, "we BCDEFGHIJ");
+    assert_eq!(result.entities.len(), 1, "{result:?}");
+    assert_eq!(result.entities[0].kind, "api_key");
+    assert_eq!(result.text, "w__DO_PRIVATE_REDACTED__");
+}
+
 struct FixedActionPolicy(Action);
 
 impl Policy for FixedActionPolicy {

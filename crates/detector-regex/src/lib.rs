@@ -2,7 +2,7 @@
 
 mod patterns;
 
-use do_context_shield_plugin_api::{Detector, DetectorError, Entity};
+use do_context_shield_plugin_api::{Detector, DetectorError, Entity, resolve_overlaps};
 use patterns::compiled;
 
 /// Regex detector for common sensitive values.
@@ -32,19 +32,9 @@ impl Detector for RegexDetector {
                 && (entity.kind != "us_bank_routing" || aba_valid(&entity.value))
         });
 
-        entities.sort_by_key(|entity| (entity.start, usize::MAX - entity.end));
-        let mut deduped = Vec::with_capacity(entities.len());
-        for entity in entities {
-            if deduped
-                .iter()
-                .any(|saved: &Entity| entity.start < saved.end && saved.start < entity.end)
-            {
-                continue;
-            }
-            deduped.push(entity);
-        }
-        deduped.sort_by_key(|entity: &Entity| (entity.start, entity.end));
-        Ok(deduped)
+        // Longest-span-wins via the shared rule: equal-length ties keep the
+        // SPECS order the entities were pushed in.
+        Ok(resolve_overlaps(entities))
     }
 }
 

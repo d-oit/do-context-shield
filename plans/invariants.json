@@ -144,10 +144,16 @@
     "category": "security"
   },
   {
-    "invariant": "Detector output is validated centrally for a non-empty kind, confidence in 0..=1, UTF-8 character boundaries, input bounds, value matching, and non-overlapping spans before judging or planning",
-    "rationale": "Downstream pipeline stages (judge, policy, transformer) must never encounter corrupted offsets or overlapping entity replacements, and an empty kind or NaN/out-of-range confidence from an in-process detector must fail the call closed instead of reaching policy decisions or results",
-    "sensor": "cargo test -p do-context-shield-core",
+    "invariant": "Detector output is validated centrally for a non-empty kind, confidence in 0..=1, UTF-8 character boundaries, input bounds, value matching, and non-overlapping spans before judging or planning; overlaps resolve longest-span-wins via plugin-api::resolve_overlaps, so a later span displacing a shorter overlapping one is kept (a later span that covers less text never wins)",
+    "rationale": "Downstream pipeline stages (judge, policy, transformer) must never encounter corrupted offsets or overlapping entity replacements, and a leftmost-first dedup would drop a longer later span (for example a credential starting inside a shorter entity), leaving the uncovered tail of the value raw in the sanitized output; an empty kind or NaN/out-of-range confidence from an in-process detector must fail the call closed instead of reaching policy decisions or results",
+    "sensor": "cargo test -p do-context-shield-core (tests::a_later_span_that_is_longer_displaces_a_shorter_overlapping_one, tests::overlapping_spans_resolved_to_longest)",
     "category": "security"
+  },
+  {
+    "invariant": "Overlap resolution is one shared implementation: detectors, the process-plugin decoder, and the central pipeline validation call plugin-api::resolve_overlaps instead of hand-rolling a sort-and-retain pass, and the rule reads longest-span-wins with equal lengths keeping the reported order",
+    "rationale": "Four copies of the sort-and-retain loop drifted into leftmost-first while the docs and plugin checklists promised longest-span-wins, so the same overlap shape resolved differently per detector and a dropped longer span left raw text in sanitized output",
+    "sensor": "cargo test -p do-context-shield-plugin-api (resolve_overlaps tests), cargo test -p do-context-shield-plugin-process (detector_protocol::a_later_longer_span_wins_over_the_leftmost_one), cargo test -p do-context-shield-detector-gliner2 (decode_keeps_the_longest_overlapping_span)",
+    "category": "contracts"
   },
   {
     "invariant": "Vault lifecycle supports explicit session deletion and TTL expiration; JSON vault serializes concurrent writers via file locking",
@@ -204,8 +210,8 @@
     "category": "verification"
   },
   {
-    "invariant": "Detector overlap dedup keeps the longest span and resolves equal-span ties by SPECS order: more specific kinds precede looser shapes, and semantic post-filters (Luhn for card numbers, ABA for US routing numbers) run before dedup",
-    "rationale": "A looser pattern can match exactly the same text as a more specific kind, so list order decides the reported kind; filtering invalid candidates after dedup would silently drop the specific match",
+    "invariant": "Detector overlap dedup keeps the longest span (plugin-api::resolve_overlaps) and resolves equal-span ties by SPECS order: more specific kinds precede looser shapes, and semantic post-filters (Luhn for card numbers, ABA for US routing numbers) run before dedup",
+    "rationale": "A looser pattern can match exactly the same text as a more specific kind, so list order decides the reported kind; filtering invalid candidates after dedup would silently drop the specific match, and a leftmost-first dedup would keep a shorter early span over a longer one that starts inside it",
     "sensor": "cargo test -p do-context-shield-detector-regex",
     "category": "contracts"
   },

@@ -42,6 +42,12 @@ impl HybridDetector {
 }
 
 impl Detector for HybridDetector {
+    /// Merge primary and secondary entities.
+    ///
+    /// Deliberately not `plugin_api::resolve_overlaps`: source precedence needs
+    /// the primary/secondary split, which a rule over a single span list cannot
+    /// express. The secondary half reimplements that rule (longest-span-wins,
+    /// equal lengths keeping the earlier-returned span) plus the primary guard.
     fn detect(&self, input: &str) -> Result<Vec<Entity>, DetectorError> {
         let mut entities = self.primary.detect(input)?;
         let primary_len = entities.len();

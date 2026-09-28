@@ -16,7 +16,7 @@
 //! - `GLiNER2.5` boundary exports (`boundary_manifest.json`): rejected; the
 //!   boundary architecture needs a different engine (see `docs/plugins.md`).
 
-use do_context_shield_plugin_api::{Detector, DetectorError, Entity};
+use do_context_shield_plugin_api::{Detector, DetectorError, Entity, resolve_overlaps};
 use std::path::PathBuf;
 
 #[cfg(feature = "gliner2")]
@@ -130,11 +130,11 @@ pub fn canonical_kind(label: &str) -> String {
 /// Convert backend spans to pipeline entities.
 ///
 /// Applies the score threshold, drops spans outside the input or on
-/// non-`char` boundaries, clamps confidence to 0..=1, and resolves overlaps
-/// longest-span-wins (mirroring `detector-regex`).
+/// non-`char` boundaries, clamps confidence to 0..=1, and hands the survivors
+/// to [`resolve_overlaps`] (longest-span-wins, mirroring `detector-regex`).
 #[must_use]
 pub fn decode_spans(input: &str, spans: &[RawSpan], threshold: f32) -> Vec<Entity> {
-    let mut entities: Vec<Entity> = spans
+    let entities: Vec<Entity> = spans
         .iter()
         .filter(|span| span.score >= threshold && span.start < span.end && span.end <= input.len())
         .filter_map(|span| {
@@ -149,19 +149,7 @@ pub fn decode_spans(input: &str, spans: &[RawSpan], threshold: f32) -> Vec<Entit
         })
         .collect();
 
-    entities.sort_by_key(|entity| (entity.start, usize::MAX - entity.end));
-    let mut deduped = Vec::with_capacity(entities.len());
-    for entity in entities {
-        if deduped
-            .iter()
-            .any(|saved: &Entity| entity.start < saved.end && saved.start < entity.end)
-        {
-            continue;
-        }
-        deduped.push(entity);
-    }
-    deduped.sort_by_key(|entity: &Entity| (entity.start, entity.end));
-    deduped
+    resolve_overlaps(entities)
 }
 
 /// Local NER detector backed by a `GLiNER2` ONNX export.

@@ -47,7 +47,7 @@ Follow this skill to add a new implementation without breaking the privacy bound
 - New crates.io dependencies must satisfy `deny.toml` (license allow-list, no wildcards, crates.io-only); note that `cargo deny check` uses default features, so verify feature-gated trees explicitly before release.
 - Never log raw sensitive input or vault mappings.
 - Use explicit session scopes (`ScopeId`) for mappings.
-- Preserve semantic relationships when transforming entities (repeated entity → stable token; see overlap handling in `detector-regex`).
+- Preserve semantic relationships when transforming entities (repeated entity → stable token; detectors drop overlapping candidates through `plugin-api::resolve_overlaps`).
 - Secrets are redacted (`Action::Redact`), never pseudonymized.
 - Policies receive `ProcessingContext` and may block requests via `Action::Block` or `Action::Review`.
 - Vaults support `delete_scope` and `expire` for lifecycle cleanup.
@@ -64,4 +64,4 @@ For non-Rust replacements, do not use a dynamic-library ABI. Implement the proce
 - [ ] New dependency on a network client or provider SDK in a runtime crate
 - [ ] `println!`/`eprintln!`/`log` of `input`, `original`, `value`, or vault contents
 - [ ] Session id ignored or shared across unrelated tasks
-- [ ] Overlapping entity spans emitted without longest-span-wins dedup
+- [ ] Overlapping entity spans emitted without `plugin-api::resolve_overlaps` (hand-rolled leftmost-first dedup drops a later span that covers more text, leaving its uncovered tail raw in sanitized output)

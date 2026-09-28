@@ -72,6 +72,19 @@ fn longest_span_wins_for_overlapping_spans() {
 }
 
 #[test]
+fn a_later_longer_span_wins_over_the_leftmost_one() {
+    // `detect-overlap` only covers equal starts; this shapes the rule's
+    // discriminator: the `api_key` span starts inside `person` and is longer.
+    let entities = detect(&detector("detect-late-long"), "we BCDEFGHIJ");
+    let [entity] = entities.as_slice() else {
+        panic!("expected exactly one entity, got {entities:?}");
+    };
+    assert_eq!(entity.kind, "api_key");
+    assert_eq!((entity.start, entity.end), (1, 12));
+    assert_eq!(entity.value, "e BCDEFGHIJ");
+}
+
+#[test]
 fn rejects_value_mismatch() {
     let message = error_message(&detector("detect-mismatch"), "alice@example.com");
     assert!(message.contains("does not match input"), "got: {message}");

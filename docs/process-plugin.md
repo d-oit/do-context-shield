@@ -36,7 +36,7 @@ Response:
 - `value` is optional and must equal `input[start..end]`; the pipeline always takes the value from the input, never from the child.
 - `confidence` is optional, defaults to `1.0`, and must be within `0..=1`.
 - Fails closed on an empty kind, an invalid span, a value mismatch, or an out-of-range confidence.
-- Overlaps are resolved longest-span-wins; the first reported entity wins on identical spans.
+- Overlaps are resolved by [`resolve_overlaps`](../crates/plugin-api/src/spans.rs) (longest-span-wins): a later span displaces a shorter one it overlaps, so a nested span never survives its container, and the first reported entity wins on identical spans.
 - The pipeline re-validates every report (character boundaries, bounds, value equality, a non-empty kind, confidence in `0..=1`) and resolves overlaps before the judge, policy, and transformer run, so a misbehaving detector fails the call either way.
 
 ## judge
