@@ -287,6 +287,7 @@ fn run_mcp(args: McpArgs, config: &config::Config) -> Result<(), Box<dyn std::er
         },
         config,
     );
+    let context = resolved.to_context();
     do_context_shield_mcp_server::run_stdio(do_context_shield_mcp_server::ServerConfig {
         tools,
         vault_file: resolved.vault_file,
@@ -304,6 +305,7 @@ fn run_mcp(args: McpArgs, config: &config::Config) -> Result<(), Box<dyn std::er
         transformer: resolved.transformer,
         transformer_command: resolved.transformer_command,
         process_timeout_ms: resolved.process_timeout_ms,
+        context,
     })?;
     Ok(())
 }

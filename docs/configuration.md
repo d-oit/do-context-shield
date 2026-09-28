@@ -67,7 +67,7 @@ Command lines are split on whitespace; quoting and shell expansion are not suppo
 
 ### `[context]`
 
-Default enforcement context for `sanitize`; `mcp-stdio` takes these per `context.sanitize` call instead.
+Default enforcement context. It applies to the CLI `sanitize` call and supplies the `mcp-stdio` server default for `context.sanitize` requests that omit the arguments; a per-call argument (or CLI flag) overrides the file value field by field.
 
 | Key | Values | Default |
 | --- | --- | --- |
@@ -92,7 +92,7 @@ Bounds one process-plugin response; the child is killed and reaped on timeout (`
 | `restore` | `[vault]`, `[process]`; the plugin selections are still merged into the pipeline, but restore only resolves placeholders |
 | `inspect` | detector keys of `[plugins]` (`detector`, `model_dir`, `detector_command`) and `[process]`; the vault is constructed but not queried |
 | `forget` | `[vault]`, `[process]` |
-| `mcp-stdio` | all sections except `[context]` (enforcement context arrives per `context.sanitize` argument); `[plugins] tools` sets the exposed tool surface |
+| `mcp-stdio` | all sections; `[context]` becomes the server default for `context.sanitize` and per-call arguments override it (field by field); `[plugins] tools` sets the exposed tool surface |
 | `encrypt-vault` | nothing: both paths are explicit flags, so an ambient file can never trigger an in-place rewrite |
 
 The session scope never comes from the file: the vault-scoping commands (`sanitize`, `restore`, `forget`) require `--session` explicitly so mappings cannot leak across implicit scopes.
