@@ -167,19 +167,32 @@ fn fragment_export_matches_flat_and_legacy_layouts() {
 fn boundary_export_requires_the_manifest() {
     let boundary = temp_dir_with(&["boundary_manifest.json", "encoder.onnx"]);
     assert!(boundary_export(boundary.path()));
+    let nested_fp32 = temp_dir_with(&["fp32_25/boundary_manifest.json", "encoder.onnx"]);
+    assert!(boundary_export(nested_fp32.path()));
+    let nested_fp16 = temp_dir_with(&["fp16_25/boundary_manifest.json", "encoder.onnx"]);
+    assert!(boundary_export(nested_fp16.path()));
     let fragments = temp_dir_with(&["encoder.onnx"]);
     assert!(!boundary_export(fragments.path()));
+    // A subfolder without the manifest is a span export, not a boundary one.
+    let nested_span_export = temp_dir_with(&["fp32_25/encoder_fp32.onnx"]);
+    assert!(!boundary_export(nested_span_export.path()));
 }
 
 #[test]
 fn detect_rejects_boundary_exports_with_a_specific_error() {
-    let dir = temp_dir_with(&["boundary_manifest.json"]);
-    let detector = detector_with(dir.path());
-    match detector.detect("John Doe") {
-        Ok(entities) => panic!("expected fail-closed error, got {entities:?}"),
-        Err(error) => {
-            let text = error.to_string();
-            assert!(text.contains("boundary"), "{text}");
+    for names in [
+        ["boundary_manifest.json"].as_slice(),
+        ["fp32_25/boundary_manifest.json", "encoder_fp32.onnx"].as_slice(),
+        ["fp16_25/boundary_manifest.json", "encoder_fp16.onnx"].as_slice(),
+    ] {
+        let dir = temp_dir_with(names);
+        let detector = detector_with(dir.path());
+        match detector.detect("John Doe") {
+            Ok(entities) => panic!("expected fail-closed error, got {entities:?}"),
+            Err(error) => {
+                let text = error.to_string();
+                assert!(text.contains("boundary"), "{text}");
+            }
         }
     }
 }
