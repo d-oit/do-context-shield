@@ -202,6 +202,30 @@ fn credit_card_vs_phone_overlap() {
 }
 
 #[test]
+fn luhn_gate_rejects_invalid_card_numbers() {
+    // The gate, not the pattern, is what makes "regex owns cards" true: the
+    // digit run is accepted only when the checksum passes.
+    assert!(luhn_valid("4111111111111111"), "valid Visa test number");
+    assert!(luhn_valid("4111 1111 1111 1111"), "spaces are ignored");
+    assert!(luhn_valid("4111-1111-1111-1111"), "hyphens are ignored");
+    assert!(!luhn_valid("4111111111111112"), "wrong check digit");
+    assert!(!luhn_valid("1234567890123456"), "digit run that fails Luhn");
+    assert!(!luhn_valid("4111x11111111111"), "non-digit is not a card");
+}
+
+#[test]
+fn aba_gate_rejects_invalid_routing_numbers() {
+    assert!(aba_valid("111000025"), "ABA checksum passes");
+    assert!(
+        !aba_valid("123456789"),
+        "digits whose weighted sum is not 0 mod 10"
+    );
+    assert!(!aba_valid("11100002"), "eight digits");
+    assert!(!aba_valid("1110000255"), "ten digits");
+    assert!(!aba_valid("11100A025"), "non-digit is not a routing number");
+}
+
+#[test]
 fn detects_date_of_birth() {
     let detector = RegexDetector;
     let entities = match detector.detect("DOB 01/15/1990 recorded") {
