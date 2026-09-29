@@ -116,7 +116,11 @@ docs: update client-integration guide
 3. Run quality gates.
 4. Commit using Conventional Commits.
 5. Open a PR against `main`.
-6. Wait for CI to pass.
+6. Wait for CI to pass — and keep the branch up to date. `main` requires the `CI Success` check
+   on an up-to-date branch, and the check is bound to the PR's merge commit, so any other merge
+   makes your checks stale. Rebase with `scripts/update-pr-branches.sh` (or
+   `gh pr update-branch --rebase <number>`) and let the checks re-run; GitHub auto-merge will not
+   update the branch for you.
 
 ## Release Process
 
