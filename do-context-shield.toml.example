@@ -4,7 +4,7 @@
 [plugins]
 detector = "regex"                  # regex | gliner2 | hybrid | process
 policy = "default"                  # default | process
-transformer = "pseudonymize"        # pseudonymize | process
+transformer = "pseudonymize"        # pseudonymize | generalize | mask | process
 # judge = "heuristics"             # heuristics | process (optional)
 # tools = "sanitize,inspect"       # mcp-stdio only: sanitize | restore | inspect | forget | all
 # model_dir = "path/to/gliner2"    # GLiNER2 ONNX export directory

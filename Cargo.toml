@@ -55,6 +55,8 @@ do-context-shield-plugin-api = { path = "crates/plugin-api", version = "0.1.0" }
 do-context-shield-plugin-process = { path = "crates/plugin-process", version = "0.1.0" }
 do-context-shield-plugin-registry = { path = "crates/plugin-registry", version = "0.1.0" }
 do-context-shield-policy-default = { path = "crates/policy-default", version = "0.1.0" }
+do-context-shield-transformer-generalize = { path = "crates/transformer-generalize", version = "0.1.0" }
+do-context-shield-transformer-mask = { path = "crates/transformer-mask", version = "0.1.0" }
 do-context-shield-transformer-pseudonymize = { path = "crates/transformer-pseudonymize", version = "0.1.0" }
 do-context-shield-vault-json = { path = "crates/vault-json", version = "0.1.0" }
 do-context-shield-vault-memory = { path = "crates/vault-memory", version = "0.1.0" }

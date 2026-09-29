@@ -141,6 +141,15 @@ fn hybrid_detector_name_is_accepted() -> Result<(), Box<dyn std::error::Error>> 
 }
 
 #[test]
+fn non_reversible_transformer_names_are_accepted() -> Result<(), Box<dyn std::error::Error>> {
+    for name in ["generalize", "mask"] {
+        let config: Config = toml::from_str(&format!("[plugins]\ntransformer = \"{name}\"\n"))?;
+        assert!(validate(&config).is_ok(), "{name}");
+    }
+    Ok(())
+}
+
+#[test]
 fn vault_combinations_checked() -> Result<(), Box<dyn std::error::Error>> {
     for text in [
         "[vault]\nvault = \"json\"\n",

@@ -256,5 +256,11 @@
     "rationale": "A plan that drops an entity leaves its raw value in the sanitized output, and a reversible action on a credential stores it in the vault instead of redacting it, so both defeat the boundary no matter how correct the policy was for the entities it did decide",
     "sensor": "cargo test -p do-context-shield-core (tests::policy::short_plan_fails_closed, tests::policy::substituted_decision_fails_closed, tests::policy::reversible_action_on_secret_fails_closed)",
     "category": "security"
+  },
+  {
+    "invariant": "Non-reversible transformers (`generalize`, `mask`) never emit vault-resolvable tokens or mappings: generalize replaces a pseudonymization target with a kind-only `__DO_PRIVATE_<KIND>__` token whose kind passes the placeholder grammar, mask keeps only the last four characters, and `restore` is a no-op on either output",
+    "rationale": "Claiming non-reversibility while emitting a mintable token or a mapping would keep the raw value recoverable from the vault; equal values of one kind collapsing to one token is the documented trade-off, and it must not silently degrade into pseudonymization",
+    "sensor": "cargo test -p do-context-shield-transformer-generalize -p do-context-shield-transformer-mask + cargo test -p do-context-shield (tests/cli_transformers.rs)",
+    "category": "security"
   }
 ]

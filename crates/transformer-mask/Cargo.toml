@@ -1,0 +1,19 @@
+[package]
+name = "do-context-shield-transformer-mask"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Non-reversible partial-masking transformer plugin for do-context-shield"
+homepage.workspace = true
+repository.workspace = true
+include = ["src/**/*", "Cargo.toml"]
+
+[lints]
+workspace = true
+
+[dependencies]
+do-context-shield-plugin-api.workspace = true
+
+[dev-dependencies]
+do-context-shield-vault-memory.workspace = true

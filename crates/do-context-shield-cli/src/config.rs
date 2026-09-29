@@ -23,7 +23,7 @@ const DETECTORS: [&str; 4] = ["regex", "gliner2", "hybrid", "process"];
 /// Policy plugin names accepted in the configuration file.
 const POLICIES: [&str; 2] = ["default", "process"];
 /// Transformer plugin names accepted in the configuration file.
-const TRANSFORMERS: [&str; 2] = ["pseudonymize", "process"];
+const TRANSFORMERS: [&str; 4] = ["pseudonymize", "generalize", "mask", "process"];
 /// Judge plugin names accepted in the configuration file.
 const JUDGES: [&str; 2] = ["heuristics", "process"];
 /// Vault plugin names accepted in the configuration file.

@@ -9,6 +9,8 @@ use do_context_shield_plugin_process::{
     ProcessDetector, ProcessJudge, ProcessPolicy, ProcessTransformer, ProcessVault,
 };
 use do_context_shield_policy_default::DefaultPolicy;
+use do_context_shield_transformer_generalize::GeneralizingTransformer;
+use do_context_shield_transformer_mask::MaskingTransformer;
 use do_context_shield_transformer_pseudonymize::PseudonymizingTransformer;
 use do_context_shield_vault_memory::MemoryVault;
 use thiserror::Error;
@@ -87,6 +89,8 @@ pub fn policy(name: &str) -> Result<Box<dyn Policy>, RegistryError> {
 pub fn transformer(name: &str) -> Result<Box<dyn Transformer>, RegistryError> {
     match name {
         "pseudonymize" => Ok(Box::new(PseudonymizingTransformer)),
+        "generalize" => Ok(Box::new(GeneralizingTransformer)),
+        "mask" => Ok(Box::new(MaskingTransformer)),
         "process" => Ok(Box::new(ProcessTransformer::default())),
         _ => Err(RegistryError::Unknown {
             kind: "transformer",
@@ -126,7 +130,7 @@ mod tests {
         for name in ["default", "process"] {
             assert!(policy(name).is_ok(), "policy `{name}`");
         }
-        for name in ["pseudonymize", "process"] {
+        for name in ["pseudonymize", "generalize", "mask", "process"] {
             assert!(transformer(name).is_ok(), "transformer `{name}`");
         }
         for name in ["memory", "process"] {

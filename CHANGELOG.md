@@ -52,6 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Test coverage for previously untested documented rules: the process-plugin 8 MiB response cap (a fixture mode emits one byte past the cap and the call fails closed), `detector-regex` positive detection for `ipv4` and `iban`, vault-TTL rejection for `json`/`process`/`vault_file` selections, config auto-discovery from the working directory and `$HOME/.config/do-context-shield/config.toml`, and an exhaustive check that every GLiNER2-PII credential label is a `is_secret_kind` (with `card_expiry` deliberately excluded).
 
+- Non-reversible transformers: `--transformer generalize` (also `[plugins] transformer`, `DO_CONTEXT_SHIELD_TRANSFORMER`, and the MCP server's transformer field) replaces every pseudonymization target with one kind-only `__DO_PRIVATE_<KIND>__` token, and `--transformer mask` keeps only the last four characters (`*************.com`). Neither writes to the vault nor returns mappings, so `restore` is a no-op on their output and repeated values of one kind become indistinguishable; the kind-only token is shape-checked against the placeholder grammar (invalid kinds fail closed) and is deliberately not the minted shape a vault can resolve. Secrets stay redacted under both. New `transformer-generalize` and `transformer-mask` crates wired through the registry, CLI, config, MCP server, and docs.
+
 ### Changed
 
 - MCP tool namespace rename: tools are now `context.sanitize`, `context.restore`, and `context.inspect` (formerly `private.*`). `context.restore` strictly requires an explicit `session` parameter with no fallback scope, preventing accidental shared-scope raw value restoration.

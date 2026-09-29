@@ -7,8 +7,17 @@ The core does not know which detector, judge, policy, transformer, or vault is u
 | detection | `Detector` | regex, `detector-gliner2` (local ONNX NER), `detector-hybrid` (regex + model), `plugin-process` (`detect`) | custom local NER, rules |
 | judging | `SemanticJudge` | `judge-heuristics` (local rules), `plugin-process` (`judge`) | local model, hosted judge via process |
 | policy | `Policy` | default, `plugin-process` (`plan`) | project policy, enterprise DLP |
-| transformation | `Transformer` | pseudonymize, `plugin-process` (`transform`) | redact, generalize, encrypt, format-preserving |
+| transformation | `Transformer` | pseudonymize, generalize, mask, `plugin-process` (`transform`) | redact, encrypt, format-preserving |
 | storage | `Vault` | memory / JSON file, `plugin-process` (`vault_get_or_insert`, `vault_resolve`) | SQLite, OS keychain, encrypted local DB |
+
+Transformers decide how a pseudonymization target is replaced. `pseudonymize`
+(the default) mints a stable, vault-resolvable token per value, so repeated
+values keep their identity and `restore` can resolve them. `generalize`
+replaces every value of a kind with one kind-only token
+(`__DO_PRIVATE_EMAIL__`), and `mask` keeps only the last four characters
+(`*************.com`); neither writes to the vault nor returns mappings, so
+their output cannot be restored and equal values of one kind become
+indistinguishable. Secrets are redacted under all three.
 
 Implementations are selected by logical plugin name. Every capability can also run behind a process boundary: `crates/plugin-process` speaks newline-delimited JSON to a user-configured local executable (`docs/process-plugin.md`), so an implementation written in another language needs no Rust dynamic-library ABI. Compiled-in plugins remain the default; the process boundary is opt-in per capability (`--detector`/`--judge`/`--policy`/`--transformer`/`--vault process` with the matching `--*-command` flag). Semantic judging is optional and off by default: the judge is selected with `--judge heuristics` or `--judge process --judge-command <program>`, and the pipeline composes as `Detector -> SemanticJudge (optional) -> Policy -> Transformer -> Vault`.
 

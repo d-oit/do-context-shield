@@ -14,6 +14,8 @@ ORDER=(
     do-context-shield-detector-gliner2
     do-context-shield-policy-default
     do-context-shield-transformer-pseudonymize
+    do-context-shield-transformer-generalize
+    do-context-shield-transformer-mask
     do-context-shield-vault-memory
     do-context-shield-vault-json
     do-context-shield-plugin-registry

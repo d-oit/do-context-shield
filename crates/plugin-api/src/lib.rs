@@ -73,7 +73,9 @@ mod secret;
 mod spans;
 
 pub use context::{DataCategory, ProcessingContext, RecipientClass};
-pub use placeholder::{is_minted_placeholder_token, is_placeholder_token, mint_placeholder};
+pub use placeholder::{
+    is_minted_placeholder_token, is_placeholder_token, is_valid_placeholder_kind, mint_placeholder,
+};
 pub use secret::is_secret_kind;
 pub use spans::resolve_overlaps;
 
@@ -372,7 +374,10 @@ pub fn validate_judgments(len: usize, judgments: &[Judgment]) -> Result<(), Judg
 
 #[cfg(test)]
 mod tests {
-    use super::{is_minted_placeholder_token, is_placeholder_token, mint_placeholder};
+    use super::{
+        is_minted_placeholder_token, is_placeholder_token, is_valid_placeholder_kind,
+        mint_placeholder,
+    };
 
     #[test]
     fn minted_tokens_are_shaped_and_unguessable() {
@@ -401,5 +406,22 @@ mod tests {
         assert!(!is_placeholder_token("__DO_PRIVATE_EMAIL__X__"));
         assert!(is_placeholder_token("__DO_PRIVATE_REDACTED__"));
         assert!(!is_minted_placeholder_token("__DO_PRIVATE_EMAIL_1__"));
+    }
+
+    #[test]
+    fn placeholder_kinds_are_validated_for_shape() {
+        for kind in ["email", "full_name", "card_cvv", "apiKey2"] {
+            assert!(is_valid_placeholder_kind(kind), "{kind}");
+        }
+        for kind in [
+            "",
+            "email__x",
+            "_email",
+            "email_",
+            "email-address",
+            "ü-email",
+        ] {
+            assert!(!is_valid_placeholder_kind(kind), "{kind}");
+        }
     }
 }
