@@ -20,7 +20,7 @@
   {
     "invariant": "Runtime crates stay provider-agnostic: no cloud LLM SDK or network-client dependency",
     "rationale": "The privacy boundary must work offline and never leak context to a provider",
-    "sensor": "bash scripts/check-deps.sh + cargo deny check (crates.io-only allow-list) + review of new dependency entries",
+    "sensor": "bash scripts/check-deps.sh (layer direction + cargo deny check + the offline ban list: Cargo.lock must contain no network client, TLS stack, or hosted-model SDK, checked across every feature) + review of new dependency entries",
     "category": "architecture"
   },
   {

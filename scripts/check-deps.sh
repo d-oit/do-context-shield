@@ -12,6 +12,12 @@
 #   2. `cargo deny check` runs when deny.toml is configured and covers the
 #      transitive closure; without deny.toml the policy is unconfigured, so
 #      the sensor WARN-skips rather than failing a greenfield scaffold.
+#   3. The dependency closure stays offline: Cargo.lock must contain no network
+#      client, TLS stack, or hosted-model SDK, because the core's privacy claim
+#      is that nothing leaves the process. Cargo.lock lists every feature's
+#      dependencies, so this also covers feature-gated trees (`gliner2`) that
+#      `cargo deny check` does not compile. Override the ERE with
+#      DO_HARNESS_FORBIDDEN_DEPS (used by the sensor's own negative tests).
 # Missing cargo-deny fails closed when CI=true or DO_HARNESS_REQUIRE_TOOLS=1.
 set -euo pipefail
 
@@ -35,6 +41,21 @@ if [[ -f "$TYPES_MANIFEST" ]]; then
             | grep -oE '^[[:space:]]*"?[A-Za-z0-9_.-]+' \
             | tr -d ' "'
     )
+fi
+
+LOCK="$ROOT/Cargo.lock"
+if [[ ! -f "$LOCK" ]]; then
+    echo "FAIL: Cargo.lock is missing; the dependency closure cannot be checked."
+    FAIL=1
+else
+    FORBIDDEN_DEPS="${DO_HARNESS_FORBIDDEN_DEPS:-^(reqwest|reqwest-[a-z0-9-]+|ureq|hyper|hyper-[a-z0-9-]+|h2|quinn|tonic|isahc|surf|curl|curl-sys|tungstenite|rustls|rustls-[a-z0-9-]+|native-tls|openssl|openssl-sys|webpki|webpki-roots|aws-sdk-[a-z0-9-]+|aws-config|google-cloud-[a-z0-9-]+|azure_[a-z0-9_-]+|azure-sdk-[a-z0-9-]+|openai[a-z0-9-]*|anthropic[a-z0-9-]*|cohere[a-z0-9-]*|mistral[a-z0-9-]*|ollama[a-z0-9-]*|bedrock[a-z0-9-]*)$}"
+    while IFS= read -r crate; do
+        [[ -z "$crate" ]] && continue
+        if [[ "$crate" =~ $FORBIDDEN_DEPS ]]; then
+            printf "FAIL: the privacy boundary must stay offline, but Cargo.lock pulls in '%s' (network client, TLS stack, or hosted-model SDK).\n" "$crate"
+            FAIL=1
+        fi
+    done < <(sed -n 's/^name = "\(.*\)"/\1/p' "$LOCK" | sort -u)
 fi
 
 if [[ -f "$ROOT/deny.toml" ]]; then
