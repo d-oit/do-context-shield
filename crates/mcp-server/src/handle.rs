@@ -12,8 +12,12 @@ const LEGACY_VERSION: &str = "2025-11-25";
 fn response(id: Value, mut result: Value) -> Value {
     if let Value::Object(map) = &mut result {
         map.insert(
+            "resultType".to_owned(),
+            Value::String("complete".to_owned()),
+        );
+        map.insert(
             "_meta".to_owned(),
-            json!({"io.modelcontextprotocol/serverInfo":{"name":"do-context-shield","version":"0.1.0"}}),
+            json!({"io.modelcontextprotocol/serverInfo":{"name":"do-context-shield","version":env!("CARGO_PKG_VERSION")}}),
         );
     }
     let mut envelope = json!({"jsonrpc":"2.0","result":result});
@@ -23,8 +27,35 @@ fn response(id: Value, mut result: Value) -> Value {
     envelope
 }
 
-fn error_response(id: Value, message: &str) -> Value {
-    let mut envelope = json!({"jsonrpc":"2.0","error":{"code":-32000,"message":message}});
+/// A JSON-RPC protocol error.
+///
+/// `code` is the JSON-RPC 2.0 / MCP code: `-32700` parse error, `-32600`
+/// invalid request, `-32601` unknown method or tool, `-32602` invalid params.
+/// Failures inside a tool call never come through here — they are
+/// [`tool_error`] results, so a model sees them as tool output.
+fn error_response(id: Value, code: i32, message: &str) -> Value {
+    let mut envelope = json!({"jsonrpc":"2.0","error":{"code":code,"message":message}});
+    if let Value::Object(map) = &mut envelope {
+        map.insert("id".to_owned(), id);
+    }
+    envelope
+}
+
+/// The 2026-07-28 rejection of a requested protocol version this server does
+/// not support.
+///
+/// `data.supported` lists the accepted versions and `data.requested` echoes
+/// the version from the request. Nothing else from the request enters the
+/// error, so tool input can never leak through it.
+fn unsupported_version(id: Value, requested: &str) -> Value {
+    let mut envelope = json!({
+        "jsonrpc":"2.0",
+        "error":{
+            "code":-32022,
+            "message":"Unsupported protocol version",
+            "data":{"supported":[MODERN_VERSION, LEGACY_VERSION],"requested":requested}
+        }
+    });
     if let Value::Object(map) = &mut envelope {
         map.insert("id".to_owned(), id);
     }
@@ -45,21 +76,106 @@ fn tool_error(id: Value, message: &str) -> Value {
     )
 }
 
-/// Read the request `_meta` version marker, warning when it is absent.
+/// The namespaced MCP request-metadata keys (2026-07-28).
+const PROTOCOL_VERSION_KEY: &str = "io.modelcontextprotocol/protocolVersion";
+const CLIENT_CAPABILITIES_KEY: &str = "io.modelcontextprotocol/clientCapabilities";
+
+/// A structurally valid JSON-RPC request, after envelope and metadata checks.
+struct ValidRequest<'a> {
+    id: Value,
+    method: &'a str,
+    params: Option<&'a Value>,
+}
+
+/// A valid JSON-RPC request id is a string or an integer number.
+fn valid_id(value: &Value) -> bool {
+    value.is_string() || value.is_i64() || value.is_u64()
+}
+
+/// Validate one parsed line as a JSON-RPC 2.0 request for this server.
 ///
-/// Modern clients send `_meta.protocolVersion`; a request without it is still
-/// answered, because rejecting pre-2026 clients would break every existing
-/// integration.
-fn warn_on_missing_meta(request: &Value) {
-    let version = request
-        .pointer("/params/_meta/protocolVersion")
-        .or_else(|| request.pointer("/_meta/protocolVersion"))
-        .and_then(Value::as_str);
-    if version.is_none() {
-        eprintln!(
-            "do-context-shield: request without `_meta.protocolVersion`; assuming a pre-2026 client"
-        );
+/// Returns `Ok(None)` for a notification — a structurally valid message with
+/// no `id` — so it can never reach dispatch, and with it never sanitize,
+/// restore, or delete state. `Err(response)` carries the protocol error to
+/// emit. Checks run in wire order: envelope (`-32600`), `id` (`-32600`),
+/// `params` shape (`-32602`), then the namespaced protocol metadata
+/// (`-32602`/`-32022`).
+fn validate_request(request: &Value) -> Result<Option<ValidRequest<'_>>, Value> {
+    let Some(object) = request.as_object() else {
+        return Err(error_response(
+            Value::Null,
+            -32600,
+            "request must be a JSON object",
+        ));
+    };
+    // The id to echo on an envelope error: only a valid id is echoed.
+    let echoed = match object.get("id") {
+        Some(id) if valid_id(id) => id.clone(),
+        _ => Value::Null,
+    };
+    if object.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
+        return Err(error_response(echoed, -32600, "`jsonrpc` must be \"2.0\""));
     }
+    let Some(method) = object.get("method").and_then(Value::as_str) else {
+        return Err(error_response(echoed, -32600, "`method` must be a string"));
+    };
+    let id = match object.get("id") {
+        Some(id) if valid_id(id) => id.clone(),
+        Some(_) => {
+            return Err(error_response(
+                Value::Null,
+                -32600,
+                "`id` must be a string or an integer",
+            ));
+        }
+        // No `id`: a notification, never dispatched.
+        None => return Ok(None),
+    };
+    let params = object.get("params");
+    if let Some(params) = params
+        && !params.is_object()
+    {
+        return Err(error_response(id, -32602, "`params` must be a JSON object"));
+    }
+    check_protocol_metadata(&id, params)?;
+    Ok(Some(ValidRequest { id, method, params }))
+}
+
+/// Enforce the namespaced protocol metadata of a request.
+///
+/// The version and capabilities keys are read only from `params._meta`; the
+/// pre-2026 bare `protocolVersion` is not the wire contract. A request that
+/// carries the version key must name a supported version and come with
+/// capabilities; the checks run before dispatch, so a `tools/call` for an
+/// unnegotiated revision never executes. A request without the key keeps the
+/// legacy behavior and gets one stderr warning naming the wire key.
+fn check_protocol_metadata(id: &Value, params: Option<&Value>) -> Result<(), Value> {
+    let meta = params.and_then(|params| params.get("_meta"));
+    let Some(version) = meta.and_then(|meta| meta.get(PROTOCOL_VERSION_KEY)) else {
+        eprintln!(
+            "do-context-shield: request without `params._meta[\"{PROTOCOL_VERSION_KEY}\"]`; assuming a pre-2026 client"
+        );
+        return Ok(());
+    };
+    let Some(version) = version.as_str() else {
+        return Err(error_response(
+            id.clone(),
+            -32602,
+            "`io.modelcontextprotocol/protocolVersion` must be a string",
+        ));
+    };
+    if version != MODERN_VERSION && version != LEGACY_VERSION {
+        return Err(unsupported_version(id.clone(), version));
+    }
+    let capabilities = meta.and_then(|meta| meta.get(CLIENT_CAPABILITIES_KEY));
+    if !capabilities.is_some_and(Value::is_object) {
+        return Err(error_response(
+            id.clone(),
+            -32602,
+            "`io.modelcontextprotocol/clientCapabilities` must be an object",
+        ));
+    }
+    Ok(())
 }
 
 /// Parse the optional enforcement-context arguments of `context.sanitize`.
@@ -108,23 +224,32 @@ pub(crate) fn handle_request(
     default_context: &ProcessingContext,
     line: &str,
 ) -> Result<Option<Value>, Box<dyn std::error::Error>> {
-    let request: Value = match serde_json::from_str(line.trim()) {
+    let line: Value = match serde_json::from_str(line.trim()) {
         Ok(value) => value,
-        Err(error) => return Ok(Some(error_response(Value::Null, &error.to_string()))),
+        Err(error) => {
+            return Ok(Some(error_response(
+                Value::Null,
+                -32700,
+                &error.to_string(),
+            )));
+        }
     };
-    let id = request.get("id").cloned().unwrap_or(Value::Null);
-    let method = request.get("method").and_then(Value::as_str).unwrap_or("");
-    warn_on_missing_meta(&request);
+    let ValidRequest { id, method, params } = match validate_request(&line) {
+        Ok(Some(request)) => request,
+        Ok(None) => return Ok(None),
+        Err(response) => return Ok(Some(response)),
+    };
 
     let result = match method {
         // Modern MCP 2026-07-28: no initialize handshake; clients may discover first.
         "server/discover" => response(
             id,
             json!({
-                "resultType":"object",
                 "supportedVersions":[MODERN_VERSION, LEGACY_VERSION],
                 "capabilities":{"tools":{}},
-                "instructions":"Local privacy boundary. Sanitize sensitive coding context before external model/tool calls; use the same explicit session value when restoring placeholders."
+                "instructions":"Local privacy boundary. Sanitize sensitive coding context before external model/tool calls; use the same explicit session value when restoring placeholders.",
+                "ttlMs":300_000,
+                "cacheScope":"private"
             }),
         ),
         // Legacy clients can still negotiate the 2025-era handshake.
@@ -133,24 +258,23 @@ pub(crate) fn handle_request(
             json!({
                 "protocolVersion":LEGACY_VERSION,
                 "capabilities":{"tools":{}},
-                "serverInfo":{"name":"do-context-shield","version":"0.1.0"},
+                "serverInfo":{"name":"do-context-shield","version":env!("CARGO_PKG_VERSION")},
                 "instructions":"Local privacy boundary for coding agents."
             }),
         ),
-        "notifications/initialized" => return Ok(None),
         "tools/list" => response(id, tools_list(tools)),
         "tools/call" => {
-            let name = request
-                .pointer("/params/name")
+            let name = params
+                .and_then(|params| params.get("name"))
                 .and_then(Value::as_str)
                 .unwrap_or("");
-            let args = request
-                .pointer("/params/arguments")
+            let args = params
+                .and_then(|params| params.get("arguments"))
                 .cloned()
                 .unwrap_or_else(|| json!({}));
             tool_call(pipeline, tools, default_context, id, name, &args)?
         }
-        _ => error_response(id, "unknown method"),
+        _ => error_response(id, -32601, "unknown method"),
     };
     Ok(Some(result))
 }
@@ -226,6 +350,7 @@ fn tool_call(
         if !tools.contains(tool) {
             return Ok(error_response(
                 id,
+                -32601,
                 &format!(
                     "{name} is not enabled on this server (allow it with `--tools {}` or `--tools all`)",
                     tool.short()
@@ -234,7 +359,11 @@ fn tool_call(
         }
     }
     if !args.is_object() {
-        return Ok(error_response(id, "`arguments` must be a JSON object"));
+        return Ok(error_response(
+            id,
+            -32602,
+            "`arguments` must be a JSON object",
+        ));
     }
     Ok(match name {
         "context.sanitize" => {
@@ -301,7 +430,7 @@ fn tool_call(
                 Err(error) => tool_error(id, &error.to_string()),
             }
         }
-        _ => error_response(id, "unknown tool"),
+        _ => error_response(id, -32601, "unknown tool"),
     })
 }
 

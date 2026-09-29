@@ -13,8 +13,11 @@ use std::path::PathBuf;
     about = "Local privacy boundary for coding agents"
 )]
 pub(crate) struct Cli {
-    /// Path to a configuration file; without it `./do-context-shield.toml` and
-    /// `$HOME/.config/do-context-shield/config.toml` are tried in that order.
+    /// Path to a configuration file. The one-shot commands fall back to
+    /// `./do-context-shield.toml`, then
+    /// `$HOME/.config/do-context-shield/config.toml`; `mcp-stdio` reads a file
+    /// only when this flag names one, because a project directory must not
+    /// configure the server that runs in it.
     #[arg(long, global = true)]
     pub(crate) config: Option<PathBuf>,
     #[command(subcommand)]

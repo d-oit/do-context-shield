@@ -12,6 +12,11 @@ fn tool_error_text(response: Option<Value>) -> String {
         Some(true),
         "expected an isError result in {value}"
     );
+    assert_eq!(
+        value.pointer("/result/resultType").and_then(Value::as_str),
+        Some("complete"),
+        "expected a complete result in {value}"
+    );
     assert!(
         value.get("error").is_none(),
         "expected no JSON-RPC error in {value}"
@@ -26,13 +31,33 @@ fn tool_error_text(response: Option<Value>) -> String {
 #[test]
 fn unknown_method_malformed_json_and_bad_params_are_protocol_errors() {
     let mut pipeline = pipeline();
-    for body in [
-        tool_call("context.nope", "x", None),
-        r#"{"jsonrpc":"2.0","id":2,"method":"bogus/method","params":{}}"#.to_owned(),
-        r#"{"jsonrpc": broken"#.to_owned(),
+    for (body, code) in [
+        // Unknown tool and unknown method: -32601.
+        (tool_call("context.nope", "x", None), -32601),
+        (
+            r#"{"jsonrpc":"2.0","id":2,"method":"bogus/method","params":{}}"#.to_owned(),
+            -32601,
+        ),
+        // A line that is not JSON at all: -32700.
+        (r#"{"jsonrpc": broken"#.to_owned(), -32700),
         // A non-object `arguments` value is a failure of the request shape, not
-        // of the tool's own validation.
-        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"context.sanitize","arguments":"alice@example.com"}}"#.to_owned(),
+        // of the tool's own validation: -32602.
+        (
+            r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"context.sanitize","arguments":"alice@example.com"}}"#
+                .to_owned(),
+            -32602,
+        ),
+        // A non-object `params` member is a shape error too: -32602.
+        (
+            r#"{"jsonrpc":"2.0","id":4,"method":"tools/list","params":[]}"#.to_owned(),
+            -32602,
+        ),
+        // Structurally invalid requests: -32600.
+        (r#"{"id":5,"method":"tools/list"}"#.to_owned(), -32600),
+        (r#"{"jsonrpc":"2.0","id":6,"method":7}"#.to_owned(), -32600),
+        (r#"{"jsonrpc":"2.0","id":1.5,"method":"tools/list"}"#.to_owned(), -32600),
+        (r#"{"jsonrpc":"2.0","id":null,"method":"tools/list"}"#.to_owned(), -32600),
+        ("[]".to_owned(), -32600),
     ] {
         let response = request(&mut pipeline, &body);
         let Some(value) = response else {
@@ -43,7 +68,30 @@ fn unknown_method_malformed_json_and_bad_params_are_protocol_errors() {
             value.get("result").is_none(),
             "expected no result in {value}"
         );
+        assert_eq!(
+            value.pointer("/error/code").and_then(Value::as_i64),
+            Some(code),
+            "wrong code for {body}: {value}"
+        );
     }
+
+    // An invalid request echoes a string or integer id and nulls anything else.
+    let echoed = request(
+        &mut pipeline,
+        r#"{"jsonrpc":"1.0","id":7,"method":"tools/list"}"#,
+    );
+    let Some(value) = echoed else {
+        panic!("expected an error response");
+    };
+    assert_eq!(value.get("id").and_then(Value::as_i64), Some(7), "{value}");
+    let invalid_id = request(
+        &mut pipeline,
+        r#"{"jsonrpc":"1.0","id":1.5,"method":"tools/list"}"#,
+    );
+    let Some(value) = invalid_id else {
+        panic!("expected an error response");
+    };
+    assert_eq!(value.get("id"), Some(&Value::Null), "{value}");
 }
 
 #[test]
