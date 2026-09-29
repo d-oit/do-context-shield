@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `deps` sensor: the dependency closure is checked for network clients, TLS stacks, and hosted-model SDKs (`Cargo.lock`, which covers every feature including `gliner2`), because "nothing leaves the process" was only review-enforced. The closure currently contains none of them; the ban list is overridable with `DO_HARNESS_FORBIDDEN_DEPS` for the sensor's own negative tests.
 
+- `hooks` sensor (`scripts/check-hooks.sh`, in the `verification`, `release`, and `ci` sets): the git hooks are the local gate, so the wiring is now machine-checked — `.githooks/{pre-commit,pre-push,commit-msg}` exist and are executable, every sensor `do-harness.toml` declares under `[hooks]` is really invoked by that hand-written hook (adding a sensor without mirroring it fails instead of silently weakening the gate), `core.hooksPath` stays on `.githooks`, and the `.githooks` / `.git/hooks` installation modes are never combined.
 - Initial privacy boundary: regex detector, default policy, pseudonymize transformer, memory/JSON vaults.
 - CLI (`sanitize`, `restore`, `inspect`, `mcp-stdio`) and MCP JSON-RPC stdio adapter.
 - Agent skills (`.agents/skills/private-data`, `.agents/skills/plugin-development`, indexed in `.agents/SKILLS.md`).

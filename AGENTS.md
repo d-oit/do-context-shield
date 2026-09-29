@@ -5,11 +5,12 @@
 |Task|Command|
 |---|---|
 |Build|`cargo build`|
-|Full local gate|`do-harness verify --set verification` (fmt, check, clippy, test, loc, skills, deps, audit, commitlint)|
+|Full local gate|`do-harness verify --set verification` (fmt, check, clippy, test, loc, shellcheck, hooks, skills, deps, audit, commitlint)|
 |Changed-only gate|`do-harness verify --changed --set verification`|
 |Selection preview|`do-harness explain --set verification --changed`|
 |Evidence freshness|`do-harness status --set verification`|
 |Skill structure gate|`bash scripts/check-skills.sh`|
+|Hook wiring gate|`bash scripts/check-hooks.sh` (hook files, sensor parity, single hook mode)|
 |Skill evals|`do-harness eval --strict-fixtures` (narrow with `--skill <name>`)|
 |Feature build|`cargo check -p <crate> --features <feature>` (e.g. `do-context-shield-detector-gliner2 --features gliner2`)|
 |Setup|`git config core.hooksPath .githooks` after cloning|

@@ -49,13 +49,14 @@ curl -fsSL https://raw.githubusercontent.com/d-o-hub/do-harness/main/scripts/ins
 Then run the whole local gate with one command, or the sensors directly:
 
 ```bash
-do-harness verify --set verification          # fmt, check, clippy, test, loc, skills, deps, audit, commitlint
+do-harness verify --set verification          # fmt, check, clippy, test, loc, shellcheck, hooks, skills, deps, audit, commitlint
 do-harness verify --changed --set verification   # only sensors whose inputs changed
 do-harness explain --set verification --changed  # show the selection without running it
 do-harness status --set verification          # evidence freshness without running sensors
 do-harness eval --strict-fixtures             # skill structure + hermetic walkthroughs
 bash scripts/check-skills.sh                  # skill gate + planning-catalog check
 bash scripts/check-shellcheck.sh              # shell lint for hooks and scripts
+bash scripts/check-hooks.sh                   # hook wiring: sensor parity + single hook mode
 
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
@@ -67,7 +68,7 @@ python3 scripts/validate-structure.py
 
 Local sensors are declared in `do-harness.toml` (`pre-commit`: fmt, check, loc; `pre-push`: the full verification set) with shell implementations in `scripts/check-*.sh`; CI enforces the same sensors plus structure validation, secret scanning, publish-surface checks, and a macOS/Windows test matrix (default-feature tests plus `cargo check --workspace --all-features --all-targets`, so feature-gated code is compiled on every supported OS; the Linux jobs cover the `--all-features` test run). The `Harness` CI job installs the pinned `do-harness` and runs the `ci` signal set (`verification` minus `commitlint`, since PR titles are the enforced commit contract) with `--format json --strict`, verifies evidence freshness (`status --set ci`), and runs `do-harness eval --strict-fixtures` for the skill corpus.
 
-Git hooks: `.githooks/` is this repository's hook source of truth — versioned and reviewed alongside the code (`git config core.hooksPath .githooks`). It ships `pre-commit` (staged secret scan, LOC and `unwrap`/`expect` hygiene, TOML syntax, fmt, check), `commit-msg` (commitlint on the prepared subject), and `pre-push` (the full local gate: fmt, check, clippy, test, loc, shellcheck, deps, audit, commitlint). `do-harness hook install` is a per-developer alternative that writes managed hooks into `.git/hooks/`; the two do not combine, because a `core.hooksPath` pointing at `.githooks` makes git ignore `.git/hooks/` entirely — pick one. (Upstream, for the pinned v0.1.1: `hook status`/`doctor` ignore the `core.hooksPath` shadowing — [d-o-hub/do-harness#108](https://github.com/d-o-hub/do-harness/issues/108), fixed upstream and awaiting a release — and `hook install`/`uninstall` ignore `--dry-run` — [d-o-hub/do-harness#159](https://github.com/d-o-hub/do-harness/issues/159).)
+Git hooks: `.githooks/` is this repository's hook source of truth — versioned and reviewed alongside the code (`git config core.hooksPath .githooks`). It ships `pre-commit` (staged secret scan, LOC and `unwrap`/`expect` hygiene, TOML syntax, fmt, check), `commit-msg` (commitlint on the prepared subject), and `pre-push` (the full local gate: fmt, check, clippy, test, loc, shellcheck, hooks, deps, audit, commitlint). `do-harness hook install` is a per-developer alternative that writes managed hooks into `.git/hooks/`; the two do not combine, because a `core.hooksPath` pointing at `.githooks` makes git ignore `.git/hooks/` entirely — pick one. The `hooks` sensor (`bash scripts/check-hooks.sh`) enforces that choice plus sensor parity: every sensor `do-harness.toml` declares for a hook must actually be invoked by that hand-written hook, so adding a sensor without mirroring it fails locally instead of silently weakening the gate. (Upstream, for the pinned v0.1.1: `hook status`/`doctor` ignore the `core.hooksPath` shadowing — [d-o-hub/do-harness#108](https://github.com/d-o-hub/do-harness/issues/108), fixed upstream and awaiting a release — and `hook install`/`uninstall` ignore `--dry-run` — [d-o-hub/do-harness#159](https://github.com/d-o-hub/do-harness/issues/159).)
 
 ## Agent workflow
 
