@@ -104,7 +104,8 @@ pub(crate) struct ProcessConfig {
 ///
 /// Returns an error when a configuration file exists but cannot be read or
 /// parsed, when an explicit path cannot be read, or when an environment
-/// override is not a valid value.
+/// override is not a valid value. A missing explicit path is an error; a
+/// candidate that does not exist is simply not selected.
 pub(crate) fn load(explicit: Option<&Path>) -> Result<Config, Box<dyn std::error::Error>> {
     let mut config = match explicit {
         Some(path) => read(path)?,
@@ -122,7 +123,11 @@ pub(crate) fn load(explicit: Option<&Path>) -> Result<Config, Box<dyn std::error
 fn read_discovered() -> Result<Config, Box<dyn std::error::Error>> {
     let candidates = [Some(PathBuf::from(CONFIG_FILE_NAME)), home_config_path()];
     for candidate in candidates.into_iter().flatten() {
-        if candidate.is_file() {
+        // Existence, not `is_file()`: a candidate that exists but is not a
+        // regular file (a directory of that name, a dangling symlink) is a
+        // broken setup, not an absent one, and must fail instead of falling
+        // through to the next candidate.
+        if candidate.symlink_metadata().is_ok() {
             return read(&candidate);
         }
     }
@@ -193,7 +198,30 @@ pub(crate) fn validate(config: &Config) -> Result<(), Box<dyn std::error::Error>
         ToolSet::parse(tools)
             .map_err(|error| format!("config: invalid `tools` value `{tools}`: {error}"))?;
     }
+    if let Some(jurisdiction) = context.jurisdiction.as_deref() {
+        validate_jurisdiction(jurisdiction)?;
+    }
     validate_vault(&config.vault)
+}
+
+/// Reject a `jurisdiction` that is not an ISO 3166-1 alpha-2 code.
+///
+/// The value is forwarded to policies as written, so a typo (`DEU`, `Germany`,
+/// `de-DE`) would silently reach policy decisions that compare it against
+/// two-letter codes.
+///
+/// # Errors
+///
+/// Returns an error naming the field and the rejected value.
+fn validate_jurisdiction(value: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let valid = value.len() == 2 && value.chars().all(|c| c.is_ascii_alphabetic());
+    if !valid {
+        return Err(format!(
+            "config: `jurisdiction` must be an ISO 3166-1 alpha-2 code, got `{value}`"
+        )
+        .into());
+    }
+    Ok(())
 }
 
 /// Reject vault combinations that cannot select one consistent vault.

@@ -8,7 +8,7 @@ Status: implemented (`crates/do-context-shield-cli/src/config.rs`). Every option
 2. `./do-context-shield.toml`,
 3. `$HOME/.config/do-context-shield/config.toml`.
 
-The first existing candidate wins. Without any file, every option keeps its built-in default. A file that exists but cannot be read or parsed is an error — the tool never falls back to defaults silently.
+The first existing candidate wins. Without any file, every option keeps its built-in default. A candidate that exists but cannot be read or parsed is an error — the tool never falls back to defaults silently, and a candidate of that name that is not a regular file (a directory, a dangling symlink) is such an error rather than an absent one. A missing `--config` path is an error too: the explicit path is an instruction, while an absent auto-discovery candidate is simply not selected.
 
 Paths in the file are literal: environment variables and `~` are not expanded.
 
@@ -132,6 +132,7 @@ Startup fails, naming the offending field, when
 - the file contains an unknown key,
 - a plugin, recipient, or data-category name is unknown (the error lists the accepted values),
 - the `[plugins] tools` list is empty or names an unknown tool (the error lists the accepted values),
+- `jurisdiction` is not a two-letter ISO 3166-1 alpha-2 code (the value is forwarded to policies as written, so a typo must not reach them),
 - the `[vault]` combination cannot select one consistent vault:
   - `vault = "json"` without `vault_file`,
   - `vault_file` together with `vault = "memory"` or `vault = "process"`,
