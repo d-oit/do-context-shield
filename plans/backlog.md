@@ -77,3 +77,12 @@ architecture decision before code.
 - **Rule**: never invoke `claude` or `codex` in an agent session without explicit human approval. Registration mechanics are verified and documented (`docs/client-integration.md` → "Other clients"); everything beyond that is human-driven.
 - **Remaining work (human-run only)**: Codex — one non-interactive turn calling `context.inspect` + `context.sanitize` (session `codex-probe-1`) and a placeholder-only reply. Claude Code — approve the project server once, then the same turn with session `cc-probe-1`.
 - **Exit criteria**: a transcript proving the tool invocation and the sanitized reply, recorded here and in `docs/client-integration.md`.
+
+## Open — needs a decision
+
+### Auto-discovered config file also configures `mcp-stdio` (trust boundary)
+
+- **Status**: 2026-09-28 — `./do-context-shield.toml` is found from the working directory, and MCP clients spawn the server with the project as its cwd. A repository shipping that file therefore selects the plugins (`[plugins]` detector/policy/transformer/judge, including `process` with `*_command`, i.e. local process execution) and — since the `[context]` plumbing fix — the default enforcement context of every `context.sanitize` call.
+- **Rule**: no silent weakening; the search order is documented (`docs/configuration.md`), so the fix has to be an explicit decision, not a drive-by change.
+- **Options**: (a) `mcp-stdio` honours a file only when `--config` is passed (auto-discovery stays for CLI commands); (b) refuse `process` plugins when the file came from auto-discovery; (c) keep the behaviour and state the trust assumption in `SECURITY.md`.
+- **Exit criteria**: one option implemented or recorded as accepted risk, with a test pinning it, and `docs/configuration.md` / `README.md` kept in agreement.

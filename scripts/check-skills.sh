@@ -8,6 +8,8 @@
 #   2. every skill has evals/evals.json with graded assertions and a negative case
 #   3. plans/methods.json subtask sensors exist in do-harness.toml
 #   4. every plans/invariants.json entry carries invariant/rationale/sensor/category
+#   5. the harness skill's sensor table matches do-harness.toml: every sensor has
+#      a row, and a row may only claim a stage the sensor is wired into
 #
 # python3 is required for the gate; a missing interpreter WARN-skips locally and
 # fails closed when CI=true or DO_HARNESS_REQUIRE_TOOLS=1.
@@ -85,6 +87,71 @@ for method in methods:
             failures.append(
                 f"methods.json: method {method['name']} subtask {subtask['name']} names unknown sensor {sensor}"
             )
+
+# The harness skill's sensor table is the map agents read before touching the
+# suite. A sensor missing from the table, or a row claiming a stage the sensor
+# is not wired into, sends the next agent to the wrong gate.
+def toml_list(key):
+    match = re.search(rf"^{re.escape(key)}\s*=\s*\[(.*?)\]", config, re.M)
+    if not match:
+        failures.append(f"do-harness.toml: no `{key}` list found")
+        return set()
+    return {item.strip().strip('"') for item in match.group(1).split(",") if item.strip()}
+
+pre_commit = toml_list("pre-commit")
+pre_push = toml_list("pre-push")
+ci_set = toml_list("ci")
+verification_set = toml_list("verification")
+commit_msg_hook = (root / ".githooks/commit-msg").read_text()
+
+harness_skill = root / ".agents/skills/harness/SKILL.md"
+lines = harness_skill.read_text().splitlines()
+header = next((i for i, line in enumerate(lines) if line.startswith("| Sensor | Command | Stage")), None)
+if header is None:
+    failures.append("harness SKILL.md: no `| Sensor | Command | Stage |` table found")
+    rows = {}
+else:
+    rows = {}
+    for line in lines[header + 1 :]:
+        if not line.startswith("|"):
+            break
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) < 3 or set(cells[0]) <= set("- ") or not cells[0]:
+            continue
+        rows[cells[0]] = cells[2].lower()
+
+missing = sorted(sensor_names - set(rows))
+if missing:
+    failures.append(f"harness SKILL.md: sensor table has no row for {', '.join(missing)}")
+suite_stages = ("pre-commit", "pre-push", "verification", "commit-msg")
+for name, stage in rows.items():
+    tokens = [part.strip(" `") for part in stage.split(",") if part.strip(" `")]
+    if name not in sensor_names:
+        # The table also documents CI-only gates that are not do-harness
+        # sensors (structure, deny, publish-check, secret-scan). They may claim
+        # CI, but never a stage of the harness suite.
+        claimed = [token for token in tokens if any(marker in token for marker in suite_stages)]
+        if claimed:
+            failures.append(
+                f"harness SKILL.md: row `{name}` is not a do-harness sensor but claims {', '.join(claimed)}"
+            )
+        continue
+    for token in tokens:
+        if "commit-msg" in token:
+            if f"scripts/check-{name}.sh" not in commit_msg_hook:
+                failures.append(f"harness SKILL.md: {name} claims the commit-msg hook, which does not run it")
+        elif "pre-commit" in token and name not in pre_commit:
+            failures.append(f"harness SKILL.md: {name} claims the pre-commit hook, which does not run it")
+        elif "pre-push" in token and name not in pre_push:
+            failures.append(f"harness SKILL.md: {name} claims the pre-push hook, which does not run it")
+        elif token == "ci" and name not in ci_set:
+            failures.append(f"harness SKILL.md: {name} claims CI, which does not run it")
+        elif "verification" in token and name not in verification_set:
+            failures.append(f"harness SKILL.md: {name} claims the verification set, which does not run it")
+        elif not any(
+            marker in token for marker in ("pre-commit", "pre-push", "ci", "verification", "commit-msg")
+        ):
+            failures.append(f"harness SKILL.md: {name} names unrecognized stage `{token}`")
 
 invariants = json.loads((root / "plans/invariants.json").read_text())
 for entry in invariants:
