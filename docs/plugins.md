@@ -47,6 +47,8 @@ DO_CONTEXT_SHIELD_E2E_MODEL_DIR="$PWD/models/gliner2-pii" \
 cargo test -p do-context-shield --features gliner2 --test cli_model_e2e --test mcp_model_e2e
 ```
 
+CI provisions the same archive in the Linux `Test` job (cached per version) and sets `DO_HARNESS_REQUIRE_ORT=1`, which turns an unset `ORT_DYLIB_PATH` into a failure instead of a skip — so the runtime-backed tests (`incomplete_fragment_export_fails_closed` and friends) really run there, and a broken download or a version bump that forgets this pin is red rather than quietly skipped. Local runs keep skipping without the environment variable.
+
 ### Supported export layouts
 
 **Fragment sets (primary)** — GLiNER2 span exports: `model_dir` holds an `encoder*.onnx` fragment, either flat (`encoder.onnx`, `encoder_fp32.onnx`, `encoder_fp16.onnx`, plus the `_iobinding` variants, as `export_span_v3.py` produces them) or under the legacy `fp16_v2/`/`fp32_v2/` subfolders, together with the other seven fragments (`token_gather`, `span_rep`, `schema_gather`, `count_pred_argmax`, `count_lstm_fixed`, `scorer`, `classifier`) and the export's `tokenizer.json`. The `gliner2-rs` engine (local, Apache-2.0, same `ort` stack) runs the pipeline: label-conditioned schema handling, span enumeration, and count decoding are its job. The detector feeds `Gliner2Config::labels` (default `PII_LABELS_42`) as the schema and maps the returned entities. The eight ONNX sessions load lazily on the first fragment detect (seconds cold on CPU) and stay cached for the detector's lifetime; long inputs are chunked by the engine (384-token windows, 64 overlapping).

@@ -198,11 +198,41 @@ fn fragment_export_without_feature_fails_closed() {
     }
 }
 
+/// Whether the environment demands a loadable ONNX Runtime.
+///
+/// CI provisions the runtime pinned in `docs/plugins.md` and sets
+/// `DO_HARNESS_REQUIRE_ORT=1`, so a missing or misspelled `ORT_DYLIB_PATH`
+/// fails the runtime-backed tests instead of silently skipping them.
+#[cfg(feature = "gliner2")]
+fn ort_required() -> bool {
+    std::env::var("DO_HARNESS_REQUIRE_ORT").is_ok_and(|value| value == "1")
+}
+
+/// The configured ONNX Runtime library, or `None` when the test should skip.
+#[cfg(feature = "gliner2")]
+fn ort_dylib_path() -> Option<std::path::PathBuf> {
+    let Some(path) = std::env::var_os("ORT_DYLIB_PATH") else {
+        assert!(
+            !ort_required(),
+            "DO_HARNESS_REQUIRE_ORT=1 but ORT_DYLIB_PATH is unset; \
+             CI must provision the pinned ONNX Runtime (docs/plugins.md)"
+        );
+        eprintln!("skip: set ORT_DYLIB_PATH to run the runtime-backed tests");
+        return None;
+    };
+    let path = std::path::PathBuf::from(path);
+    assert!(
+        path.is_file(),
+        "ORT_DYLIB_PATH is not a file: {}",
+        path.display()
+    );
+    Some(path)
+}
+
 #[cfg(feature = "gliner2")]
 #[test]
 fn incomplete_fragment_export_fails_closed() {
-    if std::env::var_os("ORT_DYLIB_PATH").is_none() {
-        // The dynamic ONNX Runtime is only present in feature-build runs.
+    if ort_dylib_path().is_none() {
         return;
     }
     let dir = temp_dir_with(&["encoder_fp32.onnx"]);

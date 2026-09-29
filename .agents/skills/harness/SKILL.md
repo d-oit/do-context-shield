@@ -79,7 +79,7 @@ A sensor firing more than twice in one task is a feedforward-guide defect. Updat
 - Never weaken or delete the sensor that fired; fix the cause.
 - `.do-harness/` (state database, evidence) and `target/` are gitignored local state — never durable evidence, never committed.
 - `do-harness eval` needs `.agents/skills/skill-creator/scripts/quick_validate.py` (dependency-free, no PyYAML) in its sandbox, and `--strict-fixtures` rejects thin datasets; grader drift requires an explicit `--bless`.
-- Feature-gated crates (`--features gliner2`) are not covered by the default suite: run the feature build explicitly.
+- Feature-gated crates (`--features gliner2`) are not covered by the default suite: run the feature build explicitly. The Linux `Test` job provisions the pinned ONNX Runtime (1.28.0, cached) and sets `DO_HARNESS_REQUIRE_ORT=1` so the runtime-backed tests cannot silently skip there; locally, set `ORT_DYLIB_PATH` (see `docs/plugins.md`) to make them run.
 
 ## References
 
