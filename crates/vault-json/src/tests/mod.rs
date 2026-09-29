@@ -1,6 +1,8 @@
 use super::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+mod encrypted;
+
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
 fn temp_path() -> PathBuf {
@@ -308,7 +310,7 @@ fn write_state_surfaces_flush_failures() {
             Err(io::Error::new(io::ErrorKind::StorageFull, "disk full"))
         }
     }
-    match write_state(FullDisk, &State::default()) {
+    match write_bytes(FullDisk, b"state") {
         Ok(()) => panic!("a failed flush must not report success"),
         Err(error) => assert!(error.to_string().contains("disk full"), "{error}"),
     }

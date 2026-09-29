@@ -2,8 +2,9 @@
 
 use clap::Parser;
 use cli::{
-    Cli, Command, ContextArgs, DetectorSelection, ForgetArgs, InspectArgs, InspectOutput, McpArgs,
-    PipelineSelection, RestoreArgs, SanitizeArgs, VaultArgs, VaultSelection,
+    Cli, Command, ContextArgs, DetectorSelection, EncryptVaultArgs, ForgetArgs, InspectArgs,
+    InspectOutput, McpArgs, PipelineSelection, RestoreArgs, SanitizeArgs, VaultArgs,
+    VaultSelection,
 };
 use do_context_shield_core::PrivacyPipeline;
 use do_context_shield_plugin_api::ScopeId;
@@ -35,6 +36,7 @@ fn build_pipeline(
 ) -> Result<PrivacyPipeline, Box<dyn std::error::Error>> {
     let timeout = Duration::from_millis(resolved.process_timeout_ms);
     let vault_file = resolved.vault_file.as_deref();
+    let vault_key_file = resolved.vault_key_file.as_deref();
     let vault: Box<dyn do_context_shield_plugin_api::Vault> = match resolved.vault.as_deref() {
         Some("process") => {
             if vault_file.is_some() {
@@ -43,13 +45,17 @@ fn build_pipeline(
                         .into(),
                 );
             }
+            if vault_key_file.is_some() {
+                return Err(vault_key_conflict("process"));
+            }
             Box::new(ProcessVault::from_selection(
                 resolved.vault_command.as_deref(),
                 timeout,
             )?)
         }
-        Some("json") => Box::new(do_context_shield_vault_json::JsonVault::open(
+        Some("json") => Box::new(do_context_shield_vault_json::JsonVault::open_with_key_file(
             json_vault_file(vault_file)?,
+            vault_key_file,
         )?),
         Some("memory") => {
             if vault_file.is_some() {
@@ -58,13 +64,27 @@ fn build_pipeline(
                         .into(),
                 );
             }
+            if vault_key_file.is_some() {
+                return Err(vault_key_conflict("memory"));
+            }
             do_context_shield_plugin_registry::vault("memory")?
         }
         Some(other) => return Err(format!("unknown vault plugin `{other}`").into()),
-        None => match vault_file {
-            Some(path) => Box::new(do_context_shield_vault_json::JsonVault::open(path)?),
-            None => do_context_shield_plugin_registry::vault("memory")?,
-        },
+        None => {
+            if let Some(path) = vault_file {
+                Box::new(do_context_shield_vault_json::JsonVault::open_with_key_file(
+                    path,
+                    vault_key_file,
+                )?)
+            } else if vault_key_file.is_some() {
+                return Err(
+                    "vault key file (`vault_key_file` or `--vault-key-file`) requires a vault file (`vault_file` or `--vault-file <path>`) for the JSON vault"
+                        .into(),
+                );
+            } else {
+                do_context_shield_plugin_registry::vault("memory")?
+            }
+        }
     };
     let detector: Box<dyn do_context_shield_plugin_api::Detector> = match resolved.detector.as_str()
     {
@@ -117,6 +137,14 @@ fn json_vault_file(vault_file: Option<&Path>) -> Result<&Path, Box<dyn std::erro
     })
 }
 
+/// A vault key file alongside a vault that cannot encrypt at rest.
+fn vault_key_conflict(name: &str) -> Box<dyn std::error::Error> {
+    format!(
+        "vault `{name}` cannot be combined with a vault key file (`vault_key_file` or `--vault-key-file`)"
+    )
+    .into()
+}
+
 fn read_stdin() -> Result<String, Box<dyn std::error::Error>> {
     let mut input = String::new();
     io::stdin().read_to_string(&mut input)?;
@@ -131,6 +159,7 @@ fn run_simple(command: Command, config: &config::Config) -> Result<(), Box<dyn s
         Command::Inspect(args) => run_inspect(args, config)?,
         Command::Forget(args) => run_forget(args, config)?,
         Command::McpStdio(args) => run_mcp(args, config)?,
+        Command::EncryptVault(args) => run_encrypt_vault(&args)?,
     }
     io::stdout().flush()?;
     Ok(())
@@ -143,6 +172,7 @@ fn run_sanitize(
     let VaultArgs {
         session,
         vault_file,
+        vault_key_file,
         store,
     } = args.vault;
     let resolved = config::resolve(
@@ -151,6 +181,7 @@ fn run_sanitize(
             pipeline: args.pipeline,
             vault: store,
             vault_file,
+            vault_key_file,
             vault_ttl_seconds: None,
             context: args.context,
             process: args.process,
@@ -171,6 +202,7 @@ fn run_restore(
     let VaultArgs {
         session,
         vault_file,
+        vault_key_file,
         store,
     } = args.vault;
     let resolved = config::resolve(
@@ -179,6 +211,7 @@ fn run_restore(
             pipeline: PipelineSelection::default(),
             vault: store,
             vault_file,
+            vault_key_file,
             vault_ttl_seconds: None,
             context: ContextArgs::default(),
             process: args.process,
@@ -202,6 +235,7 @@ fn run_inspect(
             pipeline: PipelineSelection::default(),
             vault: VaultSelection::default(),
             vault_file: None,
+            vault_key_file: None,
             vault_ttl_seconds: None,
             context: ContextArgs::default(),
             process: args.process,
@@ -220,6 +254,7 @@ fn run_forget(args: ForgetArgs, config: &config::Config) -> Result<(), Box<dyn s
     let VaultArgs {
         session,
         vault_file,
+        vault_key_file,
         store,
     } = args.vault;
     let resolved = config::resolve(
@@ -228,6 +263,7 @@ fn run_forget(args: ForgetArgs, config: &config::Config) -> Result<(), Box<dyn s
             pipeline: PipelineSelection::default(),
             vault: store,
             vault_file,
+            vault_key_file,
             vault_ttl_seconds: None,
             context: ContextArgs::default(),
             process: args.process,
@@ -247,6 +283,7 @@ fn run_mcp(args: McpArgs, config: &config::Config) -> Result<(), Box<dyn std::er
             pipeline: args.pipeline,
             vault: args.store,
             vault_file: args.vault_file,
+            vault_key_file: args.vault_key_file,
             vault_ttl_seconds: args.vault_ttl_seconds,
             context: ContextArgs::default(),
             process: args.process,
@@ -256,6 +293,7 @@ fn run_mcp(args: McpArgs, config: &config::Config) -> Result<(), Box<dyn std::er
     do_context_shield_mcp_server::run_stdio(do_context_shield_mcp_server::ServerConfig {
         tools,
         vault_file: resolved.vault_file,
+        vault_key_file: resolved.vault_key_file,
         vault: resolved.vault,
         vault_command: resolved.vault_command,
         vault_ttl_seconds: resolved.vault_ttl_seconds,
@@ -270,6 +308,16 @@ fn run_mcp(args: McpArgs, config: &config::Config) -> Result<(), Box<dyn std::er
         transformer_command: resolved.transformer_command,
         process_timeout_ms: resolved.process_timeout_ms,
     })?;
+    Ok(())
+}
+
+/// Rewrite an existing plaintext JSON vault in the encrypted format.
+///
+/// Both paths come from the command line, not the configuration: a migration
+/// rewrites the vault in place, so an ambient file must not trigger it.
+fn run_encrypt_vault(args: &EncryptVaultArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let key = do_context_shield_vault_json::VaultKey::from_file(&args.vault_key_file)?;
+    do_context_shield_vault_json::JsonVault::encrypt_in_place(&args.vault_file, key)?;
     Ok(())
 }
 

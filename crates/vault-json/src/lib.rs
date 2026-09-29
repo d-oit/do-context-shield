@@ -6,8 +6,21 @@ use do_context_shield_plugin_api::{
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufReader, BufWriter};
+use std::io::{self, BufWriter};
 use std::path::{Path, PathBuf};
+
+mod encrypted;
+
+pub use encrypted::VaultKey;
+
+/// How vault state is stored on disk.
+enum Format {
+    /// Plain JSON state, the format vaults had before at-rest encryption.
+    Plaintext,
+    /// XChaCha20-Poly1305 envelope; original values never touch the disk in
+    /// the clear.
+    Encrypted(VaultKey),
+}
 
 #[derive(Default, Serialize, Deserialize)]
 struct State {
@@ -84,54 +97,150 @@ fn lock_path(path: &Path) -> PathBuf {
 /// File-backed local vault. Use only with an access-controlled local path.
 ///
 /// The vault file holds original values by design and is created with
-/// owner-only permissions on Unix. Sequential processes share state by
-/// reloading the file on every insert; concurrent writers are serialized
-/// through an advisory lock on `<path>.lock`.
+/// owner-only permissions on Unix. With a [`VaultKey`] the state is encrypted
+/// at rest (XChaCha20-Poly1305) and a file that is not in the expected format
+/// fails closed instead of being silently reinterpreted. Sequential processes
+/// share state by reloading the file on every insert; concurrent writers are
+/// serialized through an advisory lock on `<path>.lock`.
 pub struct JsonVault {
     path: PathBuf,
     state: State,
+    format: Format,
 }
 
 impl JsonVault {
-    /// Open or create a JSON vault.
+    /// Open or create a plaintext JSON vault.
     ///
     /// # Errors
     ///
-    /// Returns [`VaultError`] when the vault file cannot be read, parsed, or created.
+    /// Returns [`VaultError`] when the vault file cannot be read, parsed, or
+    /// created, or when the file is an encrypted envelope (open it with
+    /// [`JsonVault::open_encrypted`] instead).
     pub fn open(path: impl Into<PathBuf>) -> Result<Self, VaultError> {
-        let path = path.into();
-        if path.exists() {
-            let loaded: State = {
-                let _lock = Lock::shared(&path)?;
-                let file = File::open(&path).map_err(|error| io_error(&error))?;
-                serde_json::from_reader(BufReader::new(file)).map_err(|error| json_error(&error))?
-            };
-            restrict_permissions(&path)?;
-            Ok(Self {
-                path,
-                state: loaded,
-            })
-        } else {
-            Ok(Self {
-                path,
-                state: State::default(),
-            })
+        Self::open_with_format(path.into(), Format::Plaintext)
+    }
+
+    /// Open or create a vault whose state is encrypted at rest with `key`.
+    ///
+    /// A missing file starts empty and is written encrypted on the first save.
+    /// An existing plaintext file is rejected; migrate it with
+    /// [`JsonVault::encrypt_in_place`] first, so a key cannot silently rewrite
+    /// a vault whose backup or plaintext copy the operator still expects.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError`] when the file cannot be read or decrypted, or
+    /// when it is not in the encrypted format.
+    pub fn open_encrypted(path: impl Into<PathBuf>, key: VaultKey) -> Result<Self, VaultError> {
+        Self::open_with_format(path.into(), Format::Encrypted(key))
+    }
+
+    /// Open a vault in plaintext, or encrypted with `key_file` when it is set.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError`] when the key file cannot be read or is accessible
+    /// beyond its owner, the vault file cannot be read or decrypted, or the
+    /// file is in the other format than the key selects.
+    pub fn open_with_key_file(
+        path: impl Into<PathBuf>,
+        key_file: Option<&Path>,
+    ) -> Result<Self, VaultError> {
+        match key_file {
+            Some(key_file) => Self::open_encrypted(path, VaultKey::from_file(key_file)?),
+            None => Self::open(path),
         }
+    }
+
+    /// Rewrite an existing plaintext vault file in the encrypted format.
+    ///
+    /// The rewrite goes through the same temporary-file-and-rename path as a
+    /// normal save, so a failure cannot corrupt the existing vault. An
+    /// already-encrypted file is left untouched.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError`] when the file is missing, unreadable, already
+    /// encrypted, or not plaintext vault state.
+    pub fn encrypt_in_place(path: impl Into<PathBuf>, key: VaultKey) -> Result<(), VaultError> {
+        let path = path.into();
+        let _lock = Lock::exclusive(&path)?;
+        if !path.exists() {
+            return Err(VaultError::Message(format!(
+                "vault file `{}` does not exist",
+                path.display()
+            )));
+        }
+        let bytes = fs::read(&path).map_err(|error| io_error(&error))?;
+        let value: serde_json::Value =
+            serde_json::from_slice(&bytes).map_err(|error| json_error(&error))?;
+        if encrypted::is_envelope(&value) {
+            return Err(VaultError::Message(format!(
+                "vault file `{}` is already encrypted",
+                path.display()
+            )));
+        }
+        let state: State = serde_json::from_value(value).map_err(|error| json_error(&error))?;
+        Self {
+            path,
+            state,
+            format: Format::Encrypted(key),
+        }
+        .persist_locked()
+    }
+
+    /// Open a vault in `format`, loading whatever state the file holds.
+    fn open_with_format(path: PathBuf, format: Format) -> Result<Self, VaultError> {
+        let state = {
+            let _lock = Lock::shared(&path)?;
+            Self::load_state(&path, &format)?
+        };
+        if path.exists() {
+            restrict_permissions(&path)?;
+        }
+        Ok(Self {
+            path,
+            state,
+            format,
+        })
     }
 
     /// Load state from disk while the caller holds the appropriate lock.
     ///
-    /// Missing files mean empty state; corrupt files are errors.
+    /// Missing files mean empty state; corrupt files and files in the other
+    /// format are errors.
     ///
     /// # Errors
     ///
-    /// Returns [`VaultError`] when the vault file cannot be read or parsed.
-    fn load_state(path: &Path) -> Result<State, VaultError> {
-        if path.exists() {
-            let file = File::open(path).map_err(|error| io_error(&error))?;
-            serde_json::from_reader(BufReader::new(file)).map_err(|error| json_error(&error))
-        } else {
-            Ok(State::default())
+    /// Returns [`VaultError`] when the vault file cannot be read, cannot be
+    /// decrypted with the configured key, or is not in the expected format.
+    fn load_state(path: &Path, format: &Format) -> Result<State, VaultError> {
+        if !path.exists() {
+            return Ok(State::default());
+        }
+        let bytes = fs::read(path).map_err(|error| io_error(&error))?;
+        let value: serde_json::Value =
+            serde_json::from_slice(&bytes).map_err(|error| json_error(&error))?;
+        match format {
+            Format::Plaintext => {
+                if encrypted::is_envelope(&value) {
+                    return Err(VaultError::Message(format!(
+                        "vault file `{}` is encrypted; provide the vault key (`--vault-key-file` or `DO_CONTEXT_SHIELD_VAULT_KEY_FILE`)",
+                        path.display()
+                    )));
+                }
+                serde_json::from_value(value).map_err(|error| json_error(&error))
+            }
+            Format::Encrypted(key) => {
+                if !encrypted::is_envelope(&value) {
+                    return Err(VaultError::Message(format!(
+                        "vault file `{}` is not encrypted; migrate it with `do-context-shield encrypt-vault --vault-file <path> --vault-key-file <path>`",
+                        path.display()
+                    )));
+                }
+                let plaintext = encrypted::decrypt(value, key)?;
+                serde_json::from_slice(&plaintext).map_err(|error| json_error(&error))
+            }
         }
     }
 
@@ -139,11 +248,11 @@ impl JsonVault {
     ///
     /// # Errors
     ///
-    /// Returns [`VaultError`] when the lock or vault file cannot be read or
-    /// parsed.
-    fn read_state(path: &Path) -> Result<State, VaultError> {
+    /// Returns [`VaultError`] when the lock cannot be taken or the vault file
+    /// cannot be read, decrypted, or parsed.
+    fn read_state(path: &Path, format: &Format) -> Result<State, VaultError> {
         let _lock = Lock::shared(path)?;
-        Self::load_state(path)
+        Self::load_state(path, format)
     }
 
     /// Reload state from disk so sequential processes observe each other's
@@ -154,9 +263,10 @@ impl JsonVault {
     ///
     /// # Errors
     ///
-    /// Returns [`VaultError`] when the vault file cannot be read or parsed.
+    /// Returns [`VaultError`] when the vault file cannot be read, decrypted,
+    /// or parsed.
     fn reload_locked(&mut self) -> Result<(), VaultError> {
-        self.state = Self::load_state(&self.path)?;
+        self.state = Self::load_state(&self.path, &self.format)?;
         Ok(())
     }
 
@@ -195,21 +305,26 @@ impl JsonVault {
                 fs::create_dir_all(parent).map_err(|error| io_error(&error))?;
             }
         }
+        let state_json = serde_json::to_vec(&self.state).map_err(|error| json_error(&error))?;
+        let bytes = match &self.format {
+            Format::Plaintext => state_json,
+            Format::Encrypted(key) => encrypted::encrypt(&state_json, key)?,
+        };
         let tmp = self.path.with_extension("json.tmp");
         let file = restricted_file(&tmp)?;
-        write_state(BufWriter::new(file), &self.state)?;
+        write_bytes(BufWriter::new(file), &bytes)?;
         fs::rename(&tmp, &self.path).map_err(|error| io_error(&error))?;
         Ok(())
     }
 }
 
-/// Serialize `state` and flush the writer, surfacing every I/O failure.
+/// Write `bytes` and flush the writer, surfacing every I/O failure.
 ///
 /// The flush is explicit on purpose: a `BufWriter` discards flush errors when
 /// it drops, which would let a failed write rename a truncated temporary file
 /// over a healthy vault while the caller still saw success.
-fn write_state<W: io::Write>(mut writer: W, state: &State) -> Result<(), VaultError> {
-    serde_json::to_writer(&mut writer, state).map_err(|error| json_error(&error))?;
+fn write_bytes<W: io::Write>(mut writer: W, bytes: &[u8]) -> Result<(), VaultError> {
+    writer.write_all(bytes).map_err(|error| io_error(&error))?;
     writer.flush().map_err(|error| io_error(&error))
 }
 
@@ -286,7 +401,7 @@ impl Vault for JsonVault {
     }
 
     fn resolve(&self, scope: &ScopeId, token: &str) -> Result<Option<Mapping>, VaultError> {
-        let state = Self::read_state(&self.path)?;
+        let state = Self::read_state(&self.path, &self.format)?;
         Ok(state
             .mappings
             .into_iter()

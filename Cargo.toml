@@ -27,6 +27,12 @@ expect_used = "deny"
 
 [workspace.dependencies]
 clap = { version = "4.5", features = ["derive"] }
+# At-rest encryption for the JSON vault (XChaCha20-Poly1305 AEAD).
+# `default-features = false` drops the optional OS-RNG plumbing: nonces come
+# from the workspace `getrandom` dependency, and the crate stays offline.
+chacha20poly1305 = { version = "0.10", default-features = false, features = [
+  "alloc",
+] }
 # OS entropy for unguessable placeholder tokens (`mint_placeholder`).
 getrandom = "0.3"
 # Fragment orchestrator for GLiNER2 span exports (encoder + 7 fragments).

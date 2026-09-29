@@ -64,6 +64,7 @@ timeout_ms = 1500
             vault_file: Some(PathBuf::from("vault.json")),
             vault_command: Some("detect-vault".to_owned()),
             vault_ttl_seconds: None,
+            vault_key_file: None,
         },
         context: ContextConfig {
             recipient: Some("trusted".to_owned()),
@@ -158,6 +159,10 @@ fn vault_combinations_checked() -> Result<(), Box<dyn std::error::Error>> {
         "[vault]\nvault = \"process\"\nvault_ttl_seconds = 60\n",
         "[vault]\nvault = \"memory\"\nvault_file = \"v.json\"\n",
         "[vault]\nvault_file = \"v.json\"\nvault_ttl_seconds = 60\n",
+        // A key encrypts only the JSON vault, which needs a file.
+        "[vault]\nvault_key_file = \"k.key\"\n",
+        "[vault]\nvault = \"memory\"\nvault_key_file = \"k.key\"\n",
+        "[vault]\nvault = \"process\"\nvault_key_file = \"k.key\"\n",
     ] {
         let config: Config = toml::from_str(text)?;
         assert!(validate(&config).is_err(), "expected rejection: {text}");
@@ -167,6 +172,8 @@ fn vault_combinations_checked() -> Result<(), Box<dyn std::error::Error>> {
         "[vault]\nvault = \"memory\"\nvault_ttl_seconds = 60\n",
         "[vault]\nvault_file = \"v.json\"\n",
         "[vault]\nvault = \"process\"\nvault_command = \"vault-cmd\"\n",
+        "[vault]\nvault = \"json\"\nvault_file = \"v.json\"\nvault_key_file = \"k.key\"\n",
+        "[vault]\nvault_file = \"v.json\"\nvault_key_file = \"k.key\"\n",
     ] {
         let config: Config = toml::from_str(text)?;
         assert!(validate(&config).is_ok(), "expected acceptance: {text}");

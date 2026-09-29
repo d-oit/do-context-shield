@@ -8,7 +8,7 @@ The core does not know which detector, judge, policy, transformer, or vault is u
 | judging | `SemanticJudge` | `judge-heuristics` (local rules), `plugin-process` (`judge`) | local model, hosted judge via process |
 | policy | `Policy` | default, `plugin-process` (`plan`) | project policy, enterprise DLP |
 | transformation | `Transformer` | pseudonymize, generalize, mask, `plugin-process` (`transform`) | redact, encrypt, format-preserving |
-| storage | `Vault` | memory / JSON file, `plugin-process` (`vault_get_or_insert`, `vault_resolve`) | SQLite, OS keychain, encrypted local DB |
+| storage | `Vault` | memory / JSON file (optionally encrypted at rest with a key file), `plugin-process` (`vault_get_or_insert`, `vault_resolve`) | SQLite, OS keychain, encrypted local DB |
 
 Transformers decide how a pseudonymization target is replaced. `pseudonymize`
 (the default) mints a stable, vault-resolvable token per value, so repeated
