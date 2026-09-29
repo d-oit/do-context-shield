@@ -30,6 +30,7 @@ Every variable is optional; an unset or empty variable keeps the file value. Val
 | `DO_CONTEXT_SHIELD_VAULT` | `[vault] vault` |
 | `DO_CONTEXT_SHIELD_VAULT_FILE` | `[vault] vault_file` |
 | `DO_CONTEXT_SHIELD_VAULT_TTL_SECONDS` | `[vault] vault_ttl_seconds` |
+| `DO_CONTEXT_SHIELD_VAULT_KEY_FILE` | `[vault] vault_key_file` |
 | `DO_CONTEXT_SHIELD_RECIPIENT` | `[context] recipient` |
 | `DO_CONTEXT_SHIELD_DATA_CATEGORY` | `[context] data_category` |
 | `DO_CONTEXT_SHIELD_PURPOSE` | `[context] purpose` |
@@ -62,6 +63,7 @@ Command lines are split on whitespace; quoting and shell expansion are not suppo
 | `vault_file` | path | unset | required by `vault = "json"`; selects the JSON vault on its own |
 | `vault_command` | command line | unset | required with `vault = "process"` |
 | `vault_ttl_seconds` | seconds | unset | memory vault only; only takes effect for `mcp-stdio` — one-shot commands exit before a mapping lifetime matters |
+| `vault_key_file` | path | unset | 64-hex-character key that encrypts the JSON vault at rest; requires `vault_file`, and on Unix the key file must be owner-only |
 
 ### `[context]`
 
@@ -91,8 +93,37 @@ Bounds one process-plugin response; the child is killed and reaped on timeout (`
 | `inspect` | detector keys of `[plugins]` (`detector`, `model_dir`, `detector_command`) and `[process]`; the vault is constructed but not queried |
 | `forget` | `[vault]`, `[process]` |
 | `mcp-stdio` | all sections except `[context]` (enforcement context arrives per `context.sanitize` argument); `[plugins] tools` sets the exposed tool surface |
+| `encrypt-vault` | nothing: both paths are explicit flags, so an ambient file can never trigger an in-place rewrite |
 
 The session scope never comes from the file: the vault-scoping commands (`sanitize`, `restore`, `forget`) require `--session` explicitly so mappings cannot leak across implicit scopes.
+
+## At-rest encryption
+
+Pointing the JSON vault at a key file encrypts every write with
+XChaCha20-Poly1305 (fresh 192-bit nonce per write; the format version is bound
+as associated data). The file becomes a small JSON envelope holding the format
+version, the cipher name, the nonce, and the ciphertext, so original values are
+never on disk in the clear.
+
+- The key file holds exactly 64 hex characters (`openssl rand -hex 32` writes
+  one). On Unix it must not be readable or writable by group or others —
+  `chmod 600` — and the tool refuses a key file that is.
+- `--vault-key-file <path>`, `DO_CONTEXT_SHIELD_VAULT_KEY_FILE`, or
+  `[vault] vault_key_file` select it; it requires a `vault_file`.
+- A plaintext vault with a key configured is **not** rewritten silently: the
+  call fails and names the migration command:
+
+  ```bash
+  do-context-shield encrypt-vault \
+      --vault-file ~/.local/share/do-context-shield/vault.json \
+      --vault-key-file ~/.config/do-context-shield/vault.key
+  ```
+
+  The rewrite goes through the same temporary-file-and-rename path as a normal
+  save (a failure cannot corrupt the existing vault) and preserves every
+  mapping.
+- An encrypted file opened without a key, a plaintext file opened with one, a
+  wrong key, and a modified envelope all fail closed with a named reason.
 
 ## Validation (fail closed)
 
@@ -104,7 +135,8 @@ Startup fails, naming the offending field, when
 - the `[vault]` combination cannot select one consistent vault:
   - `vault = "json"` without `vault_file`,
   - `vault_file` together with `vault = "memory"` or `vault = "process"`,
-  - `vault_ttl_seconds` with anything but the memory vault (`json`, `process`, or a lone `vault_file`, which selects the JSON vault).
+  - `vault_ttl_seconds` with anything but the memory vault (`json`, `process`, or a lone `vault_file`, which selects the JSON vault),
+  - `vault_key_file` without a `vault_file`, or with `vault = "memory"`/`"process"` — only the JSON vault encrypts at rest.
 
 Plugin names are validated at load time against the same set the CLI flags accept, so a typo cannot silently select a different plugin.
 
@@ -126,6 +158,16 @@ vault_file = "/home/user/.local/share/do-context-shield/vault.json"
 ```
 
 Path values are TOML basic strings, so a Windows path needs its backslashes doubled (`vault_file = "C:\\Users\\me\\vault.json"`) or a literal string (`vault_file = 'C:\Users\me\vault.json'`); a single-backslash path fails to parse.
+
+Same vault, encrypted at rest:
+
+```toml
+[vault]
+vault_file = "/home/user/.local/share/do-context-shield/vault.json"
+vault_key_file = "/home/user/.config/do-context-shield/vault.key"
+```
+
+`openssl rand -hex 32 > vault.key && chmod 600 vault.key` creates the key; an existing plaintext vault at `vault_file` must be migrated once with `do-context-shield encrypt-vault --vault-file … --vault-key-file …` (see "At-rest encryption").
 
 MCP server with a local judge and a bounded memory vault:
 

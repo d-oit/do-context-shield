@@ -54,6 +54,9 @@ pub(super) fn apply(config: &mut Config) -> Result<(), Box<dyn std::error::Error
     if let Some(value) = var("DO_CONTEXT_SHIELD_VAULT_FILE") {
         config.vault.vault_file = Some(PathBuf::from(value));
     }
+    if let Some(value) = var("DO_CONTEXT_SHIELD_VAULT_KEY_FILE") {
+        config.vault.vault_key_file = Some(PathBuf::from(value));
+    }
     if let Some(value) = var("DO_CONTEXT_SHIELD_VAULT_TTL_SECONDS") {
         let seconds = value.parse::<u64>().map_err(|error| {
             format!(

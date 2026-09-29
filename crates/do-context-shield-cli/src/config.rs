@@ -72,6 +72,7 @@ pub(crate) struct VaultConfig {
     pub(crate) vault_file: Option<PathBuf>,
     pub(crate) vault_command: Option<String>,
     pub(crate) vault_ttl_seconds: Option<u64>,
+    pub(crate) vault_key_file: Option<PathBuf>,
 }
 
 /// Default enforcement context for `sanitize`.
@@ -204,6 +205,7 @@ pub(crate) fn validate(config: &Config) -> Result<(), Box<dyn std::error::Error>
 fn validate_vault(vault: &VaultConfig) -> Result<(), Box<dyn std::error::Error>> {
     let file = vault.vault_file.is_some();
     let ttl = vault.vault_ttl_seconds.is_some();
+    let key = vault.vault_key_file.is_some();
     match vault.vault.as_deref() {
         Some("process") => {
             if file {
@@ -212,10 +214,16 @@ fn validate_vault(vault: &VaultConfig) -> Result<(), Box<dyn std::error::Error>>
             if ttl {
                 return Err(ttl_requires_memory("process"));
             }
+            if key {
+                return Err(key_requires_json_vault("process"));
+            }
         }
         Some("memory") => {
             if file {
                 return Err(vault_file_conflict("memory"));
+            }
+            if key {
+                return Err(key_requires_json_vault("memory"));
             }
         }
         Some("json") => {
@@ -231,9 +239,22 @@ fn validate_vault(vault: &VaultConfig) -> Result<(), Box<dyn std::error::Error>>
             if file && ttl {
                 return Err(ttl_requires_memory("json"));
             }
+            if key && !file {
+                return Err(
+                    "config: `vault_key_file` requires `vault_file` (the JSON vault)".into(),
+                );
+            }
         }
     }
     Ok(())
+}
+
+/// A `vault_key_file` alongside an explicit non-JSON vault name.
+fn key_requires_json_vault(name: &str) -> Box<dyn std::error::Error> {
+    format!(
+        "config: vault `{name}` cannot be combined with `vault_key_file` (only the JSON vault encrypts at rest)"
+    )
+    .into()
 }
 
 /// A `vault_file` alongside an explicit non-JSON vault name.
@@ -277,6 +298,7 @@ pub(crate) struct CliSelection {
     pub(crate) pipeline: PipelineSelection,
     pub(crate) vault: VaultSelection,
     pub(crate) vault_file: Option<PathBuf>,
+    pub(crate) vault_key_file: Option<PathBuf>,
     pub(crate) vault_ttl_seconds: Option<u64>,
     pub(crate) context: ContextArgs,
     pub(crate) process: ProcessArgs,
@@ -297,6 +319,7 @@ pub(crate) struct Resolved {
     pub(crate) judge_command: Option<String>,
     pub(crate) vault: Option<String>,
     pub(crate) vault_file: Option<PathBuf>,
+    pub(crate) vault_key_file: Option<PathBuf>,
     pub(crate) vault_command: Option<String>,
     pub(crate) vault_ttl_seconds: Option<u64>,
     pub(crate) recipient: String,
@@ -355,6 +378,7 @@ pub(crate) fn resolve(cli: CliSelection, config: &Config) -> Resolved {
             .or_else(|| plugins.judge_command.clone()),
         vault: cli.vault.vault.or_else(|| vault.vault.clone()),
         vault_file: cli.vault_file.or_else(|| vault.vault_file.clone()),
+        vault_key_file: cli.vault_key_file.or_else(|| vault.vault_key_file.clone()),
         vault_command: cli
             .vault
             .vault_command

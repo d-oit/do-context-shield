@@ -28,7 +28,7 @@ Claude Code / OpenCode / Codex / Gemini CLI / custom agent
 - Process plugins: a local executable can implement detection, judging, policy, transformation, or storage over newline-delimited JSON (`--detector process --detector-command "<program> [args...]"`, likewise `--judge`, `--policy`, `--transformer`, and `--vault` with their own command flags; see `docs/process-plugin.md`).
 - Default policy: pseudonymize personal identifiers; redact secrets.
 - Optional semantic judge (`--judge heuristics` or a local process judge) that labels candidates; secrets stay redacted regardless of judge output.
-- In-memory vault with session scoping.
+- In-memory vault with session scoping, plus an opt-in JSON vault for cross-process workflows that can be encrypted at rest with a key file (`--vault-key-file`; `encrypt-vault` migrates an existing plaintext vault).
 - CLI over stdin/stdout.
 - MCP-style JSON-RPC stdio adapter with `context.sanitize`, `context.restore`, `context.inspect`, and `context.forget` tools.
 - Agent skill instructions usable by coding clients that can execute shell tools.

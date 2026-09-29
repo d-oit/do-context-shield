@@ -38,7 +38,7 @@ fn assert_token_entropy(rest: &str, text: &str) {
 
 /// Every environment variable the binary reads. Cleared by [`cmd`] so an
 /// ambient value can never change a test.
-pub const CONFIG_ENV_VARS: [&str; 12] = [
+pub const CONFIG_ENV_VARS: [&str; 13] = [
     "DO_CONTEXT_SHIELD_DATA_CATEGORY",
     "DO_CONTEXT_SHIELD_DETECTOR",
     "DO_CONTEXT_SHIELD_JUDGE",
@@ -50,6 +50,7 @@ pub const CONFIG_ENV_VARS: [&str; 12] = [
     "DO_CONTEXT_SHIELD_TRANSFORMER",
     "DO_CONTEXT_SHIELD_VAULT",
     "DO_CONTEXT_SHIELD_VAULT_FILE",
+    "DO_CONTEXT_SHIELD_VAULT_KEY_FILE",
     "DO_CONTEXT_SHIELD_VAULT_TTL_SECONDS",
 ];
 

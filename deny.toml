@@ -27,6 +27,10 @@ version = 2
 allow = [
     "MIT",
     "Apache-2.0",
+    # `subtle`, pulled in by chacha20poly1305's Poly1305 MAC (universal-hash)
+    # for the encrypted JSON vault. Constant-time primitives, OSI-approved
+    # permissive license; reviewed 2026-09-29.
+    "BSD-3-Clause",
     # libloading, pulled in by ort's load-dynamic backend (gliner2 feature).
     "ISC",
     "Unicode-3.0",

@@ -262,5 +262,11 @@
     "rationale": "Claiming non-reversibility while emitting a mintable token or a mapping would keep the raw value recoverable from the vault; equal values of one kind collapsing to one token is the documented trade-off, and it must not silently degrade into pseudonymization",
     "sensor": "cargo test -p do-context-shield-transformer-generalize -p do-context-shield-transformer-mask + cargo test -p do-context-shield (tests/cli_transformers.rs)",
     "category": "security"
+  },
+  {
+    "invariant": "The JSON vault encrypts at rest when a key file is configured (XChaCha20-Poly1305 envelope, fresh nonce per write, format marker as associated data): a plaintext file requires an explicit `encrypt-vault` migration, and a wrong key, a modified envelope, or a file in the other format fails closed instead of being misread",
+    "rationale": "The vault file holds raw originals by design; without a key they are readable by anything that reaches the file (backups, shared machines, an accidental copy), and a silent reinterpretation of the wrong format could persist plaintext the operator believes is encrypted",
+    "sensor": "cargo test -p do-context-shield-vault-json + cargo test -p do-context-shield (tests/cli_vault_encryption.rs)",
+    "category": "security"
   }
 ]

@@ -28,6 +28,7 @@ pub(crate) enum Command {
     Inspect(InspectArgs),
     Forget(ForgetArgs),
     McpStdio(McpArgs),
+    EncryptVault(EncryptVaultArgs),
 }
 
 #[derive(Args)]
@@ -82,6 +83,10 @@ pub(crate) struct VaultArgs {
     /// Optional local file for persistence across separate CLI processes (JSON vault).
     #[arg(long)]
     pub(crate) vault_file: Option<PathBuf>,
+    /// Optional 64-hex-character key file that encrypts the JSON vault at rest
+    /// (requires `--vault-file`; on Unix the key file must be owner-only).
+    #[arg(long)]
+    pub(crate) vault_key_file: Option<PathBuf>,
     #[command(flatten)]
     pub(crate) store: VaultSelection,
 }
@@ -91,6 +96,10 @@ pub(crate) struct McpArgs {
     /// Optional local file for persistence across MCP process restarts (JSON vault).
     #[arg(long)]
     pub(crate) vault_file: Option<PathBuf>,
+    /// Optional 64-hex-character key file that encrypts the JSON vault at rest
+    /// (requires `--vault-file`; on Unix the key file must be owner-only).
+    #[arg(long)]
+    pub(crate) vault_key_file: Option<PathBuf>,
     /// Lifetime in seconds after which in-process memory-vault mappings stop
     /// resolving (memory vault only).
     #[arg(long)]
@@ -110,6 +119,21 @@ pub(crate) struct McpArgs {
     pub(crate) pipeline: PipelineSelection,
     #[command(flatten)]
     pub(crate) process: ProcessArgs,
+}
+
+/// Rewrite an existing plaintext JSON vault in the encrypted format.
+///
+/// Both paths are explicit on purpose: a migration rewrites the vault in
+/// place, so it must not be triggered by an ambient configuration file.
+#[derive(Args)]
+pub(crate) struct EncryptVaultArgs {
+    /// Existing plaintext vault file to migrate.
+    #[arg(long)]
+    pub(crate) vault_file: PathBuf,
+    /// 64-hex-character key file the vault is encrypted with
+    /// (owner-only on Unix).
+    #[arg(long)]
+    pub(crate) vault_key_file: PathBuf,
 }
 
 /// Parse the `--tools` value into a [`ToolSet`].

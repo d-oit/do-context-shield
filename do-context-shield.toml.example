@@ -18,6 +18,7 @@ transformer = "pseudonymize"        # pseudonymize | generalize | mask | process
 # vault_file = "vault.json"        # required with vault = "json"
 # vault_command = "my-vault"       # process plugin command
 # vault_ttl_seconds = 3600         # memory vault mapping lifetime
+# vault_key_file = "vault.key"     # 64-hex key file that encrypts the JSON vault at rest
 
 # Default enforcement context for `sanitize`. CLI flags override per call.
 [context]
