@@ -4,7 +4,8 @@
 //! the [`ProcessingContext`]:
 //!
 //! - secret-like kinds and `secret` labels always redact;
-//! - special-category data addressed to external or unknown recipients is blocked;
+//! - special-category data addressed to external or unknown recipients is
+//!   blocked, and a trusted recipient blocks it while `jurisdiction` is unset;
 //! - unknown recipients block every non-secret entity that is not `non_personal`;
 //! - `test`/`business` labels at or above 0.90 keep the value;
 //! - a local recipient keeps non-secret values;
@@ -60,12 +61,14 @@ fn decide(kind: &str, decision: Option<&Judgment>, context: &ProcessingContext) 
         return Action::Redact;
     }
 
-    // Special-category data never reaches an external or unknown recipient.
+    // Special-category data never reaches a non-local recipient without a
+    // declared jurisdiction: external and unknown recipients always block,
+    // and a trusted recipient blocks while the jurisdiction is unknown.
     if context.data_category == DataCategory::SpecialCategory
-        && matches!(
+        && (matches!(
             context.recipient,
             RecipientClass::External | RecipientClass::Unknown
-        )
+        ) || (context.recipient != RecipientClass::Local && context.jurisdiction.is_none()))
     {
         return Action::Block;
     }
@@ -266,12 +269,26 @@ mod tests {
     }
 
     #[test]
-    fn special_category_to_trusted_pseudonymizes() {
-        // Only external and unknown recipients block special-category data; a
-        // trusted recipient pseudonymizes it like any other personal data.
+    fn special_category_to_trusted_without_jurisdiction_blocks() {
+        // Unknown jurisdiction fails closed: trusted is the one non-local
+        // recipient the plain recipient rules let through, so the absent
+        // jurisdiction decides against the transfer.
         let context = ProcessingContext {
             recipient: RecipientClass::Trusted,
             data_category: DataCategory::SpecialCategory,
+            ..ProcessingContext::default()
+        };
+        assert_eq!(action_with("email", &[], &context), Action::Block);
+    }
+
+    #[test]
+    fn special_category_to_trusted_with_a_jurisdiction_pseudonymizes() {
+        // A declared jurisdiction keeps the previous behavior: only external
+        // and unknown recipients block special-category data outright.
+        let context = ProcessingContext {
+            recipient: RecipientClass::Trusted,
+            data_category: DataCategory::SpecialCategory,
+            jurisdiction: Some("DE".to_owned()),
             ..ProcessingContext::default()
         };
         assert_eq!(action_with("email", &[], &context), Action::Pseudonymize);

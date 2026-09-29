@@ -214,10 +214,13 @@ pub(crate) struct ContextArgs {
     /// Data category of the input used by the policy (default `personal`).
     #[arg(long, value_parser = ["non_personal", "personal", "special_category"])]
     pub(crate) data_category: Option<String>,
-    /// Purpose of the processing operation (free-form, policy-matched).
+    /// Purpose of the processing operation (free-form). Forwarded to policy
+    /// plugins; the built-in default policy does not read it, and it never
+    /// loosens a decision.
     #[arg(long)]
     pub(crate) purpose: Option<String>,
-    /// Jurisdiction code (ISO 3166-1 alpha-2), if known.
+    /// Jurisdiction code (ISO 3166-1 alpha-2), if known. Unset counts as
+    /// unknown, which blocks special-category data to any non-local recipient.
     #[arg(long)]
     pub(crate) jurisdiction: Option<String>,
 }
