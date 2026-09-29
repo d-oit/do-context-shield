@@ -84,8 +84,8 @@
     "category": "security"
   },
   {
-    "invariant": "MCP stdio tools/list stays in fixed order with ttlMs/cacheScope metadata, the server/discover and initialize paths resolve to identical tool behavior, server/discover carries resultType, a request `_meta.protocolVersion` is read (a missing one only warns, never rejects), and tool executions report failures as `isError` results while protocol failures (malformed JSON-RPC, unknown method/tool, non-object arguments, disabled tool) stay JSON-RPC errors",
-    "rationale": "Clients cache tool lists; order and metadata drift breaks that contract silently",
+    "invariant": "MCP stdio tools/list stays in fixed order and every successful result carries resultType `complete`, with ttlMs/cacheScope hints on both server/discover and tools/list; the server/discover and initialize paths resolve to identical tool behavior; the namespaced request metadata `params._meta[io.modelcontextprotocol/protocolVersion]` must name a supported version when present (an unsupported one is rejected with -32022 before dispatch), while a request without it only warns and is answered as a pre-2026 client; tool executions report failures as `isError` results while protocol failures (malformed JSON-RPC, invalid request, unknown method/tool, non-object params or arguments, disabled tool) stay JSON-RPC errors with the standard codes",
+    "rationale": "Clients cache tool lists and branch on resultType and cache hints; order, metadata, and error-code drift breaks that contract silently, and a version check that dispatched first would let a tool run under a protocol revision the client never negotiated",
     "sensor": "cargo test -p do-context-shield-mcp-server + cargo test -p do-context-shield (tests/mcp_stdio.rs: tool_failure_is_an_iserror_result, meta_version_warning_goes_to_stderr_for_legacy_requests)",
     "category": "contracts"
   },
@@ -198,7 +198,7 @@
     "category": "security"
   },
   {
-    "invariant": "The configuration file may only select known plugins and context names; unknown fields or values fail startup, and precedence is CLI flag > DO_CONTEXT_SHIELD_* environment variable > file value > built-in default, with every source validated the same way",
+    "invariant": "The configuration file may only select known plugins and context names; unknown fields or values fail startup, and precedence is CLI flag > DO_CONTEXT_SHIELD_* environment variable > file value > built-in default, with every source validated the same way, and `mcp-stdio` accepts file values only through an explicit `--config` path (auto-discovery stays for the one-shot commands)",
     "rationale": "A config typo must never silently select a weaker plugin, and effective settings must not depend on which clap default happened to be compiled in or which source supplied a value",
     "sensor": "cargo test -p do-context-shield --bins (config module tests: unknown field/value rejected, CLI-over-config precedence, tools validation) + cargo test -p do-context-shield --test cli_config (env-over-file, flag-over-env, invalid env override, auto-discovery)",
     "category": "security"
@@ -270,9 +270,9 @@
     "category": "security"
   },
   {
-    "invariant": "The config file's `[context]` values are the default enforcement context of the CLI `sanitize` call and of the `mcp-stdio` server for `context.sanitize` requests that omit the arguments; a per-call argument (or CLI flag) overrides the file value field by field, and the built-in fallback stays the most restrictive context (external recipient, personal data)",
-    "rationale": "The config file was documented as supplying these defaults, but mcp-stdio resolved them and then dropped them, so a registration pinned to `recipient = \"local\"` silently ran with the external default; both directions are user-visible policy changes and the doc pages disagreed about which one held",
-    "sensor": "cargo test -p do-context-shield --test mcp_stdio (config_file_context_supplies_server_defaults) + cargo test -p do-context-shield-mcp-server (handle::tests::server_context_supplies_defaults_and_tool_arguments_override, sanitize_context_recipient_reaches_the_policy)",
+    "invariant": "The config file's `[context]` values are the default enforcement context of the CLI `sanitize` call and, when selected with an explicit `--config`, of the `mcp-stdio` server for `context.sanitize` requests that omit the arguments (the MCP entry point never reads an ambient project file); a per-call argument (or CLI flag) overrides the file value field by field, and the built-in fallback stays the most restrictive context (external recipient, personal data)",
+    "rationale": "The config file was documented as supplying these defaults, but mcp-stdio resolved them and then dropped them, so a registration pinned to `recipient = \"local\"` silently ran with the external default; both directions are user-visible policy changes and the doc pages disagreed about which one held, and the MCP side additionally reads file values only via `--config` so a project directory cannot set them for the server it spawns",
+    "sensor": "cargo test -p do-context-shield --test mcp_stdio_config",
     "category": "contracts"
   }
 ]

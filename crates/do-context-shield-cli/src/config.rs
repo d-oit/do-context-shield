@@ -107,10 +107,42 @@ pub(crate) struct ProcessConfig {
 /// override is not a valid value. A missing explicit path is an error; a
 /// candidate that does not exist is simply not selected.
 pub(crate) fn load(explicit: Option<&Path>) -> Result<Config, Box<dyn std::error::Error>> {
-    let mut config = match explicit {
+    let config = match explicit {
         Some(path) => read(path)?,
         None => read_discovered()?,
     };
+    apply_env(config)
+}
+
+/// Load the configuration for a command that must not read an ambient file:
+/// only the explicit `--config <path>` is honoured; without it every field
+/// keeps its built-in default.
+///
+/// `mcp-stdio` uses this loader. An MCP client spawns the server with the
+/// project as its working directory, so auto-discovery would let a repository
+/// file select process plugins, loosen `[context]`, or expose
+/// `context.restore` merely by being the server's cwd. Trusted
+/// `DO_CONTEXT_SHIELD_*` environment overrides still apply.
+///
+/// # Errors
+///
+/// Returns an error when the explicit path cannot be read or parsed, or when
+/// an environment override is not a valid value. A missing explicit path is an
+/// error, never a silent fallback to defaults.
+pub(crate) fn load_explicit(explicit: Option<&Path>) -> Result<Config, Box<dyn std::error::Error>> {
+    let config = match explicit {
+        Some(path) => read(path)?,
+        None => Config::default(),
+    };
+    apply_env(config)
+}
+
+/// Apply `DO_CONTEXT_SHIELD_*` overrides to a loaded configuration.
+///
+/// # Errors
+///
+/// Returns an error when an override is not a valid value.
+fn apply_env(mut config: Config) -> Result<Config, Box<dyn std::error::Error>> {
     env::apply(&mut config)?;
     Ok(config)
 }

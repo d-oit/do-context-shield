@@ -3,6 +3,9 @@
 
 # do-harness local state and evidence artifacts
 .do-harness/
+# `do-harness task export` snapshot, derived from the state database above
+# (`do-harness task list` reads the live state; this file is never hand-edited)
+/plans/tasks.json
 
 # Local model exports and ONNX Runtime archives (paths docs/plugins.md creates
 # inside the checkout; they are hundreds of megabytes and never committed)

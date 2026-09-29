@@ -28,6 +28,25 @@ fn discover_returns_supported_versions() {
         versions.iter().any(|version| version == "2026-07-28"),
         "{response}"
     );
+    assert_eq!(
+        response
+            .pointer("/result/resultType")
+            .and_then(Value::as_str),
+        Some("complete"),
+        "{response}"
+    );
+    assert_eq!(
+        response.pointer("/result/ttlMs").and_then(Value::as_u64),
+        Some(300_000),
+        "{response}"
+    );
+    assert_eq!(
+        response
+            .pointer("/result/cacheScope")
+            .and_then(Value::as_str),
+        Some("private"),
+        "{response}"
+    );
     session.close();
 }
 
@@ -135,7 +154,7 @@ fn forget_over_stdio() {
 fn malformed_json_returns_error() {
     let mut session = McpSession::start();
     let response = session.send("{not valid json");
-    assert_eq!(error_code(&response), Some(-32000), "{response}");
+    assert_eq!(error_code(&response), Some(-32700), "{response}");
     // The loop survives the bad line and keeps serving requests.
     let follow_up =
         session.send(r#"{"jsonrpc":"2.0","id":2,"method":"server/discover","params":{}}"#);
@@ -147,7 +166,7 @@ fn malformed_json_returns_error() {
 fn unknown_method_returns_error() {
     let mut session = McpSession::start();
     let response = session.send(r#"{"jsonrpc":"2.0","id":1,"method":"bogus"}"#);
-    assert_eq!(error_code(&response), Some(-32000), "{response}");
+    assert_eq!(error_code(&response), Some(-32601), "{response}");
     let message = response
         .pointer("/error/message")
         .and_then(Value::as_str)
@@ -165,6 +184,13 @@ fn tool_failure_is_an_iserror_result() {
     assert_eq!(
         response.pointer("/result/isError").and_then(Value::as_bool),
         Some(true),
+        "{response}"
+    );
+    assert_eq!(
+        response
+            .pointer("/result/resultType")
+            .and_then(Value::as_str),
+        Some("complete"),
         "{response}"
     );
     assert!(response.get("error").is_none(), "{response}");
@@ -198,10 +224,10 @@ fn meta_version_warning_goes_to_stderr_for_legacy_requests() {
         panic!("piped stdin missing");
     };
     let requests = [
-        // Pre-2026 request: no `_meta`, so the warning is expected.
+        // Pre-2026 request: no namespaced `_meta`, so the warning is expected.
         r#"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}"#,
-        // Modern request: `_meta.protocolVersion` is present, so no warning.
-        r#"{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"_meta":{"protocolVersion":"2026-07-28"}}}"#,
+        // Modern request: the namespaced metadata is present, so no warning.
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}"#,
     ];
     for request in requests {
         if let Err(error) = writeln!(stdin, "{request}") {

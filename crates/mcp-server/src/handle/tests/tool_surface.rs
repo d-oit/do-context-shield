@@ -48,6 +48,11 @@ fn disabled_tools_are_rejected_with_guidance() {
             .and_then(Value::as_str)
             .unwrap_or_default();
         assert!(message.contains("not enabled"), "{value}");
+        assert_eq!(
+            value.pointer("/error/code").and_then(Value::as_i64),
+            Some(-32601),
+            "{value}"
+        );
         assert!(
             value.get("result").is_none(),
             "expected no result in {value}"

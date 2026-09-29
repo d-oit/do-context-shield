@@ -10,6 +10,8 @@ Status: implemented (`crates/do-context-shield-cli/src/config.rs`). Every option
 
 The first existing candidate wins. Without any file, every option keeps its built-in default. A candidate that exists but cannot be read or parsed is an error — the tool never falls back to defaults silently, and a candidate of that name that is not a regular file (a directory, a dangling symlink) is such an error rather than an absent one. A missing `--config` path is an error too: the explicit path is an instruction, while an absent auto-discovery candidate is simply not selected.
 
+The one-shot commands use this search. `mcp-stdio` reads a file only when `--config <path>` names it: MCP clients spawn the server with the project as its working directory, so a repository shipping `do-context-shield.toml` could otherwise select `process` plugins, loosen `[context]`, or expose `context.restore` merely by being the server's cwd. Without `--config` the MCP server starts from the built-in defaults (trusted `DO_CONTEXT_SHIELD_*` environment overrides still apply); register it as `do-context-shield mcp-stdio --config /absolute/trusted/config.toml`.
+
 Paths in the file are literal: environment variables and `~` are not expanded.
 
 ## Precedence
@@ -92,7 +94,7 @@ Bounds one process-plugin response; the child is killed and reaped on timeout (`
 | `restore` | `[vault]`, `[process]`; detector/policy/transformer selections are ignored (only the vault is built, and restore only resolves placeholders) |
 | `inspect` | detector keys of `[plugins]` (`detector`, `model_dir`, `detector_command`) and `[process]`; policy, transformer, and vault selections are ignored |
 | `forget` | `[vault]`, `[process]`; detector/policy/transformer selections are ignored |
-| `mcp-stdio` | all sections; `[context]` becomes the server default for `context.sanitize` and per-call arguments override it (field by field); `[plugins] tools` sets the exposed tool surface |
+| `mcp-stdio` | all sections, but only from a file selected with `--config <path>` (auto-discovery is off); `[context]` becomes the server default for `context.sanitize` and per-call arguments override it (field by field); `[plugins] tools` sets the exposed tool surface |
 | `encrypt-vault` | nothing: both paths are explicit flags, so an ambient file can never trigger an in-place rewrite |
 
 A selection a command does not use is not built, so a plugin that cannot be constructed there (a `process` policy without a command, a JSON vault without a file) fails only the commands that run that stage — `inspect` still works with a broken `[vault]`, `forget` with a broken `[plugins]`.

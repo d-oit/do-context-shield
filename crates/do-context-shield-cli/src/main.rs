@@ -436,7 +436,14 @@ fn run_encrypt_vault(args: &EncryptVaultArgs) -> Result<(), Box<dyn std::error::
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    let config = config::load(cli.config.as_deref())?;
+    // `mcp-stdio` runs with the client's project as its working directory, so
+    // an ambient file there must not configure it: the MCP entry point reads
+    // only an explicit `--config` path. One-shot commands keep auto-discovery.
+    let config = if matches!(&cli.command, Command::McpStdio(_)) {
+        config::load_explicit(cli.config.as_deref())?
+    } else {
+        config::load(cli.config.as_deref())?
+    };
     config::validate(&config)?;
     run_simple(cli.command, &config)
 }
