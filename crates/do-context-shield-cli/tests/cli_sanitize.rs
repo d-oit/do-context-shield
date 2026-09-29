@@ -131,3 +131,25 @@ fn explicit_json_vault_selection_round_trips() {
         .success();
     assert_eq!(stdout_of(&restored), original);
 }
+
+/// The context flags are wired to the policy, not just parsed: `trusted`
+/// pseudonymizes, `local` keeps. A flag dropped on the way to
+/// `ProcessingContext` would make both behave like the default `external`.
+#[test]
+fn context_flags_drive_the_policy() {
+    let dir = temp_dir();
+    let vulnerable = cmd(dir.path())
+        .args(["sanitize", "--session", "trusted", "--recipient", "trusted"])
+        .write_stdin("alice@example.com")
+        .assert()
+        .success();
+    let pseudonymized = stdout_of(&vulnerable);
+    common::assert_placeholder(&pseudonymized, "EMAIL", 1);
+
+    let kept = cmd(dir.path())
+        .args(["sanitize", "--session", "local", "--recipient", "local"])
+        .write_stdin("alice@example.com")
+        .assert()
+        .success();
+    assert_eq!(stdout_of(&kept), "alice@example.com");
+}

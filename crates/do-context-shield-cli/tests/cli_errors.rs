@@ -103,3 +103,23 @@ fn vault_ttl_with_a_non_memory_vault_exits_1() {
             .stderr(predicates::str::contains("requires the memory vault"));
     }
 }
+
+/// The enforcement-context flags reach the policy: `unknown` and
+/// `special_category` under the default `external` recipient are blocking
+/// combinations, and a dropped or inverted flag would show up here.
+#[test]
+fn blocking_context_exits_1() {
+    let dir = temp_dir();
+    for flags in [
+        ["--recipient", "unknown"].as_slice(),
+        ["--data-category", "special_category"].as_slice(),
+    ] {
+        cmd(dir.path())
+            .args(["sanitize", "--session", "s"])
+            .args(flags)
+            .write_stdin("alice@example.com")
+            .assert()
+            .code(1)
+            .stderr(predicates::str::contains("blocked by policy"));
+    }
+}
