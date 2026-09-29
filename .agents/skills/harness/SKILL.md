@@ -76,6 +76,10 @@ A sensor firing more than twice in one task is a feedforward-guide defect. Updat
 ## Gotchas
 
 - Never trust LLM self-assessment over a computational sensor's exit code.
+- Merge discipline: `main` requires `CI Success` on an up-to-date branch, and the check is bound
+  to the PR's merge commit — auto-merge never updates a `BEHIND` head, so run
+  `scripts/update-pr-branches.sh` before each merge and re-run it after every merge (see
+  `AGENTS.md` → "Pull-request merges").
 - Never weaken or delete the sensor that fired; fix the cause.
 - `.do-harness/` (state database, evidence) and `target/` are gitignored local state — never durable evidence, never committed.
 - `do-harness eval` needs `.agents/skills/skill-creator/scripts/quick_validate.py` (dependency-free, no PyYAML) in its sandbox, and `--strict-fixtures` rejects thin datasets; grader drift requires an explicit `--bless`.

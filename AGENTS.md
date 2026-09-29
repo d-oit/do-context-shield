@@ -44,6 +44,23 @@ Agent = Model + Harness: feedforward guides prevent errors before coding, feedba
 - Feature-gated builds (`--features gliner2`) are not part of the default sensor suite; run `cargo check`/`clippy`/`test` for the feature explicitly when touching those crates.
 - Probes and throwaway scripts stay under `target/` (gitignored); never commit them.
 
+### Pull-request merges (strict required checks)
+
+`main` accepts pull requests only, and requires the `CI Success` check on an up-to-date branch.
+The check is bound to the PR's merge commit, so **every merge to `main` invalidates the checks
+of every other open PR** — and GitHub auto-merge never updates the head branch, so it waits
+forever on a `BEHIND` PR instead of draining a batch.
+
+- Run `scripts/update-pr-branches.sh` before merging: it rebases every open PR that is `BEHIND`
+  through `gh pr update-branch --rebase` (server-side, no local checkout). Wait for `CI Success`,
+  merge one PR, then re-run the script after each merge.
+- A PR the script reports as conflicting needs a local rebase. The recurring collisions are the
+  `CHANGELOG.md` bullet lists and `plans/invariants.json`: several pending PRs insert at the same
+  anchor, so keep both sides — and for a batch of CHANGELOG entries, anchor each PR's bullet to a
+  *different* existing entry so the next merge does not re-conflict it.
+- Merge with `gh pr merge <n> --squash --delete-branch` (matches the existing history); never
+  bypass the required check with `--admin`.
+
 ## Machine-readable decisions
 
 Every durable rule is recorded in `plans/invariants.json` as `{invariant, rationale, sensor, category}` and seeded into the state database (`do-harness seed --prune`). A rule whose `sensor` is review-only is not machine-enforced — prefer adding the sensor.
