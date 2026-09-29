@@ -54,7 +54,12 @@ pub fn is_minted_placeholder_token(token: &str) -> bool {
 }
 
 /// Whether `kind` can be embedded in a token and parsed by `restore`.
-fn is_valid_placeholder_kind(kind: &str) -> bool {
+///
+/// The shape mirrors [`is_placeholder_token`]: ASCII alphanumerics and single
+/// underscores only, starting and ending with an alphanumeric, so appending
+/// the closing delimiter could never split the token early.
+#[must_use]
+pub fn is_valid_placeholder_kind(kind: &str) -> bool {
     let bytes = kind.as_bytes();
     !bytes.is_empty()
         && bytes[0].is_ascii_alphanumeric()

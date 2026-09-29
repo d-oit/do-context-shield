@@ -475,6 +475,8 @@ dependencies = [
  "do-context-shield-plugin-api",
  "do-context-shield-plugin-process",
  "do-context-shield-policy-default",
+ "do-context-shield-transformer-generalize",
+ "do-context-shield-transformer-mask",
  "do-context-shield-transformer-pseudonymize",
  "do-context-shield-vault-memory",
  "thiserror",
@@ -485,6 +487,22 @@ name = "do-context-shield-policy-default"
 version = "0.1.0"
 dependencies = [
  "do-context-shield-plugin-api",
+]
+
+[[package]]
+name = "do-context-shield-transformer-generalize"
+version = "0.1.0"
+dependencies = [
+ "do-context-shield-plugin-api",
+ "do-context-shield-vault-memory",
+]
+
+[[package]]
+name = "do-context-shield-transformer-mask"
+version = "0.1.0"
+dependencies = [
+ "do-context-shield-plugin-api",
+ "do-context-shield-vault-memory",
 ]
 
 [[package]]

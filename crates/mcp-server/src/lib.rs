@@ -154,7 +154,7 @@ pub struct ServerConfig {
     /// Command line of a local judge executable; required with `judge` set to `process`.
     /// Split on whitespace; quoting and shell expansion are not supported.
     pub judge_command: Option<String>,
-    /// Transformer plugin name: `pseudonymize` or `process`.
+    /// Transformer plugin name: `pseudonymize`, `generalize`, `mask`, or `process`.
     pub transformer: String,
     /// Command line of a local transformer executable; required with `process`.
     /// Split on whitespace; quoting and shell expansion are not supported.

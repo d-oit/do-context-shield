@@ -166,9 +166,11 @@ pub(crate) struct PipelineSelection {
     /// Split on whitespace; quoting and shell expansion are not supported.
     #[arg(long)]
     pub(crate) policy_command: Option<String>,
-    /// Transformer plugin (default `pseudonymize`): `pseudonymize` or `process` (local executable
+    /// Transformer plugin (default `pseudonymize`): `pseudonymize` (reversible
+    /// vault-backed tokens), `generalize` (kind-only non-reversible tokens),
+    /// `mask` (partial reveal, non-reversible), or `process` (local executable
     /// over newline-delimited JSON).
-    #[arg(long, value_parser = ["pseudonymize", "process"])]
+    #[arg(long, value_parser = ["pseudonymize", "generalize", "mask", "process"])]
     pub(crate) transformer: Option<String>,
     /// Command line of a local transformer executable; required with `--transformer process`.
     /// Split on whitespace; quoting and shell expansion are not supported.

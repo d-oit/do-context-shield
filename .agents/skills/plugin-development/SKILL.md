@@ -28,7 +28,7 @@ Follow this skill to add a new implementation without breaking the privacy bound
 | detection | `Detector::detect` | `detector-regex`, `detector-gliner2` (local ONNX NER, `gliner2` feature), `plugin-process` (`detect`) | custom local NER, rules (`docs/plugins.md`) |
 | judging | `SemanticJudge::judge` | `judge-heuristics` (reserved-domain and role-address rules), `plugin-process` (`judge`) | local model, hosted judge via process |
 | policy | `Policy::plan` | `policy-default`, `plugin-process` (`plan`) | project / enterprise DLP policy |
-| transformation | `Transformer::transform` | `transformer-pseudonymize`, `plugin-process` (`transform`) | redact, generalize, encrypt |
+| transformation | `Transformer::transform` | `transformer-pseudonymize`, `transformer-generalize`, `transformer-mask`, `plugin-process` (`transform`) | redact, encrypt, format-preserving |
 | storage | `Vault::get_or_insert`, `Vault::resolve`, `Vault::delete_scope`, `Vault::expire` | `vault-memory`, `vault-json`, `plugin-process` (`vault_get_or_insert`, `vault_resolve`) | SQLite, OS keychain |
 
 ## Workflow

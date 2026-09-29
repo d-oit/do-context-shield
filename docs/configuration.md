@@ -43,7 +43,7 @@ Every variable is optional; an unset or empty variable keeps the file value. Val
 | --- | --- | --- | --- |
 | `detector` | `regex`, `gliner2`, `hybrid`, `process` | `regex` | |
 | `policy` | `default`, `process` | `default` | |
-| `transformer` | `pseudonymize`, `process` | `pseudonymize` | |
+| `transformer` | `pseudonymize`, `generalize`, `mask`, `process` | `pseudonymize` | `generalize`/`mask` are non-reversible: no vault writes, no restorable output |
 | `judge` | `heuristics`, `process` | unset | judging is optional and off by default |
 | `tools` | `sanitize`, `restore`, `inspect`, `forget`, `all` (comma-separated) | `sanitize,inspect` | `mcp-stdio` only; pins the exposed MCP tool surface in the file (equivalent to `--tools`) |
 | `model_dir` | path | unset | `gliner2`/`hybrid` ONNX export directory |
