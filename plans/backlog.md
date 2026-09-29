@@ -12,19 +12,6 @@ Recorded 2026-09-29 from the gap-analysis hardening pass (harness task 24).
 Each item was explicitly out of scope there and needs a product or
 architecture decision before code.
 
-### Format-preserving, generalize, and mask transformers
-
-- **Status**: `transformer-pseudonymize` is the only transformer, and it also
-  carries the `Redact` path. Generalize (kind-only, non-restorable output) and
-  mask (partial reveal) are new user-visible behaviors, not a code gap.
-- **Decision needed**: the generalize token shape (for example a kind-only
-  `__DO_PRIVATE_<KIND>__` that `restore` must leave untouched) and the masking
-  policy per kind (how many characters stay visible, and in which positions).
-- **Exit criteria**: transformer implementation(s) registered in
-  `plugin-registry` with CLI/config names, `restore` proven to be a no-op on
-  their output, and unit + CLI integration tests. Collapsing equal values must
-  not silently break the stable-identity guarantee pseudonymization keeps.
-
 ### Audit trail for transform mappings
 
 - **Status**: mappings live only inside the session-scoped vault; nothing
@@ -58,16 +45,18 @@ architecture decision before code.
 - **Exit criteria**: a documented, testable flow — or removal of the action
   from the public enum if review belongs outside the boundary.
 
-### `JsonVault` at-rest encryption and expiry
+### `JsonVault` on-disk TTL
 
-- **Status**: the JSON vault persists raw originals in plaintext with
-  owner-only file permissions; the TTL applies to the memory vault only.
-- **Decision needed**: key source and management (OS keychain or passphrase;
-  hosted KMS stays out per provider-agnosticism), format versioning and the
-  migration path for existing files, and on-disk TTL semantics (lazy purge vs
-  eager rewrite).
-- **Exit criteria**: an encrypted format with a migration path, documented
-  and tested TTL behavior, and no raw value recoverable from the file alone.
+- **Status**: at-rest encryption with a key file, the `encrypt-vault`
+  migration, and the format marker landed (harness task 26); `vault_ttl_seconds`
+  still requires the memory vault, so a JSON vault mapping lives until the file
+  is deleted or its scope is forgotten.
+- **Decision needed**: whether cross-process persistence should have a TTL at
+  all, and if so the on-disk semantics (lazy purge on read vs eager rewrite,
+  and how concurrent writer processes coordinate it).
+- **Exit criteria**: documented, tested TTL behavior for the JSON vault — or a
+  recorded decision that persistence deliberately has none and
+  `vault_ttl_seconds` stays memory-vault-only.
 
 ## Blocked — approval-gated
 
