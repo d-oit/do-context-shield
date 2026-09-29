@@ -1,6 +1,7 @@
 use super::*;
 use do_context_shield_plugin_api::{Entity, JudgeError, Judgment, SemanticJudge, SemanticLabel};
 
+mod context;
 mod errors;
 mod tool_surface;
 
@@ -29,7 +30,16 @@ fn request(pipeline: &mut PrivacyPipeline, body: &str) -> Option<Value> {
 }
 
 fn request_with(pipeline: &mut PrivacyPipeline, tools: ToolSet, body: &str) -> Option<Value> {
-    match handle_request(pipeline, tools, body) {
+    request_with_context(pipeline, tools, &ProcessingContext::default(), body)
+}
+
+fn request_with_context(
+    pipeline: &mut PrivacyPipeline,
+    tools: ToolSet,
+    context: &ProcessingContext,
+    body: &str,
+) -> Option<Value> {
+    match handle_request(pipeline, tools, context, body) {
         Ok(response) => response,
         Err(error) => panic!("unexpected error: {error}"),
     }
@@ -273,66 +283,6 @@ fn judge_labels_reach_the_policy() {
         &tool_call("context.sanitize", "alice@example.com", Some("s")),
     ));
     assert_placeholder(&replaced, "EMAIL", 1);
-}
-
-#[test]
-fn sanitize_context_recipient_reaches_the_policy() {
-    let mut pipeline = pipeline();
-    let kept = content_text(context_sanitize(
-        &mut pipeline,
-        "alice@example.com",
-        r#","recipient":"local""#,
-    ));
-    assert_eq!(kept, "alice@example.com");
-
-    let blocked = context_sanitize(
-        &mut pipeline,
-        "alice@example.com",
-        r#","recipient":"unknown""#,
-    );
-    let Some(value) = blocked else {
-        panic!("expected a response");
-    };
-    assert_eq!(
-        value.pointer("/result/isError").and_then(Value::as_bool),
-        Some(true),
-        "{value}"
-    );
-    let message = value
-        .pointer("/result/content/0/text")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    assert!(message.contains("blocked by policy"), "{value}");
-}
-
-#[test]
-fn sanitize_context_data_category_reaches_the_policy() {
-    let mut pipeline = pipeline();
-    let blocked = context_sanitize(
-        &mut pipeline,
-        "alice@example.com",
-        r#","data_category":"special_category""#,
-    );
-    let Some(value) = blocked else {
-        panic!("expected a response");
-    };
-    assert_eq!(
-        value.pointer("/result/isError").and_then(Value::as_bool),
-        Some(true),
-        "{value}"
-    );
-    assert!(value.get("error").is_none(), "{value}");
-}
-
-#[test]
-fn sanitize_context_purpose_and_jurisdiction_are_accepted() {
-    let mut pipeline = pipeline();
-    let sanitized = content_text(context_sanitize(
-        &mut pipeline,
-        "alice@example.com",
-        r#","purpose":"support","jurisdiction":"DE""#,
-    ));
-    assert_placeholder(&sanitized, "EMAIL", 1);
 }
 
 /// `context.forget` call with an optional session argument.

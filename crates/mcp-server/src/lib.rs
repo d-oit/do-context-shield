@@ -1,6 +1,7 @@
 //! MCP stdio adapter. The privacy engine itself remains transport-agnostic.
 
 use do_context_shield_core::PrivacyPipeline;
+use do_context_shield_plugin_api::ProcessingContext;
 use do_context_shield_plugin_process::{
     DEFAULT_TIMEOUT_MS, ProcessDetector, ProcessJudge, ProcessPolicy, ProcessTransformer,
 };
@@ -171,6 +172,12 @@ pub struct ServerConfig {
     /// MCP tools to expose. Defaults to [`ToolSet::model_facing`]: `restore`
     /// and `forget` stay off the model-facing surface unless opted in.
     pub tools: ToolSet,
+    /// Enforcement context for `context.sanitize` calls that omit the context
+    /// arguments, so a config file can pin them for a registration. Tool
+    /// arguments override it field by field; the default is the most
+    /// restrictive context (external recipient, personal data, no purpose or
+    /// jurisdiction).
+    pub context: ProcessingContext,
 }
 
 impl Default for ServerConfig {
@@ -192,6 +199,7 @@ impl Default for ServerConfig {
             process_timeout_ms: DEFAULT_TIMEOUT_MS,
             vault_ttl_seconds: None,
             tools: ToolSet::model_facing(),
+            context: ProcessingContext::default(),
         }
     }
 }
@@ -262,6 +270,7 @@ pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Err
     let mut output = stdout.lock();
     let mut line = String::new();
     let tools = config.tools;
+    let default_context = config.context.clone();
 
     loop {
         line.clear();
@@ -271,7 +280,7 @@ pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Err
         if line.trim().is_empty() {
             continue;
         }
-        let response = handle_request(&mut pipeline, tools, &line)?;
+        let response = handle_request(&mut pipeline, tools, &default_context, &line)?;
         if let Some(response) = response {
             serde_json::to_writer(&mut output, &response)?;
             output.write_all(b"\n")?;

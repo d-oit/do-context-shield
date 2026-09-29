@@ -64,20 +64,20 @@ fn warn_on_missing_meta(request: &Value) {
 
 /// Parse the optional enforcement-context arguments of `context.sanitize`.
 ///
-/// Omitted fields fall back to the most restrictive defaults (external
-/// recipient, personal data, no purpose or jurisdiction). An unknown enum name
-/// or a wrong JSON type is an error, never a silent downgrade to a weaker
-/// context.
-fn processing_context(args: &Value) -> Result<ProcessingContext, String> {
+/// Omitted fields fall back to `base`, the server's configured context (by
+/// default the most restrictive one: external recipient, personal data, no
+/// purpose or jurisdiction). An unknown enum name or a wrong JSON type is an
+/// error, never a silent downgrade to a weaker context.
+fn processing_context(args: &Value, base: &ProcessingContext) -> Result<ProcessingContext, String> {
     let recipient = match args.get("recipient") {
-        None | Some(Value::Null) => RecipientClass::default(),
+        None | Some(Value::Null) => base.recipient,
         Some(Value::String(name)) => RecipientClass::parse(name).ok_or_else(|| {
             format!("recipient must be one of local, trusted, external, unknown; got `{name}`")
         })?,
         Some(_) => return Err("recipient must be a string".to_owned()),
     };
     let data_category = match args.get("data_category") {
-        None | Some(Value::Null) => DataCategory::default(),
+        None | Some(Value::Null) => base.data_category,
         Some(Value::String(name)) => DataCategory::parse(name).ok_or_else(|| {
             format!(
                 "data_category must be one of non_personal, personal, special_category; got `{name}`"
@@ -86,9 +86,9 @@ fn processing_context(args: &Value) -> Result<ProcessingContext, String> {
         Some(_) => return Err("data_category must be a string".to_owned()),
     };
     Ok(ProcessingContext {
-        purpose: optional_string(args, "purpose")?,
+        purpose: optional_string(args, "purpose")?.or_else(|| base.purpose.clone()),
         recipient,
-        jurisdiction: optional_string(args, "jurisdiction")?,
+        jurisdiction: optional_string(args, "jurisdiction")?.or_else(|| base.jurisdiction.clone()),
         data_category,
     })
 }
@@ -105,6 +105,7 @@ fn optional_string(args: &Value, key: &str) -> Result<Option<String>, String> {
 pub(crate) fn handle_request(
     pipeline: &mut PrivacyPipeline,
     tools: ToolSet,
+    default_context: &ProcessingContext,
     line: &str,
 ) -> Result<Option<Value>, Box<dyn std::error::Error>> {
     let request: Value = match serde_json::from_str(line.trim()) {
@@ -147,7 +148,7 @@ pub(crate) fn handle_request(
                 .pointer("/params/arguments")
                 .cloned()
                 .unwrap_or_else(|| json!({}));
-            tool_call(pipeline, tools, id, name, &args)?
+            tool_call(pipeline, tools, default_context, id, name, &args)?
         }
         _ => error_response(id, "unknown method"),
     };
@@ -216,6 +217,7 @@ impl ToolName {
 fn tool_call(
     pipeline: &mut PrivacyPipeline,
     tools: ToolSet,
+    default_context: &ProcessingContext,
     id: Value,
     name: &str,
     args: &Value,
@@ -244,7 +246,7 @@ fn tool_call(
                 Ok(session) => session,
                 Err(message) => return Ok(tool_error(id, &message)),
             };
-            let context = match processing_context(args) {
+            let context = match processing_context(args, default_context) {
                 Ok(context) => context,
                 Err(message) => return Ok(tool_error(id, &message)),
             };
