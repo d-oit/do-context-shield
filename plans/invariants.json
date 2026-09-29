@@ -138,9 +138,9 @@
     "category": "security"
   },
   {
-    "invariant": "Recipient-aware default policy enforces GDPR/jurisdiction data categories: special-category data addressed to external or unknown recipients blocks, and unknown recipients block non-secret data except when it is explicitly declared non-personal",
-    "rationale": "Fail-closed boundary prevents sensitive personal data from leaking to unvetted recipients",
-    "sensor": "cargo test -p do-context-shield-policy-default -p do-context-shield-core",
+    "invariant": "Recipient-aware default policy enforces GDPR/jurisdiction data categories: special-category data addressed to a non-local recipient blocks while `jurisdiction` is unset (external and unknown recipients always block; a trusted recipient blocks only without a declared jurisdiction), unknown recipients block non-secret data except when it is explicitly declared non-personal, and `purpose` is forwarded intent the default policy never reads — it cannot loosen a decision",
+    "rationale": "Fail-closed boundary prevents sensitive personal data from leaking to unvetted recipients; an unset jurisdiction is unknown, and context fields that were validated and carried through every adapter but ignored made `--jurisdiction`/`--purpose` look enforced when they were not",
+    "sensor": "cargo test -p do-context-shield-policy-default -p do-context-shield-core + cargo test -p do-context-shield --test cli_context (special_category_to_trusted_without_jurisdiction_blocks, special_category_to_trusted_with_a_jurisdiction_pseudonymizes, purpose_alone_never_loosens)",
     "category": "security"
   },
   {

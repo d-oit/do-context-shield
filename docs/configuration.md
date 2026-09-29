@@ -78,6 +78,8 @@ Default enforcement context. It applies to the CLI `sanitize` call and supplies 
 | `purpose` | free-form string | unset |
 | `jurisdiction` | ISO 3166-1 alpha-2 code | unset |
 
+Field semantics: `recipient` and `data_category` drive the built-in default policy. `jurisdiction` is the governing regime of the transfer when the caller knows it; unset means unknown, and unknown fails closed — special-category data to a non-local recipient is blocked (external and unknown recipients always block, and a trusted recipient blocks while the jurisdiction is unset). `purpose` is free-form intent forwarded to policy plugins; the built-in default policy does not read it, and it never loosens a decision.
+
 ### `[process]`
 
 | Key | Values | Default |

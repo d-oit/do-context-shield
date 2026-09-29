@@ -92,3 +92,54 @@ fn context_flags_reach_the_process_policy() {
     let redacted = sanitize(dir.path(), &base, "alice@example.com");
     assert_eq!(redacted, "__DO_PRIVATE_REDACTED__");
 }
+
+#[test]
+fn special_category_to_trusted_without_jurisdiction_blocks() {
+    let dir = temp_dir();
+    cmd(dir.path())
+        .args([
+            "sanitize",
+            "--session",
+            "ctx",
+            "--recipient",
+            "trusted",
+            "--data-category",
+            "special_category",
+        ])
+        .write_stdin("alice@example.com")
+        .assert()
+        .code(1)
+        .stderr(predicates::str::contains("blocked by policy"));
+}
+
+#[test]
+fn special_category_to_trusted_with_a_jurisdiction_pseudonymizes() {
+    let dir = temp_dir();
+    let pseudonymized = sanitize(
+        dir.path(),
+        &[
+            "--recipient",
+            "trusted",
+            "--data-category",
+            "special_category",
+            "--jurisdiction",
+            "DE",
+        ],
+        "alice@example.com",
+    );
+    common::assert_placeholder(&pseudonymized, "EMAIL", 1);
+}
+
+#[test]
+fn purpose_alone_never_loosens() {
+    // `purpose` is forwarded intent for policy plugins; the built-in default
+    // does not read it, so it cannot keep a value the recipient rules
+    // pseudonymize.
+    let dir = temp_dir();
+    let pseudonymized = sanitize(
+        dir.path(),
+        &["--purpose", "support", "--recipient", "external"],
+        "alice@example.com",
+    );
+    common::assert_placeholder(&pseudonymized, "EMAIL", 1);
+}

@@ -24,16 +24,18 @@ architecture decision before code.
   isolation, secret redaction, and tests proving no raw value leaks outside
   the boundary.
 
-### Jurisdiction- and purpose-aware default policy
+### Jurisdiction pairing and purpose-conditional transfers
 
-- **Status**: `ProcessingContext.purpose` and `.jurisdiction` are carried
-  through every adapter and ignored by `DefaultPolicy`, which reads only the
-  recipient class and data category.
-- **Decision needed**: the decision tree itself (which jurisdiction pairs
-  block special-category data, whether an unknown jurisdiction fails closed,
-  and which purposes permit pseudonymized transfer).
-- **Exit criteria**: a documented matrix implemented in `DefaultPolicy` (or a
-  new policy plugin), with privacy-invariant tests covering every cell.
+- **Status**: the conservative default landed — an unset jurisdiction fails
+  closed for special-category data to non-local recipients, and `purpose` is
+  documented and tested as forwarded intent that cannot loosen a decision.
+  What remains is the legal/product matrix the default deliberately does not
+  guess.
+- **Decision needed**: which jurisdiction pairs may receive special-category
+  data (adequacy mappings), and which purposes, if any, permit a looser action.
+- **Exit criteria**: a documented matrix implemented as a new opt-in policy
+  plugin (never in the conservative default), with privacy-invariant tests
+  covering every cell.
 
 ### `Action::Review` human-review flow
 
