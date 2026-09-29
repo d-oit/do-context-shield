@@ -89,11 +89,13 @@ Bounds one process-plugin response; the child is killed and reaped on timeout (`
 | Command | Reads from the file |
 | --- | --- |
 | `sanitize` | all sections |
-| `restore` | `[vault]`, `[process]`; the plugin selections are still merged into the pipeline, but restore only resolves placeholders |
-| `inspect` | detector keys of `[plugins]` (`detector`, `model_dir`, `detector_command`) and `[process]`; the vault is constructed but not queried |
-| `forget` | `[vault]`, `[process]` |
+| `restore` | `[vault]`, `[process]`; detector/policy/transformer selections are ignored (only the vault is built, and restore only resolves placeholders) |
+| `inspect` | detector keys of `[plugins]` (`detector`, `model_dir`, `detector_command`) and `[process]`; policy, transformer, and vault selections are ignored |
+| `forget` | `[vault]`, `[process]`; detector/policy/transformer selections are ignored |
 | `mcp-stdio` | all sections; `[context]` becomes the server default for `context.sanitize` and per-call arguments override it (field by field); `[plugins] tools` sets the exposed tool surface |
 | `encrypt-vault` | nothing: both paths are explicit flags, so an ambient file can never trigger an in-place rewrite |
+
+A selection a command does not use is not built, so a plugin that cannot be constructed there (a `process` policy without a command, a JSON vault without a file) fails only the commands that run that stage — `inspect` still works with a broken `[vault]`, `forget` with a broken `[plugins]`.
 
 The session scope never comes from the file: the vault-scoping commands (`sanitize`, `restore`, `forget`) require `--session` explicitly so mappings cannot leak across implicit scopes.
 
