@@ -103,3 +103,55 @@ fn cli_flag_overrides_config() {
     );
     common::assert_placeholder(&sanitized, "EMAIL", 1);
 }
+
+#[test]
+fn cwd_config_is_discovered_without_a_flag() {
+    let dir = temp_dir();
+    write_config(
+        &dir.path().join("do-context-shield.toml"),
+        "[context]\nrecipient = \"local\"\n",
+    );
+
+    // `--recipient local` keeps a personal value; observing the keep without
+    // any flag proves the working-directory file was found and applied.
+    let kept = sanitize(dir.path(), &[], "alice@example.com");
+    assert_eq!(kept, "alice@example.com");
+}
+
+#[test]
+fn home_config_is_discovered_when_the_working_directory_has_none() {
+    let dir = temp_dir();
+    let home = dir.path().join(".config/do-context-shield");
+    if let Err(error) = std::fs::create_dir_all(&home) {
+        panic!("cannot create {}: {error}", home.display());
+    }
+    write_config(
+        &home.join("config.toml"),
+        "[context]\nrecipient = \"local\"\n",
+    );
+
+    let kept = sanitize(dir.path(), &[], "alice@example.com");
+    assert_eq!(kept, "alice@example.com");
+}
+
+#[test]
+fn cwd_config_wins_over_the_home_config() {
+    let dir = temp_dir();
+    let home = dir.path().join(".config/do-context-shield");
+    if let Err(error) = std::fs::create_dir_all(&home) {
+        panic!("cannot create {}: {error}", home.display());
+    }
+    // The home file would block the call, so the keep below is the
+    // working-directory file's value.
+    write_config(
+        &home.join("config.toml"),
+        "[context]\nrecipient = \"unknown\"\n",
+    );
+    write_config(
+        &dir.path().join("do-context-shield.toml"),
+        "[context]\nrecipient = \"local\"\n",
+    );
+
+    let kept = sanitize(dir.path(), &[], "alice@example.com");
+    assert_eq!(kept, "alice@example.com");
+}

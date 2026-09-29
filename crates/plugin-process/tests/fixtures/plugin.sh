@@ -25,6 +25,8 @@ case "$mode" in
     case "$request" in
       *'"recipient":"unknown"'*) printf '%s\n' '{"plan":[{"index":0,"action":"block"}]}' ;;
       *'"recipient":"local"'*)   printf '%s\n' '{"plan":[{"index":0,"action":"keep"}]}' ;;
+      *'"purpose":"legal-hold"'*) printf '%s\n' '{"plan":[{"index":0,"action":"keep"}]}' ;;
+      *'"jurisdiction":"DE"'*)   printf '%s\n' '{"plan":[{"index":0,"action":"keep"}]}' ;;
       *)                         printf '%s\n' '{"plan":[{"index":0,"action":"redact"}]}' ;;
     esac ;;
   plan-judged)
@@ -41,6 +43,7 @@ case "$mode" in
   judge-unknown-label) printf '%s\n' '{"judgments":[{"index":0,"label":"banana","confidence":0.9}]}' ;;
   # transformer
   transform-ok)       printf '%s\n' '{"text":"__DO_PRIVATE_EMAIL_1__","mappings":[{"kind":"email","original":"alice@example.com","token":"__DO_PRIVATE_EMAIL_1__"}]}' ;;
+  transform-wrapped)  printf '%s\n' '{"text":"<<__DO_PRIVATE_EMAIL_1__>>","mappings":[{"kind":"email","original":"alice@example.com","token":"__DO_PRIVATE_EMAIL_1__"}]}' ;;
   transform-redact)   printf '%s\n' '{"text":"__DO_PRIVATE_REDACTED__"}' ;;
   transform-leak)     printf '%s\n' '{"text":"alice@example.com __DO_PRIVATE_EMAIL_1__","mappings":[{"kind":"email","original":"alice@example.com","token":"__DO_PRIVATE_EMAIL_1__"}]}' ;;
   transform-notoken)  printf '%s\n' '{"text":"(removed)","mappings":[{"kind":"email","original":"alice@example.com","token":"__DO_PRIVATE_EMAIL_1__"}]}' ;;

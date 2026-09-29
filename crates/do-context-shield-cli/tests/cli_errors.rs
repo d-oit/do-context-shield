@@ -70,3 +70,36 @@ fn invalid_tools_value_exits_2() {
         .code(2)
         .stderr(predicates::str::contains("unknown tool"));
 }
+
+#[test]
+fn vault_ttl_with_a_non_memory_vault_exits_1() {
+    let dir = temp_dir();
+    let vault = dir.path().join("vault.json");
+    let process_vault = format!("sh {}", common::process_command("vault-ok"));
+
+    // Explicit JSON vault, JSON vault selected by `--vault-file` alone, and the
+    // process vault: only the memory vault has a mapping lifetime to bound.
+    for extra in [
+        vec!["--vault", "json", "--vault-file"],
+        vec!["--vault-file"],
+        vec![
+            "--vault",
+            "process",
+            "--vault-command",
+            process_vault.as_str(),
+        ],
+    ] {
+        let mut command = cmd(dir.path());
+        command.arg("mcp-stdio");
+        command.args(&extra);
+        if !extra.contains(&"--vault-command") {
+            command.arg(&vault);
+        }
+        command
+            .args(["--vault-ttl-seconds", "5"])
+            .write_stdin("")
+            .assert()
+            .code(1)
+            .stderr(predicates::str::contains("requires the memory vault"));
+    }
+}

@@ -244,5 +244,11 @@
     "rationale": "The hooks and helper scripts are load-bearing contributor and CI gates; the SC2059-class printf defects a manual sweep had to fix should surface automatically instead",
     "sensor": "bash scripts/check-shellcheck.sh (shellcheck sensor, in the verification and ci sets)",
     "category": "verification"
+  },
+  {
+    "invariant": "Every documented adapter selection surface is covered black-box through the compiled binary: the process-plugin `--detector`/`--judge`/`--policy`/`--transformer`/`--vault process` pairs (with a missing command failing at startup), `--process-timeout-ms`, the enforcement-context flags (`--recipient`/`--data-category`/`--purpose`/`--jurisdiction`), config auto-discovery (working directory, then `$HOME`), the explicit `--vault json` round-trip, and the `--vault-ttl-seconds` vault restriction",
+    "rationale": "The library-level protocol tests prove the plugin, not the adapter: a refactor that dropped a flag-to-wiring path would keep CI green while the shipped binary silently used a built-in plugin or the default context",
+    "sensor": "cargo test -p do-context-shield (tests/cli_process_plugins.rs, tests/cli_context.rs, tests/cli_config.rs, tests/cli_errors.rs, tests/cli_sanitize.rs)",
+    "category": "verification"
   }
 ]
