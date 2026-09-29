@@ -116,6 +116,50 @@ fn detects_iban() {
 }
 
 #[test]
+fn rejects_out_of_range_ipv4_octets() {
+    let detector = RegexDetector;
+    for input in ["host 999.999.999.999 up", "host 256.100.100.100 up"] {
+        let entities = match detector.detect(input) {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert!(
+            !entities.iter().any(|entity| entity.kind == "ipv4"),
+            "{input}: {entities:?}"
+        );
+    }
+}
+
+#[test]
+fn accepts_boundary_ipv4_octets() {
+    let detector = RegexDetector;
+    for input in ["0.0.0.0", "255.255.255.255"] {
+        let entities = match detector.detect(input) {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert_eq!(entities.len(), 1, "{input}: {entities:?}");
+        assert_eq!(entities[0].kind, "ipv4");
+        assert_eq!(entities[0].value, input);
+    }
+}
+
+#[test]
+fn rejects_iban_with_a_bad_checksum() {
+    let detector = RegexDetector;
+    let entities = match detector.detect("IBAN DE89 3704 0044 0532 0130 01 today") {
+        Ok(value) => value,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    // The digit groups may still surface as the looser `phone` shape, but the
+    // invalid account number must not be reported as an IBAN.
+    assert!(
+        !entities.iter().any(|entity| entity.kind == "iban"),
+        "{entities:?}"
+    );
+}
+
+#[test]
 fn detects_aws_key() {
     let detector = RegexDetector;
     // Synthetic fixture built programmatically so no credential literal is committed.
