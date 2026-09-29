@@ -288,8 +288,21 @@ fn fragment_export(model_dir: &std::path::Path) -> bool {
 }
 
 /// Whether `model_dir` holds a `GLiNER2.5` boundary export (unsupported here).
+///
+/// Probes the same three locations as `gliner2-rs` 0.9.6 (`span.rs`): the
+/// manifest at the export root and in its `fp32_25/`/`fp16_25/` subfolders.
+/// Checking the root only would let a subfolder layout fall through to the
+/// engine and surface its generic "fragment not found" instead of the specific
+/// error below.
 fn boundary_export(model_dir: &std::path::Path) -> bool {
-    model_dir.join("boundary_manifest.json").is_file()
+    ["", "fp32_25", "fp16_25"].iter().any(|subdir| {
+        let dir = if subdir.is_empty() {
+            model_dir.to_path_buf()
+        } else {
+            model_dir.join(subdir)
+        };
+        dir.join("boundary_manifest.json").is_file()
+    })
 }
 
 #[cfg(test)]
