@@ -4,7 +4,9 @@ use do_context_shield_detector_gliner2::Gliner2Detector;
 use do_context_shield_detector_hybrid::HybridDetector;
 use do_context_shield_detector_regex::RegexDetector;
 use do_context_shield_judge_heuristics::HeuristicJudge;
-use do_context_shield_plugin_api::{Detector, Policy, SemanticJudge, Transformer, Vault};
+use do_context_shield_plugin_api::{
+    Detector, Policy, SemanticJudge, Transformer, Vault, VaultError,
+};
 use do_context_shield_plugin_process::{
     ProcessDetector, ProcessJudge, ProcessPolicy, ProcessTransformer, ProcessVault,
 };
@@ -12,7 +14,9 @@ use do_context_shield_policy_default::DefaultPolicy;
 use do_context_shield_transformer_generalize::GeneralizingTransformer;
 use do_context_shield_transformer_mask::MaskingTransformer;
 use do_context_shield_transformer_pseudonymize::PseudonymizingTransformer;
+use do_context_shield_vault_json::JsonVault;
 use do_context_shield_vault_memory::MemoryVault;
+use std::path::Path;
 use thiserror::Error;
 
 /// Registry errors.
@@ -24,6 +28,14 @@ pub enum RegistryError {
         /// Plugin capability, e.g. `detector`.
         kind: &'static str,
         /// Requested logical plugin name.
+        name: String,
+    },
+    /// A registered plugin needs an argument a name cannot carry.
+    #[error("{kind} plugin `{name}` needs a storage path; build it with `json_vault(path)`")]
+    NeedsArgument {
+        /// Plugin capability, e.g. `vault`.
+        kind: &'static str,
+        /// Logical plugin name.
         name: String,
     },
 }
@@ -101,18 +113,43 @@ pub fn transformer(name: &str) -> Result<Box<dyn Transformer>, RegistryError> {
 
 /// Construct a vault by logical name.
 ///
+/// `json` is registered but cannot be built from a name alone: it needs its
+/// storage path, so it is reported as [`RegistryError::NeedsArgument`] and
+/// built with [`json_vault`].
+///
 /// # Errors
 ///
-/// Returns [`RegistryError::Unknown`] for an unregistered name.
+/// Returns [`RegistryError::Unknown`] for an unregistered name and
+/// [`RegistryError::NeedsArgument`] for `json`.
 pub fn vault(name: &str) -> Result<Box<dyn Vault>, RegistryError> {
     match name {
         "memory" => Ok(Box::new(MemoryVault::default())),
         "process" => Ok(Box::new(ProcessVault::default())),
+        "json" => Err(RegistryError::NeedsArgument {
+            kind: "vault",
+            name: name.to_owned(),
+        }),
         _ => Err(RegistryError::Unknown {
             kind: "vault",
             name: name.to_owned(),
         }),
     }
+}
+
+/// Construct the file-backed JSON vault at `path`.
+///
+/// The adapter owns the path (`vault_file` / `--vault-file`), the optional
+/// key file (`vault_key_file` / `--vault-key-file`), and the TTL validation;
+/// this is the registry entry point for the documented `json` vault so every
+/// consumer builds the same implementation. With a key file the vault state is
+/// encrypted at rest.
+///
+/// # Errors
+///
+/// Returns the vault's own error when the key file cannot be read or the file
+/// cannot be opened in the selected format.
+pub fn json_vault(path: &Path, key_file: Option<&Path>) -> Result<Box<dyn Vault>, VaultError> {
+    Ok(Box::new(JsonVault::open_with_key_file(path, key_file)?))
 }
 
 #[cfg(test)]
@@ -159,6 +196,44 @@ mod tests {
                 other => panic!("expected an unknown-{kind} error, got {other:?}"),
             }
         }
+    }
+
+    #[test]
+    fn json_vault_is_registered_and_needs_its_path() {
+        // The documented storage row lists the JSON vault, so the name must be
+        // known; it cannot be built without a path, and that is reported as an
+        // argument error rather than "unknown plugin".
+        match vault("json").err() {
+            Some(RegistryError::NeedsArgument { kind, name }) => {
+                assert_eq!(kind, "vault");
+                assert_eq!(name, "json");
+            }
+            other => panic!("expected a needs-argument error, got {other:?}"),
+        }
+
+        let dir = match tempfile::tempdir() {
+            Ok(dir) => dir,
+            Err(error) => panic!("cannot create a temp directory: {error}"),
+        };
+        let path = dir.path().join("vault.json");
+        let mut vault = match json_vault(&path, None) {
+            Ok(vault) => vault,
+            Err(error) => panic!("json vault must construct: {error}"),
+        };
+        let scope = do_context_shield_plugin_api::ScopeId("json-scope".to_owned());
+        let mapping = match vault.get_or_insert(&scope, "email", "alice@example.com") {
+            Ok(mapping) => mapping,
+            Err(error) => panic!("insert failed: {error}"),
+        };
+        let resolved = match vault.resolve(&scope, &mapping.token) {
+            Ok(resolved) => resolved,
+            Err(error) => panic!("resolve failed: {error}"),
+        };
+        assert_eq!(
+            resolved.map(|mapping| mapping.original),
+            Some("alice@example.com".to_owned())
+        );
+        assert!(path.exists(), "the JSON vault must create its file");
     }
 
     #[test]

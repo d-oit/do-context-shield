@@ -53,10 +53,10 @@ fn build_pipeline(
                 timeout,
             )?)
         }
-        Some("json") => Box::new(do_context_shield_vault_json::JsonVault::open_with_key_file(
+        Some("json") => do_context_shield_plugin_registry::json_vault(
             json_vault_file(vault_file)?,
             vault_key_file,
-        )?),
+        )?,
         Some("memory") => {
             if vault_file.is_some() {
                 return Err(
@@ -72,10 +72,7 @@ fn build_pipeline(
         Some(other) => return Err(format!("unknown vault plugin `{other}`").into()),
         None => {
             if let Some(path) = vault_file {
-                Box::new(do_context_shield_vault_json::JsonVault::open_with_key_file(
-                    path,
-                    vault_key_file,
-                )?)
+                do_context_shield_plugin_registry::json_vault(path, vault_key_file)?
             } else if vault_key_file.is_some() {
                 return Err(
                     "vault key file (`vault_key_file` or `--vault-key-file`) requires a vault file (`vault_file` or `--vault-file <path>`) for the JSON vault"
