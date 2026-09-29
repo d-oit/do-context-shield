@@ -75,6 +75,10 @@ case "$mode" in
   vault-wrong-token) printf '%s\n' '{"mapping":{"kind":"email","original":"alice@example.com","token":"__DO_PRIVATE_EMAIL_9__"}}' ;;
   vault-miss)        printf '%s\n' '{"mapping":null}' ;;
   # shared
+  # One byte past the documented 8 MiB response cap.
+  oversized)
+    dd if=/dev/zero bs=1048576 count=8 2>/dev/null
+    dd if=/dev/zero bs=1 count=1 2>/dev/null ;;
   junk)  printf '%s\n' 'not json' ;;
   empty) : ;;
   exit)  exit 3 ;;

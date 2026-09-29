@@ -96,9 +96,10 @@ pub(crate) struct McpArgs {
     #[arg(long)]
     pub(crate) vault_ttl_seconds: Option<u64>,
     /// Comma-separated MCP tools to expose: `sanitize`, `restore`, `inspect`,
-    /// `forget`, or `all`. Defaults to `sanitize,inspect`: MCP tool results
-    /// return to the calling model, so `restore` (which resolves raw values)
-    /// stays off the model-facing surface unless a client opts in.
+    /// `forget`, or `all`. Defaults to `sanitize,inspect`, or the configured
+    /// `[plugins] tools` value: MCP tool results return to the calling model, so
+    /// `restore` (which resolves raw values) stays off the model-facing surface
+    /// unless a client opts in.
     #[arg(long, value_parser = parse_tools)]
     pub(crate) tools: Option<ToolSet>,
     #[command(flatten)]

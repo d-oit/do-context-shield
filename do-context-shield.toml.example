@@ -2,10 +2,11 @@
 # Plugin selection. All plugins have compiled-in defaults; a value here
 # overrides that default and is itself overridden by the matching CLI flag.
 [plugins]
-detector = "regex"                  # regex | gliner2 | process
+detector = "regex"                  # regex | gliner2 | hybrid | process
 policy = "default"                  # default | process
 transformer = "pseudonymize"        # pseudonymize | process
 # judge = "heuristics"             # heuristics | process (optional)
+# tools = "sanitize,inspect"       # mcp-stdio only: sanitize | restore | inspect | forget | all
 # model_dir = "path/to/gliner2"    # GLiNER2 ONNX export directory
 # detector_command = "my-detector"  # process plugin command
 # policy_command = "my-policy"

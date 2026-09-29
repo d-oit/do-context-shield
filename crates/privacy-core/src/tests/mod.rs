@@ -5,6 +5,8 @@ use do_context_shield_policy_default::DefaultPolicy;
 use do_context_shield_transformer_pseudonymize::PseudonymizingTransformer;
 use do_context_shield_vault_memory::MemoryVault;
 
+mod policy;
+
 fn context() -> ProcessingContext {
     ProcessingContext::default()
 }
@@ -434,41 +436,6 @@ fn a_later_span_that_is_longer_displaces_a_shorter_overlapping_one() {
     assert_eq!(result.entities.len(), 1, "{result:?}");
     assert_eq!(result.entities[0].kind, "api_key");
     assert_eq!(result.text, "w__DO_PRIVATE_REDACTED__");
-}
-
-struct FixedActionPolicy(Action);
-
-impl Policy for FixedActionPolicy {
-    fn plan(
-        &self,
-        entities: &[Entity],
-        _judgments: &[Judgment],
-        _context: &ProcessingContext,
-    ) -> Result<Vec<PlannedEntity>, PolicyError> {
-        Ok(entities
-            .iter()
-            .cloned()
-            .map(|entity| PlannedEntity {
-                entity,
-                action: self.0.clone(),
-            })
-            .collect())
-    }
-}
-
-#[test]
-fn block_action_fails_pipeline() {
-    for action in [Action::Block, Action::Review] {
-        let mut pipeline = PrivacyPipeline::new(
-            Box::new(RegexDetector),
-            Box::new(FixedActionPolicy(action)),
-            Box::new(PseudonymizingTransformer),
-            Box::new(MemoryVault::default()),
-        );
-        let error = sanitize_err(&mut pipeline, "alice@example.com");
-        assert!(matches!(error, PipelineError::Policy(_)), "{error:?}");
-        assert!(error.to_string().contains("blocked by policy"), "{error}");
-    }
 }
 
 #[test]

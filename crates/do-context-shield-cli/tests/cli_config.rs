@@ -155,3 +155,69 @@ fn cwd_config_wins_over_the_home_config() {
     let kept = sanitize(dir.path(), &[], "alice@example.com");
     assert_eq!(kept, "alice@example.com");
 }
+
+#[test]
+fn env_override_beats_the_file_value() {
+    let dir = temp_dir();
+    let vault = dir.path().join("env.json");
+    write_config(
+        &dir.path().join("do-context-shield.toml"),
+        "[plugins]\ndetector = \"gliner2\"\n",
+    );
+
+    // Control: the file's `gliner2` has no local model and fails closed, so
+    // the successful run below is the environment override's doing.
+    cmd(dir.path())
+        .args(["sanitize", "--session", "cfg-test", "--vault-file"])
+        .arg(&vault)
+        .write_stdin("alice@example.com")
+        .assert()
+        .failure();
+
+    let assert = cmd(dir.path())
+        .env("DO_CONTEXT_SHIELD_DETECTOR", "regex")
+        .args(["sanitize", "--session", "cfg-test", "--vault-file"])
+        .arg(&vault)
+        .write_stdin("alice@example.com")
+        .assert()
+        .success();
+    let sanitized = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
+    common::assert_placeholder(&sanitized, "EMAIL", 1);
+}
+
+#[test]
+fn cli_flag_overrides_env_override() {
+    let dir = temp_dir();
+    let vault = dir.path().join("flag.json");
+
+    // `gliner2` from the environment cannot run without a model, so this only
+    // succeeds if `--detector regex` wins over the environment value.
+    let assert = cmd(dir.path())
+        .env("DO_CONTEXT_SHIELD_DETECTOR", "gliner2")
+        .args([
+            "sanitize",
+            "--session",
+            "cfg-test",
+            "--detector",
+            "regex",
+            "--vault-file",
+        ])
+        .arg(&vault)
+        .write_stdin("alice@example.com")
+        .assert()
+        .success();
+    let sanitized = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
+    common::assert_placeholder(&sanitized, "EMAIL", 1);
+}
+
+#[test]
+fn invalid_env_override_exits_nonzero() {
+    let dir = temp_dir();
+    cmd(dir.path())
+        .env("DO_CONTEXT_SHIELD_POLICY", "bogus")
+        .args(["sanitize", "--session", "cfg-test"])
+        .write_stdin("alice@example.com")
+        .assert()
+        .code(1)
+        .stderr(predicates::str::contains("DO_CONTEXT_SHIELD_POLICY"));
+}

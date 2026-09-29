@@ -88,6 +88,34 @@ fn detects_ipv6() {
 }
 
 #[test]
+fn detects_ipv4() {
+    let detector = RegexDetector;
+    let entities = match detector.detect("host 192.168.1.1 up") {
+        Ok(value) => value,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    assert_eq!(entities.len(), 1, "{entities:?}");
+    assert_eq!(entities[0].kind, "ipv4");
+    assert_eq!(entities[0].value, "192.168.1.1");
+    assert_eq!((entities[0].start, entities[0].end), (5, 16));
+}
+
+#[test]
+fn detects_iban() {
+    let detector = RegexDetector;
+    let entities = match detector.detect("IBAN DE89 3704 0044 0532 0130 00 today") {
+        Ok(value) => value,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    // Longest-span-wins: the IBAN beats the looser `phone` shape that also
+    // matches its digit groups.
+    assert_eq!(entities.len(), 1, "{entities:?}");
+    assert_eq!(entities[0].kind, "iban");
+    assert_eq!(entities[0].value, "DE89 3704 0044 0532 0130 00");
+    assert_eq!((entities[0].start, entities[0].end), (5, 32));
+}
+
+#[test]
 fn detects_aws_key() {
     let detector = RegexDetector;
     // Synthetic fixture built programmatically so no credential literal is committed.

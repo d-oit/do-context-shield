@@ -31,6 +31,37 @@ fn error_response(id: Value, message: &str) -> Value {
     envelope
 }
 
+/// A tool execution failure as a successful JSON-RPC result.
+///
+/// MCP 2026-07-28 separates protocol errors (malformed JSON-RPC, unknown
+/// method, wrong `params` shape) from failures inside a tool call: invalid
+/// arguments and pipeline failures reach the caller as a `CallToolResult` with
+/// `isError: true`, so the model sees them as tool output instead of a
+/// transport error.
+fn tool_error(id: Value, message: &str) -> Value {
+    response(
+        id,
+        json!({"content":[{"type":"text","text":message}],"isError":true}),
+    )
+}
+
+/// Read the request `_meta` version marker, warning when it is absent.
+///
+/// Modern clients send `_meta.protocolVersion`; a request without it is still
+/// answered, because rejecting pre-2026 clients would break every existing
+/// integration.
+fn warn_on_missing_meta(request: &Value) {
+    let version = request
+        .pointer("/params/_meta/protocolVersion")
+        .or_else(|| request.pointer("/_meta/protocolVersion"))
+        .and_then(Value::as_str);
+    if version.is_none() {
+        eprintln!(
+            "do-context-shield: request without `_meta.protocolVersion`; assuming a pre-2026 client"
+        );
+    }
+}
+
 /// Parse the optional enforcement-context arguments of `context.sanitize`.
 ///
 /// Omitted fields fall back to the most restrictive defaults (external
@@ -82,12 +113,14 @@ pub(crate) fn handle_request(
     };
     let id = request.get("id").cloned().unwrap_or(Value::Null);
     let method = request.get("method").and_then(Value::as_str).unwrap_or("");
+    warn_on_missing_meta(&request);
 
     let result = match method {
         // Modern MCP 2026-07-28: no initialize handshake; clients may discover first.
         "server/discover" => response(
             id,
             json!({
+                "resultType":"object",
                 "supportedVersions":[MODERN_VERSION, LEGACY_VERSION],
                 "capabilities":{"tools":{}},
                 "instructions":"Local privacy boundary. Sanitize sensitive coding context before external model/tool calls; use the same explicit session value when restoring placeholders."
@@ -172,9 +205,11 @@ impl ToolName {
 }
 
 /// Dispatch one `tools/call`. A tool disabled by the server's [`ToolSet`] is
-/// rejected before any argument handling, and arguments are enforced, not just
-/// declared: a non-object `arguments`, or a missing/non-string `text` for the
-/// tools that declare it, is an error instead of a silent empty-input call.
+/// rejected before any argument handling with a JSON-RPC error, as are a
+/// non-object `arguments` value and an unknown tool name: those are protocol
+/// failures. Everything inside a known tool — argument validation, vault
+/// expiry, and pipeline failures — is reported as a [`tool_error`] result so
+/// the caller sees a tool execution failure, not a transport failure.
 /// Sanitize still falls back to the `default` scope for older clients; restore
 /// and forget never do, because they resolve or delete raw values and must name
 /// their session explicitly.
@@ -203,65 +238,65 @@ fn tool_call(
         "context.sanitize" => {
             let text = match text_argument(args, "context.sanitize") {
                 Ok(text) => text,
-                Err(message) => return Ok(error_response(id, &message)),
+                Err(message) => return Ok(tool_error(id, &message)),
             };
             let session = match optional_string(args, "session") {
                 Ok(session) => session,
-                Err(message) => return Ok(error_response(id, &message)),
+                Err(message) => return Ok(tool_error(id, &message)),
             };
             let context = match processing_context(args) {
                 Ok(context) => context,
-                Err(message) => return Ok(error_response(id, &message)),
+                Err(message) => return Ok(tool_error(id, &message)),
             };
             // Long-running servers drop expired in-process mappings before
             // each mutation; vaults without a TTL no-op.
             if let Err(error) = pipeline.expire_vault() {
-                return Ok(error_response(id, &error.to_string()));
+                return Ok(tool_error(id, &error.to_string()));
             }
             let scope = ScopeId(session.unwrap_or_else(|| "default".to_owned()));
             match pipeline.sanitize(&scope, &text, &context) {
                 Ok(result) => response(id, json!({"content":[{"type":"text","text":result.text}]})),
-                Err(error) => error_response(id, &error.to_string()),
+                Err(error) => tool_error(id, &error.to_string()),
             }
         }
         "context.restore" => {
             let text = match text_argument(args, "context.restore") {
                 Ok(text) => text,
-                Err(message) => return Ok(error_response(id, &message)),
+                Err(message) => return Ok(tool_error(id, &message)),
             };
             let session = match required_session(args, "context.restore") {
                 Ok(session) => session,
-                Err(message) => return Ok(error_response(id, &message)),
+                Err(message) => return Ok(tool_error(id, &message)),
             };
             match pipeline.restore(&ScopeId(session), &text) {
                 Ok(result) => response(id, json!({"content":[{"type":"text","text":result}]})),
-                Err(error) => error_response(id, &error.to_string()),
+                Err(error) => tool_error(id, &error.to_string()),
             }
         }
         "context.inspect" => {
             let text = match text_argument(args, "context.inspect") {
                 Ok(text) => text,
-                Err(message) => return Ok(error_response(id, &message)),
+                Err(message) => return Ok(tool_error(id, &message)),
             };
             match pipeline.inspect(&text) {
                 Ok(result) => response(
                     id,
                     json!({"content":[{"type":"text","text":serde_json::to_string(&result)?}]}),
                 ),
-                Err(error) => error_response(id, &error.to_string()),
+                Err(error) => tool_error(id, &error.to_string()),
             }
         }
         "context.forget" => {
             let session = match required_session(args, "context.forget") {
                 Ok(session) => session,
-                Err(message) => return Ok(error_response(id, &message)),
+                Err(message) => return Ok(tool_error(id, &message)),
             };
             match pipeline.forget(&ScopeId(session.clone())) {
                 Ok(()) => response(
                     id,
                     json!({"content":[{"type":"text","text":json!({"session":session,"forgotten":true}).to_string()}]}),
                 ),
-                Err(error) => error_response(id, &error.to_string()),
+                Err(error) => tool_error(id, &error.to_string()),
             }
         }
         _ => error_response(id, "unknown tool"),

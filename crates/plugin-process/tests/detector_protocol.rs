@@ -130,6 +130,17 @@ fn errors_on_empty_response() {
 }
 
 #[test]
+fn errors_on_oversized_response() {
+    // One byte past the 8 MiB cap must fail closed instead of buffering an
+    // unbounded response from a hostile plugin.
+    let message = error_message(&detector("oversized"), "alice@example.com");
+    assert!(
+        message.contains("response exceeds 8388608 bytes"),
+        "got: {message}"
+    );
+}
+
+#[test]
 fn times_out_and_kills_child() {
     let detector = ProcessDetector::new(
         ProcessConfig::with_command(command("hang")).with_timeout(Duration::from_millis(300)),

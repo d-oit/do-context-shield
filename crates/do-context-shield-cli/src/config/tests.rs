@@ -1,9 +1,11 @@
 //! Tests for the configuration loader, validation, and CLI merge.
 
 use super::{
-    CliSelection, Config, ContextConfig, Plugins, ProcessConfig, VaultConfig, resolve, validate,
+    CliSelection, Config, ContextConfig, Plugins, ProcessConfig, VaultConfig, resolve,
+    resolve_tools, validate,
 };
 use crate::cli::DetectorSelection;
+use do_context_shield_mcp_server::ToolSet;
 use do_context_shield_plugin_process::DEFAULT_TIMEOUT_MS;
 use std::path::PathBuf;
 
@@ -22,6 +24,7 @@ detector = "gliner2"
 policy = "process"
 transformer = "process"
 judge = "heuristics"
+tools = "sanitize,inspect"
 model_dir = "/models/gliner2"
 detector_command = "detect-detector"
 policy_command = "detect-policy"
@@ -49,6 +52,7 @@ timeout_ms = 1500
             policy: Some("process".to_owned()),
             transformer: Some("process".to_owned()),
             judge: Some("heuristics".to_owned()),
+            tools: Some("sanitize,inspect".to_owned()),
             model_dir: Some(PathBuf::from("/models/gliner2")),
             detector_command: Some("detect-detector".to_owned()),
             policy_command: Some("detect-policy".to_owned()),
@@ -94,6 +98,38 @@ fn invalid_value_rejected() -> Result<(), Box<dyn std::error::Error>> {
     assert!(validate(&detector).is_err());
     let recipient: Config = toml::from_str("[context]\nrecipient = \"nope\"")?;
     assert!(validate(&recipient).is_err());
+    Ok(())
+}
+
+#[test]
+fn tools_value_is_validated() -> Result<(), Box<dyn std::error::Error>> {
+    let bogus: Config = toml::from_str("[plugins]\ntools = \"sanitize,bogus\"")?;
+    assert!(validate(&bogus).is_err());
+    let empty: Config = toml::from_str("[plugins]\ntools = \"\"")?;
+    assert!(validate(&empty).is_err());
+    let accepted: Config = toml::from_str("[plugins]\ntools = \"sanitize,inspect\"")?;
+    assert!(validate(&accepted).is_ok());
+    let all: Config = toml::from_str("[plugins]\ntools = \"all\"")?;
+    assert!(validate(&all).is_ok());
+    Ok(())
+}
+
+#[test]
+fn tools_resolution_prefers_flag_then_file_then_default() -> Result<(), Box<dyn std::error::Error>>
+{
+    let configured: Config = toml::from_str("[plugins]\ntools = \"sanitize\"")?;
+    assert_eq!(
+        resolve_tools(None, &configured)?,
+        ToolSet::parse("sanitize")?
+    );
+    assert_eq!(
+        resolve_tools(Some(ToolSet::all()), &configured)?,
+        ToolSet::all()
+    );
+    assert_eq!(
+        resolve_tools(None, &Config::default())?,
+        ToolSet::model_facing()
+    );
     Ok(())
 }
 
