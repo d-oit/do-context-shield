@@ -210,7 +210,7 @@
     "category": "verification"
   },
   {
-    "invariant": "Detector overlap dedup keeps the longest span (plugin-api::resolve_overlaps) and resolves equal-span ties by SPECS order: more specific kinds precede looser shapes, and semantic post-filters (Luhn for card numbers, ABA for US routing numbers) run before dedup",
+    "invariant": "Detector overlap dedup keeps the longest span (plugin-api::resolve_overlaps) and resolves equal-span ties by SPECS order: more specific kinds precede looser shapes, and semantic post-filters (Luhn for card numbers, ABA for US routing numbers, byte-bounded octets for IPv4, ISO 13616 mod-97 for IBAN) run before dedup",
     "rationale": "A looser pattern can match exactly the same text as a more specific kind, so list order decides the reported kind; filtering invalid candidates after dedup would silently drop the specific match, and a leftmost-first dedup would keep a shorter early span over a longer one that starts inside it",
     "sensor": "cargo test -p do-context-shield-detector-regex",
     "category": "contracts"

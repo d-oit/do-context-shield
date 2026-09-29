@@ -25,11 +25,15 @@ impl Detector for RegexDetector {
         }
 
         // A long digit run is only a card candidate until its checksum
-        // passes, and a 9-digit run is only a routing candidate until the ABA
-        // checksum passes; the loose matchers cannot express either.
+        // passes, a 9-digit run is only a routing candidate until the ABA
+        // checksum passes, a dotted quad only after every octet fits a byte,
+        // and an IBAN-shaped string only after the ISO 13616 mod-97 check;
+        // the loose matchers cannot express any of these.
         entities.retain(|entity| {
             (entity.kind != "credit_card" || luhn_valid(&entity.value))
                 && (entity.kind != "us_bank_routing" || aba_valid(&entity.value))
+                && (entity.kind != "ipv4" || ipv4_valid(&entity.value))
+                && (entity.kind != "iban" || iban_valid(&entity.value))
         });
 
         // Longest-span-wins via the shared rule: equal-length ties keep the
@@ -83,6 +87,46 @@ fn aba_valid(value: &str) -> bool {
         .map(|(&byte, weight)| u32::from(byte - b'0') * weight)
         .sum::<u32>();
     sum % 10 == 0
+}
+
+/// Whether `value` is four dot-separated decimal octets, each in `0..=255`.
+///
+/// The source pattern bounds each group only to 1-3 digits, so a quad such as
+/// `999.999.999.999` is a candidate until this check rejects it.
+fn ipv4_valid(value: &str) -> bool {
+    let parts: Vec<&str> = value.split('.').collect();
+    parts.len() == 4
+        && parts.iter().all(|part| {
+            !part.is_empty()
+                && part.bytes().all(|byte| byte.is_ascii_digit())
+                && part.parse::<u8>().is_ok()
+        })
+}
+
+/// Whether `value` is a checksum-valid IBAN (ISO 13616).
+///
+/// The checksum rearranges the string, moves the first four characters to the
+/// end, expands each letter to its two-digit value (`A` = 10 … `Z` = 35), and
+/// requires the resulting decimal number to be congruent to 1 modulo 97. The
+/// remainder is computed digit by digit so the value never needs big-integer
+/// arithmetic.
+fn iban_valid(value: &str) -> bool {
+    let compact: Vec<u8> = value.bytes().filter(|byte| *byte != b' ').collect();
+    if !(15..=34).contains(&compact.len()) {
+        return false;
+    }
+    let mut remainder = 0u32;
+    for &byte in compact[4..].iter().chain(&compact[..4]) {
+        match byte {
+            b'0'..=b'9' => remainder = (remainder * 10 + u32::from(byte - b'0')) % 97,
+            b'A'..=b'Z' => {
+                let expanded = u32::from(byte - b'A') + 10;
+                remainder = (remainder * 100 + expanded) % 97;
+            }
+            _ => return false,
+        }
+    }
+    remainder == 1
 }
 
 #[cfg(test)]
