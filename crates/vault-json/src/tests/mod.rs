@@ -1,4 +1,5 @@
 use super::*;
+use do_context_shield_plugin_api::Vault;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 mod encrypted;

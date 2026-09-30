@@ -1,31 +1,16 @@
-//! Repeatable quality benchmark for the default regex detector.
-//!
-//! Three corpora, all built in-process from a fixed seed (no fixture
-//! literals, no network):
-//!
-//! - generated: every kind declared by the pattern table gets checksum-valid
-//!   values, and each must be detected at its exact span with that kind;
-//! - adversarial: values shaped like a kind but invalid by that kind's own
-//!   rule (checksum, range, length) must not produce the kind;
-//! - benign: prose, code, and numbers must produce no entities at all.
-//!
-//! Run `cargo test -p do-context-shield-detector-regex --test quality -- --nocapture`
-//! to print the per-kind recall table.
-
-use do_context_shield_detector_regex::RegexDetector;
-use do_context_shield_plugin_api::{Detector, Entity};
+//! Corpus generation for the quality benchmark: deterministic RNG, checksum
+//! helpers, and the generated/adversarial/benign corpora.
 
 /// Values generated per declared kind.
 const SAMPLES_PER_KIND: usize = 25;
-
 /// Kind names declared in `crates/detector-regex/src/patterns.rs`, read from
 /// the source so a new spec cannot silently miss the benchmark.
 ///
 /// Spec entries are either one line (`("kind", r"…", 0.9),`) or a `(` line
 /// followed by `"kind",`; nothing else in the file opens with a quoted name.
-fn declared_kinds() -> Vec<&'static str> {
+pub(super) fn declared_kinds() -> Vec<&'static str> {
     let mut kinds = Vec::new();
-    let mut lines = include_str!("../src/patterns.rs").lines().map(str::trim);
+    let mut lines = include_str!("../../src/patterns.rs").lines().map(str::trim);
     while let Some(line) = lines.next() {
         let literal = if let Some(rest) = line.strip_prefix("(\"") {
             rest
@@ -55,10 +40,10 @@ fn declared_kinds() -> Vec<&'static str> {
 }
 
 /// xorshift64* — deterministic and dependency-free.
-struct Rng(u64);
+pub(super) struct Rng(u64);
 
 impl Rng {
-    fn seeded() -> Self {
+    pub(super) fn seeded() -> Self {
         Self(0x5eed_1234_5678_9abc)
     }
 
@@ -346,7 +331,7 @@ fn aba_check_digit(prefix: &str) -> char {
 }
 
 /// All generated cases, with each checksum-bearing value self-validated.
-fn generated_cases(rng: &mut Rng) -> Vec<(&'static str, String)> {
+pub(super) fn generated_cases(rng: &mut Rng) -> Vec<(&'static str, String)> {
     let kinds = declared_kinds();
     assert!(
         kinds.len() >= 19,
@@ -370,7 +355,7 @@ fn generated_cases(rng: &mut Rng) -> Vec<(&'static str, String)> {
 }
 
 /// Values shaped like their kind but invalid by that kind's own rule.
-fn adversarial_cases(rng: &mut Rng) -> Vec<(&'static str, String)> {
+pub(super) fn adversarial_cases(rng: &mut Rng) -> Vec<(&'static str, String)> {
     let mut card = rng.digits(16);
     while luhn_valid(&card) {
         card = rng.digits(16);
@@ -414,7 +399,7 @@ fn adversarial_cases(rng: &mut Rng) -> Vec<(&'static str, String)> {
 }
 
 /// Prose, code, and numbers that must produce no entities.
-fn benign_corpus() -> Vec<&'static str> {
+pub(super) fn benign_corpus() -> Vec<&'static str> {
     vec![
         "The quick brown fox jumps over the lazy dog.",
         "fn main() { let answer = 42; println!(\"{answer}\"); }",
@@ -426,62 +411,4 @@ fn benign_corpus() -> Vec<&'static str> {
         "The function returns Option<&str> when the key is absent.",
         "add --force-with-lease to the push command before rebasing.",
     ]
-}
-
-/// Detect entities, failing the test on a detector error.
-fn detect(input: &str) -> Vec<Entity> {
-    match RegexDetector.detect(input) {
-        Ok(entities) => entities,
-        Err(error) => panic!("detector failed: {error}"),
-    }
-}
-
-#[test]
-fn generated_corpus_is_detected_at_the_exact_span() {
-    let mut rng = Rng::seeded();
-    let cases = generated_cases(&mut rng);
-    let kinds = declared_kinds();
-    let mut detected = 0usize;
-    for kind in &kinds {
-        let matching = cases.iter().filter(|(case_kind, _)| case_kind == kind);
-        let total = matching.clone().count();
-        let hits = matching
-            .filter(|(_, value)| {
-                detect(value)
-                    .iter()
-                    .any(|entity| entity.kind == *kind && entity.value == *value)
-            })
-            .count();
-        println!("{kind}: {hits}/{total} detected");
-        assert!(total > 0, "kind `{kind}` has no generated samples");
-        assert_eq!(hits, total, "kind `{kind}` missed generated samples");
-        detected += hits;
-    }
-    println!("generated corpus: {detected}/{} detected", cases.len());
-}
-
-#[test]
-fn adversarial_lookalikes_do_not_match_their_kind() {
-    let mut rng = Rng::seeded();
-    for (index, (kind, value)) in adversarial_cases(&mut rng).iter().enumerate() {
-        let matched = detect(value).iter().any(|entity| entity.kind == *kind);
-        assert!(
-            !matched,
-            "adversarial case {index} was reported as `{kind}`"
-        );
-    }
-    println!("adversarial corpus: all lookalikes rejected");
-}
-
-#[test]
-fn benign_text_produces_no_entities() {
-    for (index, text) in benign_corpus().iter().enumerate() {
-        let entities = detect(text);
-        assert!(
-            entities.is_empty(),
-            "benign case {index} produced {} entities",
-            entities.len()
-        );
-    }
-    println!("benign corpus: no entities");
 }
