@@ -29,7 +29,7 @@ Follow this skill to add a new implementation without breaking the privacy bound
 | judging | `SemanticJudge::judge` | `judge-heuristics` (reserved-domain and role-address rules), `plugin-process` (`judge`) | local model, hosted judge via process |
 | policy | `Policy::plan` | `policy-default`, `plugin-process` (`plan`) | project / enterprise DLP policy |
 | transformation | `Transformer::transform` | `transformer-pseudonymize`, `transformer-generalize`, `transformer-mask`, `plugin-process` (`transform`) | redact, encrypt, format-preserving |
-| storage | `Vault::get_or_insert`, `Vault::resolve`, `Vault::resolve_many`, `Vault::delete_scope`, `Vault::expire` | `vault-memory`, `vault-json`, `plugin-process` (`vault_get_or_insert`, `vault_resolve`) | SQLite, OS keychain |
+| storage | `Vault::get_or_insert`, `Vault::get_or_insert_many`, `Vault::resolve`, `Vault::resolve_many`, `Vault::delete_scope`, `Vault::expire` | `vault-memory`, `vault-json`, `plugin-process` (`vault_get_or_insert`, `vault_resolve`) | SQLite, OS keychain |
 
 ## Workflow
 

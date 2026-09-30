@@ -18,6 +18,23 @@ impl Transformer for PseudonymizingTransformer {
         let mut ordered = plan.to_vec();
         ordered.sort_by_key(|item| (item.entity.start, item.entity.end));
 
+        // One batch call for every pseudonymization target: the JSON vault
+        // would otherwise reload and rewrite its file once per entity. The
+        // mappings come back in the same order the walk consumes them.
+        let items: Vec<(&str, &str)> = ordered
+            .iter()
+            .filter(|planned| planned.action == Action::Pseudonymize)
+            .map(|planned| (planned.entity.kind.as_str(), planned.entity.value.as_str()))
+            .collect();
+        let mut stored = if items.is_empty() {
+            Vec::new()
+        } else {
+            vault
+                .get_or_insert_many(scope, &items)
+                .map_err(|error| TransformError::Message(error.to_string()))?
+        }
+        .into_iter();
+
         let mut output = String::with_capacity(input.len());
         let mut cursor = 0usize;
         let mut mappings = Vec::new();
@@ -39,9 +56,11 @@ impl Transformer for PseudonymizingTransformer {
                     return Err(TransformError::Message("blocked by policy".to_owned()));
                 }
                 Action::Pseudonymize => {
-                    let mapping = vault
-                        .get_or_insert(scope, &planned.entity.kind, &planned.entity.value)
-                        .map_err(|error| TransformError::Message(error.to_string()))?;
+                    let mapping = stored.next().ok_or_else(|| {
+                        TransformError::Message(
+                            "vault returned fewer mappings than requested".to_owned(),
+                        )
+                    })?;
                     mappings.push(mapping.clone());
                     mapping.token
                 }

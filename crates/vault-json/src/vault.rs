@@ -8,18 +8,18 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{JsonVault, Lock, MappingRecord};
 
-impl Vault for JsonVault {
-    fn get_or_insert(
+impl JsonVault {
+    /// Insert or reuse one mapping in the already-reloaded state.
+    ///
+    /// The caller holds the exclusive lock and persists afterwards, so this is
+    /// the single definition of the reuse/rotation rule for both the per-item
+    /// and the batched path.
+    fn insert_locked(
         &mut self,
         scope: &ScopeId,
         kind: &str,
         original: &str,
     ) -> Result<Mapping, VaultError> {
-        // Serialize the whole reload-modify-persist cycle so concurrent
-        // writers cannot lose each other's mappings or reuse a counter.
-        let _lock = Lock::exclusive(&self.path)?;
-        // Reload so sequential CLI processes share counters and mappings.
-        self.reload_locked()?;
         if let Some(index) = self.state.mappings.iter().position(|record| {
             record.scope == scope.0
                 && record.mapping.kind == kind
@@ -34,9 +34,7 @@ impl Vault for JsonVault {
             let next = self.next_counter(scope, kind)?;
             let token = mint_placeholder(kind, next)?;
             self.state.mappings[index].mapping.token = token;
-            let mapping = self.state.mappings[index].mapping.clone();
-            self.persist_locked()?;
-            return Ok(mapping);
+            return Ok(self.state.mappings[index].mapping.clone());
         }
 
         let next = self.next_counter(scope, kind)?;
@@ -49,8 +47,45 @@ impl Vault for JsonVault {
             scope: scope.0.clone(),
             mapping: mapping.clone(),
         });
+        Ok(mapping)
+    }
+}
+
+impl Vault for JsonVault {
+    fn get_or_insert(
+        &mut self,
+        scope: &ScopeId,
+        kind: &str,
+        original: &str,
+    ) -> Result<Mapping, VaultError> {
+        // Serialize the whole reload-modify-persist cycle so concurrent
+        // writers cannot lose each other's mappings or reuse a counter.
+        let _lock = Lock::exclusive(&self.path)?;
+        // Reload so sequential CLI processes share counters and mappings.
+        self.reload_locked()?;
+        let mapping = self.insert_locked(scope, kind, original)?;
         self.persist_locked()?;
         Ok(mapping)
+    }
+
+    fn get_or_insert_many(
+        &mut self,
+        scope: &ScopeId,
+        items: &[(&str, &str)],
+    ) -> Result<Vec<Mapping>, VaultError> {
+        // One lock, one reload, one persist for the whole list: the per-item
+        // method would rewrite the file once per entity. The snapshot is read
+        // per call, never cached, so a deletion made between two calls stays
+        // visible. A failure before the persist leaves the stored file
+        // unchanged (the next call reloads it first).
+        let _lock = Lock::exclusive(&self.path)?;
+        self.reload_locked()?;
+        let mut mappings = Vec::with_capacity(items.len());
+        for (kind, original) in items {
+            mappings.push(self.insert_locked(scope, kind, original)?);
+        }
+        self.persist_locked()?;
+        Ok(mappings)
     }
 
     fn resolve(&self, scope: &ScopeId, token: &str) -> Result<Option<Mapping>, VaultError> {
