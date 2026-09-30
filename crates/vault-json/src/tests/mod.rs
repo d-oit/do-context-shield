@@ -351,3 +351,57 @@ fn failed_write_keeps_the_existing_vault() {
     assert_token(&next.token, "EMAIL", 2);
     cleanup(&path);
 }
+
+#[test]
+fn resolve_many_reads_one_snapshot_and_keeps_results_aligned() {
+    let path = temp_path();
+    let session = scope("s");
+    let mut vault = open(&path);
+    let first = stored(&mut vault, &session, "email", "alice@example.com");
+    let second = stored(&mut vault, &session, "email", "bob@example.com");
+    let tokens = [
+        second.token.as_str(),
+        "__DO_PRIVATE_EMAIL_9_0000000000000000__",
+        first.token.as_str(),
+    ];
+    let batch = match vault.resolve_many(&session, &tokens) {
+        Ok(batch) => batch,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    assert_eq!(batch.len(), tokens.len());
+    assert_eq!(batch[0], Some(second.clone()));
+    assert_eq!(batch[1], None);
+    assert_eq!(batch[2], Some(first.clone()));
+    // Another scope never resolves these tokens.
+    match vault.resolve_many(&scope("other"), &tokens) {
+        Ok(batch) => assert_eq!(batch, vec![None, None, None]),
+        Err(error) => panic!("unexpected error: {error}"),
+    }
+    cleanup(&path);
+}
+
+#[test]
+fn resolve_many_observes_a_cross_process_deletion() {
+    let path = temp_path();
+    let session = scope("s");
+    let mut vault = open(&path);
+    let mapping = stored(&mut vault, &session, "email", "alice@example.com");
+    let tokens = [mapping.token.as_str()];
+    match vault.resolve_many(&session, &tokens) {
+        Ok(batch) => assert_eq!(batch, vec![Some(mapping.clone())]),
+        Err(error) => panic!("unexpected error: {error}"),
+    }
+
+    // A second instance (another process) revokes the scope; the next batch
+    // call must read the file again instead of reusing the earlier snapshot.
+    let mut other = open(&path);
+    match other.delete_scope(&session) {
+        Ok(()) => {}
+        Err(error) => panic!("unexpected error: {error}"),
+    }
+    match vault.resolve_many(&session, &tokens) {
+        Ok(batch) => assert_eq!(batch, vec![None]),
+        Err(error) => panic!("unexpected error: {error}"),
+    }
+    cleanup(&path);
+}

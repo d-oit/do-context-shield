@@ -212,6 +212,31 @@ pub trait Vault: Send + Sync {
     /// Returns [`VaultError`] when resolution fails.
     fn resolve(&self, scope: &ScopeId, token: &str) -> Result<Option<Mapping>, VaultError>;
 
+    /// Resolve many tokens within a scope, in the order given.
+    ///
+    /// The default implementation calls [`Vault::resolve`] once per token, so
+    /// every vault keeps working unchanged. An override exists to avoid one
+    /// authoritative read per token (see `vault-json`), and MUST resolve the
+    /// whole list against one snapshot of the vault: callers treat the result
+    /// as the state at the time of the call. Cross-call caching is forbidden —
+    /// a deletion performed between two calls (including by another process)
+    /// must be visible to the second one, which is why the snapshot must be
+    /// re-read per call rather than remembered.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError`] when resolution fails.
+    fn resolve_many(
+        &self,
+        scope: &ScopeId,
+        tokens: &[&str],
+    ) -> Result<Vec<Option<Mapping>>, VaultError> {
+        tokens
+            .iter()
+            .map(|token| self.resolve(scope, token))
+            .collect()
+    }
+
     /// Delete every mapping and counter for a session scope.
     ///
     /// `forget` is a revocation, so a vault must either remove the scope's

@@ -136,3 +136,40 @@ fn unsupported_scope_deletion_fails_closed() {
         Err(error) => panic!("unexpected error: {error}"),
     }
 }
+
+/// A vault that keeps the trait's default `resolve_many` (a per-token loop),
+/// like a third-party backend that has not adopted the batch method.
+struct DefaultBatchVault(MemoryVault);
+
+impl Vault for DefaultBatchVault {
+    fn get_or_insert(
+        &mut self,
+        scope: &ScopeId,
+        kind: &str,
+        original: &str,
+    ) -> Result<Mapping, VaultError> {
+        self.0.get_or_insert(scope, kind, original)
+    }
+
+    fn resolve(&self, scope: &ScopeId, token: &str) -> Result<Option<Mapping>, VaultError> {
+        self.0.resolve(scope, token)
+    }
+}
+
+#[test]
+fn restore_works_with_a_vault_that_keeps_the_default_batch_resolution() {
+    // `restore` resolves through `Vault::resolve_many`; the default
+    // implementation must stay a faithful per-token loop.
+    let mut pipeline = PrivacyPipeline::new(
+        Box::new(RegexDetector),
+        Box::new(DefaultPolicy),
+        Box::new(PseudonymizingTransformer),
+        Box::new(DefaultBatchVault(MemoryVault::default())),
+    );
+    let scope = ScopeId("test".to_owned());
+    let result = sanitize_ok(&mut pipeline, "alice@example.com bob@example.com");
+    match pipeline.restore(&scope, &result.text) {
+        Ok(restored) => assert_eq!(restored, "alice@example.com bob@example.com"),
+        Err(error) => panic!("unexpected error: {error}"),
+    }
+}

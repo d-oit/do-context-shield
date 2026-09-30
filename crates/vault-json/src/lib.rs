@@ -5,6 +5,7 @@ use do_context_shield_plugin_api::{
 };
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufWriter};
 use std::path::{Path, PathBuf};
@@ -411,6 +412,33 @@ impl Vault for JsonVault {
                     && is_minted_placeholder_token(&record.mapping.token)
             })
             .map(|record| record.mapping))
+    }
+
+    fn resolve_many(
+        &self,
+        scope: &ScopeId,
+        tokens: &[&str],
+    ) -> Result<Vec<Option<Mapping>>, VaultError> {
+        // One authoritative read for the whole list: restoring a text with
+        // many placeholders otherwise re-reads and re-parses the file once
+        // per token. The read is per call, never cached, so a deletion made
+        // between two calls stays visible.
+        let state = Self::read_state(&self.path, &self.format)?;
+        let wanted: HashSet<&str> = tokens.iter().copied().collect();
+        let mut found: HashMap<&str, &Mapping> = HashMap::with_capacity(wanted.len());
+        for record in &state.mappings {
+            let token = record.mapping.token.as_str();
+            if record.scope == scope.0
+                && wanted.contains(token)
+                && is_minted_placeholder_token(token)
+            {
+                found.entry(token).or_insert(&record.mapping);
+            }
+        }
+        Ok(tokens
+            .iter()
+            .map(|token| found.get(token).map(|mapping| (*mapping).clone()))
+            .collect())
     }
 
     fn delete_scope(&mut self, scope: &ScopeId) -> Result<(), VaultError> {
