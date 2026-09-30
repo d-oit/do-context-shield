@@ -64,8 +64,17 @@ Command lines are split on whitespace; quoting and shell expansion are not suppo
 | `vault` | `memory`, `json`, `process` | `memory` | `json` when `vault_file` is set and `vault` is omitted |
 | `vault_file` | path | unset | required by `vault = "json"`; selects the JSON vault on its own |
 | `vault_command` | command line | unset | required with `vault = "process"` |
-| `vault_ttl_seconds` | seconds | unset | memory vault only; only takes effect for `mcp-stdio` — one-shot commands exit before a mapping lifetime matters |
+| `vault_ttl_seconds` | seconds | unset | memory or JSON vault; a one-shot process exits before a memory-vault lifetime matters, while a persisted JSON mapping is bounded across processes |
 | `vault_key_file` | path | unset | 64-hex-character key that encrypts the JSON vault at rest; requires `vault_file`, and on Unix the key file must be owner-only |
+
+A `vault_ttl_seconds` on the JSON vault bounds how long a persisted original
+stays resolvable: every mapping is written with its timestamp, `restore` (and
+any read) hides a mapping older than the TTL, and the next locked write or
+`expire` purges it from the file — nothing is deleted before a full TTL
+elapsed. Counters are never reset, so an expired token is never reissued for a
+different value. Mappings written before a TTL was configured carry no
+timestamp; they keep resolving until the first locked write stamps them, after
+which the TTL applies normally. `forget` remains the immediate eraser.
 
 ### `[context]`
 
@@ -185,7 +194,7 @@ Startup fails, naming the offending field, when
 - the `[vault]` combination cannot select one consistent vault:
   - `vault = "json"` without `vault_file`,
   - `vault_file` together with `vault = "memory"` or `vault = "process"`,
-  - `vault_ttl_seconds` with anything but the memory vault (`json`, `process`, or a lone `vault_file`, which selects the JSON vault),
+  - `vault_ttl_seconds` with the process vault (memory and JSON vaults both have a lifetime policy),
   - `vault_key_file` without a `vault_file`, or with `vault = "memory"`/`"process"` — only the JSON vault encrypts at rest.
 
 Plugin names are validated at load time against the same set the CLI flags accept, so a typo cannot silently select a different plugin.

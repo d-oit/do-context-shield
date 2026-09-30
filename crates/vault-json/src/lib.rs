@@ -9,6 +9,7 @@ mod vault;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufWriter};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 mod encrypted;
 
@@ -33,6 +34,10 @@ struct State {
 struct MappingRecord {
     scope: String,
     mapping: Mapping,
+    /// Unix seconds when the record was written; `None` for records written
+    /// before a TTL was configured (see [`JsonVault::with_ttl`]).
+    #[serde(default)]
+    created_at: Option<u64>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -103,10 +108,26 @@ fn lock_path(path: &Path) -> PathBuf {
 /// fails closed instead of being silently reinterpreted. Sequential processes
 /// share state by reloading the file on every insert; concurrent writers are
 /// serialized through an advisory lock on `<path>.lock`.
+///
+/// With [`JsonVault::with_ttl`] every stored mapping carries the time it was
+/// written and stops resolving once it is older than the TTL:
+///
+/// - reads (`resolve`, `resolve_many`) hide an expired mapping;
+/// - locked writes and [`Vault::expire`] stamp undated records and purge
+///   expired ones from the file, so a mapping is never deleted before its TTL
+///   elapsed and a read never has to write;
+/// - counters are never reset, so a token that expired is never reissued for
+///   a different value;
+/// - records written before a TTL was configured have no timestamp; they keep
+///   resolving until the first locked write or `expire` stamps them, after
+///   which the TTL applies normally. `forget` remains the immediate eraser.
 pub struct JsonVault {
     path: PathBuf,
     state: State,
     format: Format,
+    /// Lifetime after which a stored mapping stops resolving; `None` keeps
+    /// mappings until the scope is forgotten or the file is deleted.
+    ttl: Option<Duration>,
 }
 
 impl JsonVault {
@@ -153,6 +174,18 @@ impl JsonVault {
         }
     }
 
+    /// Bound how long stored mappings stay resolvable.
+    ///
+    /// See the type-level notes for the exact semantics: reads hide expired
+    /// mappings, locked writes and [`Vault::expire`] purge them, counters are
+    /// never reset, and records written before the TTL was configured are
+    /// stamped at the next locked write instead of being purged on sight.
+    #[must_use]
+    pub fn with_ttl(mut self, ttl: Duration) -> Self {
+        self.ttl = Some(ttl);
+        self
+    }
+
     /// Rewrite an existing plaintext vault file in the encrypted format.
     ///
     /// The rewrite goes through the same temporary-file-and-rename path as a
@@ -186,6 +219,7 @@ impl JsonVault {
             path,
             state,
             format: Format::Encrypted(key),
+            ttl: None,
         }
         .persist_locked()
     }
@@ -203,6 +237,7 @@ impl JsonVault {
             path,
             state,
             format,
+            ttl: None,
         })
     }
 
@@ -358,6 +393,18 @@ fn restrict_permissions(path: &std::path::Path) -> Result<(), VaultError> {
 
 fn io_error(error: &io::Error) -> VaultError {
     VaultError::Message(error.to_string())
+}
+
+/// Unix seconds, or `None` when the clock reads before the epoch.
+///
+/// A missing clock reading never expires or stamps anything: without an age
+/// there is nothing to compare, and purging on a broken clock could destroy
+/// mappings that are still wanted.
+fn unix_now() -> Option<u64> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|elapsed| elapsed.as_secs())
 }
 
 fn json_error(error: &serde_json::Error) -> VaultError {

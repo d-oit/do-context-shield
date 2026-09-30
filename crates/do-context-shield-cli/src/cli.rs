@@ -114,8 +114,8 @@ pub(crate) struct McpArgs {
     /// (requires `--vault-file`; on Unix the key file must be owner-only).
     #[arg(long)]
     pub(crate) vault_key_file: Option<PathBuf>,
-    /// Lifetime in seconds after which in-process memory-vault mappings stop
-    /// resolving (memory vault only).
+    /// Lifetime in seconds after which vault mappings stop resolving (memory
+    /// or JSON vault; a persisted JSON mapping stays expired across restarts).
     #[arg(long)]
     pub(crate) vault_ttl_seconds: Option<u64>,
     /// Comma-separated MCP tools to expose: `sanitize`, `restore`, `inspect`,

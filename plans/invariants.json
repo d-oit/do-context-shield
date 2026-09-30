@@ -298,5 +298,11 @@
     "rationale": "Detection quality was only asserted by hand-written fixtures, so breadth (checksum gates at scale, boundary rules, lookalike precision) was unmeasured; the generated corpus self-validates its checksums and reads the kind list from the pattern table, so a new spec cannot pass without a generator",
     "sensor": "cargo test -p do-context-shield-detector-regex --test quality",
     "category": "contracts"
+  },
+  {
+    "invariant": "A `vault_ttl_seconds` on the JSON vault bounds persisted mappings: every mapping is written with a Unix timestamp, reads hide a mapping older than the TTL, and the next locked write or `expire` purges it; nothing is deleted before a full TTL elapsed, counters are never reset, mappings written before the TTL was configured are stamped at the next locked write instead of being purged or ignored, and `forget` stays the immediate eraser",
+    "rationale": "Persisted originals otherwise stayed resolvable until the file was deleted or the scope forgotten, so an operator who set a lifetime got it only for the memory vault (and the config layer rejected the combination outright); the decision needed cross-process semantics that do not destroy pre-existing mappings on upgrade and do not reissue an expired token for a different value",
+    "sensor": "cargo test -p do-context-shield-vault-json + cargo test -p do-context-shield --test mcp_stdio_config",
+    "category": "security"
   }
 ]

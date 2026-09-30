@@ -75,6 +75,7 @@ fn build_vault(
         config::VaultKind::Json => do_context_shield_plugin_registry::json_vault(
             config::json_vault_file(vault_file)?,
             vault_key_file,
+            resolved.vault_ttl_seconds.map(Duration::from_secs),
         )?,
         config::VaultKind::Memory => do_context_shield_plugin_registry::vault("memory")?,
     })

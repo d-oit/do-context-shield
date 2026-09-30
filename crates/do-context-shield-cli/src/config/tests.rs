@@ -155,11 +155,9 @@ fn non_reversible_transformer_names_are_accepted() -> Result<(), Box<dyn std::er
 fn vault_combinations_checked() -> Result<(), Box<dyn std::error::Error>> {
     for text in [
         "[vault]\nvault = \"json\"\n",
-        "[vault]\nvault = \"json\"\nvault_file = \"v.json\"\nvault_ttl_seconds = 60\n",
         "[vault]\nvault = \"process\"\nvault_file = \"v.json\"\n",
         "[vault]\nvault = \"process\"\nvault_ttl_seconds = 60\n",
         "[vault]\nvault = \"memory\"\nvault_file = \"v.json\"\n",
-        "[vault]\nvault_file = \"v.json\"\nvault_ttl_seconds = 60\n",
         // A key encrypts only the JSON vault, which needs a file.
         "[vault]\nvault_key_file = \"k.key\"\n",
         "[vault]\nvault = \"memory\"\nvault_key_file = \"k.key\"\n",
@@ -171,6 +169,8 @@ fn vault_combinations_checked() -> Result<(), Box<dyn std::error::Error>> {
     for text in [
         "[vault]\nvault = \"json\"\nvault_file = \"v.json\"\n",
         "[vault]\nvault = \"memory\"\nvault_ttl_seconds = 60\n",
+        "[vault]\nvault = \"json\"\nvault_file = \"v.json\"\nvault_ttl_seconds = 60\n",
+        "[vault]\nvault_file = \"v.json\"\nvault_ttl_seconds = 60\n",
         "[vault]\nvault_file = \"v.json\"\n",
         "[vault]\nvault = \"process\"\nvault_command = \"vault-cmd\"\n",
         "[vault]\nvault = \"json\"\nvault_file = \"v.json\"\nvault_key_file = \"k.key\"\n",
