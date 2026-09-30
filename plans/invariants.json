@@ -274,5 +274,11 @@
     "rationale": "The config file was documented as supplying these defaults, but mcp-stdio resolved them and then dropped them, so a registration pinned to `recipient = \"local\"` silently ran with the external default; both directions are user-visible policy changes and the doc pages disagreed about which one held, and the MCP side additionally reads file values only via `--config` so a project directory cannot set them for the server it spawns",
     "sensor": "cargo test -p do-context-shield --test mcp_stdio_config",
     "category": "contracts"
+  },
+  {
+    "invariant": "A pull request is armed with GitHub auto-merge (`gh pr merge --auto`) only while no review comment or review is unanswered, and every review comment and review is addressed (fixed or answered) before the merge is treated as done; auto-merge itself waits only for the required CI checks",
+    "rationale": "Auto-merge enforces the check gate mechanically but is blind to review: arming it on a PR with an open question or a CHANGES_REQUESTED review merges over the reviewer, so the merge discipline must state both halves explicitly",
+    "sensor": "review-only (GitHub auto-merge bound to the required `CI Success` check; comment triage stays maintainer-enforced)",
+    "category": "workflow"
   }
 ]
