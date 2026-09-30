@@ -23,6 +23,32 @@ Implementations are selected by logical plugin name. The JSON vault is the one i
 
 Every selection can also come from `do-context-shield.toml` (`docs/configuration.md`); an explicit CLI flag overrides the file value. For `mcp-stdio` the file applies only through `--config <path>`: a project directory cannot configure the server that runs in it.
 
+### Detector quality benchmark
+
+The default regex detector carries a repeatable benchmark
+(`crates/detector-regex/tests/quality.rs`), built in-process from a fixed seed
+— no fixture literals, no network, no model:
+
+```bash
+cargo test -p do-context-shield-detector-regex --test quality -- --nocapture
+```
+
+It measures three corpora and fails on any deviation:
+
+- **generated** — every kind declared by the pattern table gets 25 values with
+  the shape and checksum that kind requires (Luhn, ABA, IBAN mod-97, IPv6
+  forms, PEM blocks, …), and each must be detected at its exact span with that
+  kind (475/475 today);
+- **adversarial** — values shaped like a kind but invalid by its own rule
+  (checksum, octet range, length) must not produce that kind;
+- **benign** — prose, code, and numbers must produce no entities at all.
+
+The kind list is read from `patterns.rs`, so a new spec that lacks a generator
+fails the benchmark instead of passing silently. The credential patterns
+anchor their match at a word boundary, so a value ending in `-` is reported
+without the trailing character; that character is not secret material, and the
+benchmark pins the documented span by generating word-final values.
+
 ## ONNX detector models
 
 `--detector gliner2 --model-dir <dir>` runs a local ONNX export in-process: no Python, no network. Build the CLI with the backend enabled:

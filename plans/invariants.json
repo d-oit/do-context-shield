@@ -292,5 +292,11 @@
     "rationale": "Restoring a document with many placeholders re-read and re-parsed the whole JSON vault once per token (measured with a 5k-mapping vault: 9 ms per token, 4.5 s for 500 tokens), while a cross-call cache would hide external forget/revocation — the batch fixes the cost without trading away visibility (measured after: 8 ms for the same 500 tokens)",
     "sensor": "cargo test -p do-context-shield-vault-json + cargo test -p do-context-shield-vault-memory + cargo test -p do-context-shield-core",
     "category": "contracts"
+  },
+  {
+    "invariant": "The default regex detector has a repeatable quality benchmark: every kind declared by the pattern table is generated with checksum-valid values and must be detected at its exact span, adversarial lookalikes must not produce their kind, and a benign prose/code corpus must produce no entities",
+    "rationale": "Detection quality was only asserted by hand-written fixtures, so breadth (checksum gates at scale, boundary rules, lookalike precision) was unmeasured; the generated corpus self-validates its checksums and reads the kind list from the pattern table, so a new spec cannot pass without a generator",
+    "sensor": "cargo test -p do-context-shield-detector-regex --test quality",
+    "category": "contracts"
   }
 ]
