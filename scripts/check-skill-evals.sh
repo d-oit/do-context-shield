@@ -39,11 +39,30 @@ if ! command -v python3 >/dev/null 2>&1; then
     exit 0
 fi
 
-output="$(do-harness eval --strict-fixtures 2>&1)" || {
+# The eval is attempted at most twice, and only when the first attempt printed
+# no per-skill verdict line at all. Every graded or structural outcome carries
+# a `<skill>: structure=… evals=…` line (`evals=skipped` when the structure
+# gate rejected the skill), so an empty verdict set means the evaluation never
+# ran — an infrastructure hiccup, not a grade. One observed local run failed
+# this way and 11 replays plus four CI runs did not reproduce it; retrying
+# cannot turn a graded failure green, and a deterministic breakage produces the
+# same empty output on the second attempt and still fails.
+attempt=1
+while :; do
+    output="$(do-harness eval --strict-fixtures 2>&1)" && eval_rc=0 || eval_rc=$?
+    if printf '%s\n' "$output" | grep -qE '^[a-z0-9-]+: structure='; then
+        break
+    fi
+    if (( attempt == 1 )); then
+        printf '%s\n' "$output"
+        printf 'NOTICE: do-harness eval exited %s without a per-skill verdict; retrying once.\n' "$eval_rc"
+        attempt=2
+        continue
+    fi
     printf '%s\n' "$output"
-    echo "skill-evals FAILED: do-harness eval reported a fixture or structure error."
+    printf 'skill-evals FAILED: do-harness eval exited %s without a per-skill verdict twice.\n' "$eval_rc"
     exit 1
-}
+done
 printf '%s\n' "$output"
 
 # A heredoc replaces python3's stdin, so the verdicts go through a temp file.
@@ -83,7 +102,10 @@ for failure in failures:
 sys.exit(1 if failures else 0)
 PY
 
-if (( status != 0 )); then
+if (( status != 0 || eval_rc != 0 )); then
+    if (( eval_rc != 0 )); then
+        printf 'FAIL: do-harness eval exited %s\n' "$eval_rc"
+    fi
     echo "skill-evals FAILED."
     exit 1
 fi
