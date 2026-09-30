@@ -1,7 +1,8 @@
 //! `[vault]` combination validation, kept out of `config.rs` so the loader
 //! module stays under the LOC ceiling.
 
-use super::VaultConfig;
+use super::{Resolved, VaultConfig};
+use std::path::Path;
 
 /// Reject vault combinations that cannot select one consistent vault.
 ///
@@ -75,4 +76,98 @@ fn vault_file_conflict(name: &str) -> Box<dyn std::error::Error> {
 /// A TTL that only the memory vault implements.
 fn ttl_requires_memory(name: &str) -> Box<dyn std::error::Error> {
     format!("config: `vault_ttl_seconds` requires the memory vault (selected: `{name}`)").into()
+}
+
+/// The storage implementation a resolved selection names.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum VaultKind {
+    /// Local executable over the process protocol.
+    Process,
+    /// File-backed JSON vault.
+    Json,
+    /// In-process memory vault.
+    Memory,
+}
+
+/// The vault kind the resolved selection names, or the selection conflict.
+///
+/// One definition for both the runtime (`build_vault` constructs exactly what
+/// this returns) and the `config` diagnostics (which reports it), so "which
+/// vault will run" and "why this selection cannot run" cannot drift apart.
+///
+/// # Errors
+///
+/// Returns the conflict description for a vault combined with a
+/// `vault_file`/`vault_key_file` it cannot use, a `json` selection without a
+/// vault file, a key file without one, or an unknown vault name.
+pub(crate) fn vault_kind(resolved: &Resolved) -> Result<VaultKind, Box<dyn std::error::Error>> {
+    let file = resolved.vault_file.is_some();
+    let key = resolved.vault_key_file.is_some();
+    Ok(match resolved.vault.as_deref() {
+        Some("process") => {
+            if file {
+                return Err(vault_file_selection_conflict("process"));
+            }
+            if key {
+                return Err(vault_key_conflict("process"));
+            }
+            VaultKind::Process
+        }
+        Some("json") => {
+            json_vault_file(resolved.vault_file.as_deref())?;
+            VaultKind::Json
+        }
+        Some("memory") => {
+            if file {
+                return Err(vault_file_selection_conflict("memory"));
+            }
+            if key {
+                return Err(vault_key_conflict("memory"));
+            }
+            VaultKind::Memory
+        }
+        Some(other) => return Err(format!("unknown vault plugin `{other}`").into()),
+        // No explicit vault name: a `vault_file` selects the JSON vault.
+        None => {
+            if file {
+                VaultKind::Json
+            } else if key {
+                return Err(
+                    "vault key file (`vault_key_file` or `--vault-key-file`) requires a vault file (`vault_file` or `--vault-file <path>`) for the JSON vault"
+                        .into(),
+                );
+            } else {
+                VaultKind::Memory
+            }
+        }
+    })
+}
+
+/// Resolve the JSON vault path or explain what is missing.
+///
+/// # Errors
+///
+/// Returns an error when the resolved selection names no vault file.
+pub(crate) fn json_vault_file(
+    vault_file: Option<&Path>,
+) -> Result<&Path, Box<dyn std::error::Error>> {
+    vault_file.ok_or_else(|| {
+        "vault `json` requires a vault file (`vault_file` or `--vault-file <path>`)".into()
+    })
+}
+
+/// A `vault_file` alongside a vault that cannot use one, named as the runtime
+/// selection error.
+fn vault_file_selection_conflict(name: &str) -> Box<dyn std::error::Error> {
+    format!("vault `{name}` cannot be combined with a vault file (`vault_file` or `--vault-file`)")
+        .into()
+}
+
+/// A `vault_key_file` alongside a vault that cannot encrypt at rest, named as
+/// the runtime selection error.
+fn vault_key_conflict(name: &str) -> Box<dyn std::error::Error> {
+    format!(
+        "vault `{name}` cannot be combined with a vault key file (`vault_key_file` or `--vault-key-file`)"
+    )
+    .into()
 }

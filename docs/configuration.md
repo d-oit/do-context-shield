@@ -97,11 +97,54 @@ Bounds one process-plugin response; the child is killed and reaped on timeout (`
 | `inspect` | detector keys of `[plugins]` (`detector`, `model_dir`, `detector_command`) and `[process]`; policy, transformer, and vault selections are ignored |
 | `forget` | `[vault]`, `[process]`; detector/policy/transformer selections are ignored |
 | `mcp-stdio` | all sections, but only from a file selected with `--config <path>` (auto-discovery is off); `[context]` becomes the server default for `context.sanitize` and per-call arguments override it (field by field); `[plugins] tools` sets the exposed tool surface |
+| `config` | all sections: it reports the merged one-shot view (the same merge `sanitize` uses) without building a plugin or reading stdin |
 | `encrypt-vault` | nothing: both paths are explicit flags, so an ambient file can never trigger an in-place rewrite |
 
 A selection a command does not use is not built, so a plugin that cannot be constructed there (a `process` policy without a command, a JSON vault without a file) fails only the commands that run that stage — `inspect` still works with a broken `[vault]`, `forget` with a broken `[plugins]`.
 
 The session scope never comes from the file: the vault-scoping commands (`sanitize`, `restore`, `forget`) require `--session` explicitly so mappings cannot leak across implicit scopes.
+
+## Effective-configuration diagnostics
+
+`do-context-shield config` prints the configuration the one-shot commands
+would resolve, without running a plugin, spawning a process, reading stdin, or
+touching a vault:
+
+```bash
+do-context-shield config --vault-file ~/vault.json
+do-context-shield config --detector hybrid --recipient local   # inspect one invocation
+```
+
+The output is a JSON report of whitelisted settings, each with the layer that
+supplied it: `cli`, `environment`, `file`, `default` (or `none` for optional
+settings). The plugin names and vault kind come from the same resolution the
+executing commands use, and `effective_vault` is derived from the same
+classifier `sanitize` uses, so the report cannot drift from the runtime
+selection; a contradictory selection fails with the identical error the
+executing command would print.
+
+```json
+{
+  "detector": {"value": "regex", "source": "default"},
+  "judge": {"value": "heuristics", "source": "file"},
+  "effective_vault": "json",
+  "vault_file": {"configured": true, "source": "cli"},
+  "context": {"recipient": {"value": "local", "source": "environment"}, "...": "..."},
+  "process_timeout_ms": {"value": 30000, "source": "default"}
+}
+```
+
+**The report is a whitelist.** It contains validated plugin and vault names,
+the enforcement-context values (`recipient`, `data_category`, and the
+shape-checked `jurisdiction`), numeric limits, and *presence booleans* for
+path-shaped and command-shaped settings. It never contains the matched text,
+raw process commands (`detector_command`, `policy_command`, … are reported as
+`configured: true/false` only), filesystem paths (`vault_file`,
+`vault_key_file`, `model_dir`), or the free-form `purpose` value (reported as
+a presence boolean), so the report is safe to paste into an agent context. The
+MCP tool surface does not expose it: `config` is a CLI diagnostic, and
+`[plugins] tools` is not part of this report (`mcp-stdio --help` and
+`tools/list` cover the MCP surface).
 
 ## At-rest encryption
 

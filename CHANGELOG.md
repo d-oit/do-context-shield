@@ -64,6 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Test coverage for previously untested documented behavior: the `[process] timeout_ms` file value now has a binary-level timeout test (only the flag had one), and the `DO_CONTEXT_SHIELD_*` context/transform/judge overrides gained consumer-visible tests — recipient precedence changes the policy outcome, invalid recipient/data-category/jurisdiction values fail closed with no sanitized output, data-category and transformer/judge selections reach the pipeline, and the MCP server default follows the environment while a per-call argument still overrides it.
 
+- Effective-configuration diagnostics: `do-context-shield config` prints the merged one-shot selection as JSON with the layer that supplied each setting (`cli`, `environment`, `file`, `default`) — the four-layer precedence was previously only inferable by comparing sanitization outcomes. The report is a whitelist: validated plugin and vault names, enforcement-context values, numeric limits, and presence booleans for path- and command-shaped settings; raw process commands, filesystem paths, key material, and the free-form `purpose` value never appear, so the output is safe to paste into an agent context. `effective_vault` and the failure on a contradictory selection come from the same classifier `sanitize` uses (`build_vault` now shares it), so the report cannot drift from the runtime selection.
+
 ### Changed
 
 - MCP tool namespace rename: tools are now `context.sanitize`, `context.restore`, `context.inspect`, and `context.forget` (formerly `private.*`). `context.restore` strictly requires an explicit `session` parameter with no fallback scope, preventing accidental shared-scope raw value restoration.

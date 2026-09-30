@@ -15,8 +15,11 @@ use do_context_shield_plugin_process::DEFAULT_TIMEOUT_MS;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
+pub(crate) mod diag;
 mod env;
 mod vault;
+
+pub(crate) use vault::{VaultKind, json_vault_file, vault_kind};
 
 /// File name auto-discovered in the working directory.
 const CONFIG_FILE_NAME: &str = "do-context-shield.toml";
@@ -48,6 +51,10 @@ pub(crate) struct Config {
     pub(crate) context: ContextConfig,
     #[serde(default)]
     pub(crate) process: ProcessConfig,
+    /// Which settings the environment layer supplied, for [`diag`]; the file
+    /// schema has no `env` key, so this is never read from or written to disk.
+    #[serde(skip)]
+    pub(crate) env: env::EnvSet,
 }
 
 /// Plugin selection; a value here overrides the built-in default and is
@@ -282,7 +289,7 @@ fn validate_choice(
 }
 
 /// CLI-side selections for one command, before merging with the config file.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct CliSelection {
     pub(crate) detector: DetectorSelection,
     pub(crate) pipeline: PipelineSelection,
@@ -336,7 +343,8 @@ impl Resolved {
 }
 
 /// Merge one command's CLI options over the configuration file.
-pub(crate) fn resolve(cli: CliSelection, config: &Config) -> Resolved {
+pub(crate) fn resolve(cli: &CliSelection, config: &Config) -> Resolved {
+    let cli = cli.clone();
     let plugins = &config.plugins;
     let vault = &config.vault;
     let context = &config.context;
