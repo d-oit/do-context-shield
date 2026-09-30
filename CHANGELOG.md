@@ -77,6 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Merge workflow: pull requests are armed with GitHub auto-merge (`gh pr merge --auto --squash --delete-branch`), which merges only when the required checks pass on an up-to-date branch. `AGENTS.md`, the harness guide, and the invariant catalog now state the other half explicitly: auto-merge waits for CI, never for review, so it is armed only while no review comment or review is unanswered, every comment is addressed (fixed or answered, with auto-merge disabled while one is open), and a comment arriving before the merge is handled rather than merged over.
 
+- `skill-evals` sensor hardening: one local run once produced no per-skill verdict at all (the nested `do-harness eval` aborted before evaluating anything; 11 replays and four CI runs since are green). The wrapper now retries once when — and only when — an attempt prints no verdict line: graded and structural outcomes always carry `evals=<n>/<m>`, so an empty verdict set cannot be a graded failure, and a retry can never turn a graded regression green while a deterministic breakage still fails on the second attempt.
+
 ### Fixed
 
 - `plugin-api::resolve_overlaps` resolved equal-length overlapping spans by position, so the left-most span survived a tie that its own documentation — and three call sites — define as "the detector's order decides": `detector-regex` depends on that order for its SPECS precedence, `privacy-core`'s span validation and `plugin-process`'s decoder document it. The sort now compares length only (stable), so equal-length ties keep the reported order and a detector's specificity is preserved; the new test covers equal-length spans that overlap each other at different positions.
