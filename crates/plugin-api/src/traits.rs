@@ -90,6 +90,35 @@ pub trait Vault: Send + Sync {
         original: &str,
     ) -> Result<Mapping, VaultError>;
 
+    /// Return or create one mapping per `(kind, original)` item, in order.
+    ///
+    /// The default implementation calls [`Vault::get_or_insert`] once per
+    /// item, so every vault keeps working unchanged. An override exists to
+    /// avoid one authoritative write per item (see `vault-json`), and MUST
+    /// treat the whole list as one snapshot of the vault: items repeated
+    /// within the call resolve to the same mapping, and a deletion performed
+    /// between two calls (including by another process) must be visible to the
+    /// second one, so state is re-read per call and never cached across calls.
+    ///
+    /// A batch that fails may leave the vault without any of the call's
+    /// mappings: the trait makes no atomicity promise, but an override should
+    /// prefer persisting once at the end over partial writes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError`] when any mapping cannot be stored.
+    fn get_or_insert_many(
+        &mut self,
+        scope: &ScopeId,
+        items: &[(&str, &str)],
+    ) -> Result<Vec<Mapping>, VaultError> {
+        let mut mappings = Vec::with_capacity(items.len());
+        for (kind, original) in items {
+            mappings.push(self.get_or_insert(scope, kind, original)?);
+        }
+        Ok(mappings)
+    }
+
     /// Resolve a token within a scope.
     ///
     /// # Errors

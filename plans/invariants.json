@@ -288,9 +288,9 @@
     "category": "security"
   },
   {
-    "invariant": "Batch vault resolution (`Vault::resolve_many`, used by `restore`) resolves a token list against one authoritative snapshot per call, and no snapshot or per-token result is cached across calls: a scope deletion performed by another process between two calls stays visible to the second one",
-    "rationale": "Restoring a document with many placeholders re-read and re-parsed the whole JSON vault once per token (measured with a 5k-mapping vault: 9 ms per token, 4.5 s for 500 tokens), while a cross-call cache would hide external forget/revocation — the batch fixes the cost without trading away visibility (measured after: 8 ms for the same 500 tokens)",
-    "sensor": "cargo test -p do-context-shield-vault-json + cargo test -p do-context-shield-vault-memory + cargo test -p do-context-shield-core",
+    "invariant": "Batch vault access (`Vault::resolve_many` for `restore`, `Vault::get_or_insert_many` for the pseudonymizing transformer) works against one authoritative snapshot per call, and no snapshot or per-item result is cached across calls: a scope deletion performed by another process between two calls stays visible to the second one",
+    "rationale": "Both per-item paths re-read and re-wrote the whole JSON vault once per placeholder (measured with 5 000 mappings: ~9 ms per token to restore, ~15 ms per new entity to sanitize, i.e. 4.5 s for 500 tokens and ~3 s for 200 entities), while a cross-call cache would hide external forget/revocation — the batches fix the cost without trading away visibility (measured after: 8 ms for 500 tokens, 52 ms for 200 entities)",
+    "sensor": "cargo test -p do-context-shield-vault-json + cargo test -p do-context-shield-vault-memory + cargo test -p do-context-shield-core + cargo test -p do-context-shield-transformer-pseudonymize",
     "category": "contracts"
   },
   {
