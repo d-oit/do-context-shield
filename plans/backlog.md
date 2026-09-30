@@ -39,8 +39,12 @@ architecture decision before code.
 
 ### `Action::Review` human-review flow
 
-- **Status**: `Action::Review` fails the pipeline exactly like `Block`
-  (`PipelineError::Policy`), so it is a reserved action with no flow behind it.
+- **Status**: `Action::Review` fails the pipeline (`PipelineError::Policy`),
+  so it is a reserved action with no flow behind it. Since 2026-09-30 the
+  failure is diagnosable: `Review` reports `input requires review
+  (Action::Review)` while `Block` keeps `input blocked by policy`
+  (`Block` wins when a plan carries both), so an operator can tell "needs a
+  human" from "denied" — the flow-or-removal decision below stays open.
 - **Decision needed**: where review happens (CLI queue, MCP sidecar,
   harness-side hook), who approves, what text continues after approval, and
   the timeout/failure behavior.

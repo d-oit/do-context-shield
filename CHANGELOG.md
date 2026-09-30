@@ -94,6 +94,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `Action::Review` is diagnosable: the pipeline still fails the call (no review flow exists), but the error now reads `input requires review (Action::Review); no review flow is configured, so the call fails closed` instead of collapsing into `input blocked by policy`, so an operator or harness can tell "needs a human" from "denied". `Block` keeps its message and wins when a plan carries both actions.
+
 - `plugin-api::resolve_overlaps` resolved equal-length overlapping spans by position, so the left-most span survived a tie that its own documentation — and three call sites — define as "the detector's order decides": `detector-regex` depends on that order for its SPECS precedence, `privacy-core`'s span validation and `plugin-process`'s decoder document it. The sort now compares length only (stable), so equal-length ties keep the reported order and a detector's specificity is preserved; the new test covers equal-length spans that overlap each other at different positions.
 
 - `detector-gliner2` single-file layout: a `config.json` without a usable `id2label` map, or a missing `config.json`, now fails closed with an explicit error instead of decoding every token as `O` and reporting zero entities — a misconfigured export can no longer look like a clean scan. `Gliner2Config::labels` remains the label schema of the fragment layout (`docs/plugins.md`).
