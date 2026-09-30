@@ -29,7 +29,7 @@ checklist for changing them.
 |---|---|---|
 | detector | spans, kinds, confidence | invent values |
 | semantic judge (optional) | a label and confidence per candidate, or abstention | return spans or text, or weaken redaction |
-| policy | one action per entity; reject via `Action::Block`/`Action::Review` | leave an entity undecided |
+| policy | one action per entity; reject via `Action::Block` | leave an entity undecided |
 | transformer | rewritten text and mappings for pseudonymized values | keep a value it was told to replace, leak a raw value |
 | vault | scope-keyed reversible mappings, `delete_scope`, `expire` | resolve tokens across scopes |
 | pipeline | validation between stages, `EntitySummary` results | echo raw matched text, pass a failure through |
@@ -47,8 +47,8 @@ checklist for changing them.
 2. **Validate** stage output before use, fail closed: detector entities with a
    non-empty kind and confidence in `0..=1`, spans on UTF-8 boundaries with
    `value == input[start..end]`, within bounds, and resolved
-   longest-span-wins; exactly one decision per entity; any `Action::Block` or
-   `Action::Review` halts the pipeline; judgment indices in range and unique
+   longest-span-wins; exactly one decision per entity; an `Action::Block`
+   halts the pipeline; judgment indices in range and unique
    with confidence in `0..=1`; every emitted placeholder resolvable by the
    configured vault.
 3. **Transform and record** only after validation. Results carry `EntitySummary`
@@ -71,7 +71,7 @@ checklist for changing them.
   leak it: stage error text is scrubbed of known values before it surfaces.
 - Restore is scope-limited: another session resolves nothing; `context.restore`
   requires an explicit session.
-- Policy `Action::Block` and `Action::Review` fail the pipeline before transform.
+- Policy `Action::Block` fails the pipeline before transform.
 - A policy that returns fewer decisions than entities, substitutes a kind or
   span, or keeps/pseudonymizes a secret-kind entity fails the call
   (`PipelineError::Policy`).

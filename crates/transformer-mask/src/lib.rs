@@ -45,7 +45,7 @@ impl Transformer for MaskingTransformer {
             let replacement = match planned.action {
                 Action::Keep => planned.entity.value.clone(),
                 Action::Redact => REDACTED.to_owned(),
-                Action::Block | Action::Review => {
+                Action::Block => {
                     return Err(TransformError::Message("blocked by policy".to_owned()));
                 }
                 Action::Pseudonymize => mask(&planned.entity.value),
@@ -190,17 +190,15 @@ mod tests {
     }
 
     #[test]
-    fn block_and_review_actions_fail_closed() {
-        for action in [Action::Block, Action::Review] {
-            let error = match transform(
-                "alice@example.com",
-                &[planned("alice@example.com", "email", 0, 17, action)],
-            ) {
-                Ok(result) => panic!("expected an error, got {result:?}"),
-                Err(error) => error,
-            };
-            assert!(error.to_string().contains("blocked by policy"), "{error}");
-        }
+    fn block_action_fails_closed() {
+        let error = match transform(
+            "alice@example.com",
+            &[planned("alice@example.com", "email", 0, 17, Action::Block)],
+        ) {
+            Ok(result) => panic!("expected an error, got {result:?}"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("blocked by policy"), "{error}");
     }
 
     #[test]

@@ -37,20 +37,6 @@ architecture decision before code.
   plugin (never in the conservative default), with privacy-invariant tests
   covering every cell.
 
-### `Action::Review` human-review flow
-
-- **Status**: `Action::Review` fails the pipeline (`PipelineError::Policy`),
-  so it is a reserved action with no flow behind it. Since 2026-09-30 the
-  failure is diagnosable: `Review` reports `input requires review
-  (Action::Review)` while `Block` keeps `input blocked by policy`
-  (`Block` wins when a plan carries both), so an operator can tell "needs a
-  human" from "denied" — the flow-or-removal decision below stays open.
-- **Decision needed**: where review happens (CLI queue, MCP sidecar,
-  harness-side hook), who approves, what text continues after approval, and
-  the timeout/failure behavior.
-- **Exit criteria**: a documented, testable flow — or removal of the action
-  from the public enum if review belongs outside the boundary.
-
 ## Blocked — approval-gated
 
 ### Client end-to-end checks are manual and require explicit human approval

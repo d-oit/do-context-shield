@@ -252,7 +252,7 @@
     "category": "verification"
   },
   {
-    "invariant": "The pipeline validates the policy plan before transforming: exactly one decision per detected entity, on the same kind and span, and a secret-kind entity is `Redact` (or `Block`/`Review`, which fail the call)",
+    "invariant": "The pipeline validates the policy plan before transforming: exactly one decision per detected entity, on the same kind and span, and a secret-kind entity is `Redact` (or `Block`, which fails the call)",
     "rationale": "A plan that drops an entity leaves its raw value in the sanitized output, and a reversible action on a credential stores it in the vault instead of redacting it, so both defeat the boundary no matter how correct the policy was for the entities it did decide",
     "sensor": "cargo test -p do-context-shield-core (tests::policy::short_plan_fails_closed, tests::policy::substituted_decision_fails_closed, tests::policy::reversible_action_on_secret_fails_closed)",
     "category": "security"
@@ -304,11 +304,5 @@
     "rationale": "Persisted originals otherwise stayed resolvable until the file was deleted or the scope forgotten, so an operator who set a lifetime got it only for the memory vault (and the config layer rejected the combination outright); the decision needed cross-process semantics that do not destroy pre-existing mappings on upgrade and do not reissue an expired token for a different value",
     "sensor": "cargo test -p do-context-shield-vault-json + cargo test -p do-context-shield --test mcp_stdio_config",
     "category": "security"
-  },
-  {
-    "invariant": "`Action::Review` fails the pipeline with a review-specific error (`input requires review (Action::Review)`) that stays distinct from `Action::Block`'s `input blocked by policy`, produces no sanitized text, and never reaches the transformer; when one plan carries both terminal actions, `Block` names the failure",
-    "rationale": "Both actions fail closed, but collapsing them into one message hid whether the caller was denied or needed a human — the reserved review action has no flow, and an operator or harness cannot act on a review requirement it cannot see",
-    "sensor": "cargo test -p do-context-shield-core",
-    "category": "contracts"
   }
 ]

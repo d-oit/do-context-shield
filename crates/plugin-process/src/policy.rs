@@ -1,7 +1,7 @@
 //! `Policy` over the newline-delimited JSON protocol.
 //!
 //! Request: `{"method":"plan","recipient":"external","data_category":"personal","entities":[{"kind","start","end","value","confidence"}],"judgments":[{"index":0,"label":"business","confidence":0.95}]}`.
-//! Response: `{"plan":[{"index":0,"action":"keep|pseudonymize|redact|block|review"}]}`.
+//! Response: `{"plan":[{"index":0,"action":"keep|pseudonymize|redact|block"}]}`.
 //!
 //! `recipient` and `data_category` carry the enforcement context; `purpose`
 //! and `jurisdiction` are omitted when unset.
@@ -224,7 +224,6 @@ fn parse_action(action: &str) -> Option<Action> {
         "pseudonymize" => Some(Action::Pseudonymize),
         "redact" => Some(Action::Redact),
         "block" => Some(Action::Block),
-        "review" => Some(Action::Review),
         _ => None,
     }
 }
