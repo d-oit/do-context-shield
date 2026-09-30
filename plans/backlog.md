@@ -47,19 +47,6 @@ architecture decision before code.
 - **Exit criteria**: a documented, testable flow — or removal of the action
   from the public enum if review belongs outside the boundary.
 
-### `JsonVault` on-disk TTL
-
-- **Status**: at-rest encryption with a key file, the `encrypt-vault`
-  migration, and the format marker landed (harness task 26); `vault_ttl_seconds`
-  still requires the memory vault, so a JSON vault mapping lives until the file
-  is deleted or its scope is forgotten.
-- **Decision needed**: whether cross-process persistence should have a TTL at
-  all, and if so the on-disk semantics (lazy purge on read vs eager rewrite,
-  and how concurrent writer processes coordinate it).
-- **Exit criteria**: documented, tested TTL behavior for the JSON vault — or a
-  recorded decision that persistence deliberately has none and
-  `vault_ttl_seconds` stays memory-vault-only.
-
 ## Blocked — approval-gated
 
 ### Client end-to-end checks are manual and require explicit human approval

@@ -17,6 +17,7 @@ use do_context_shield_transformer_pseudonymize::PseudonymizingTransformer;
 use do_context_shield_vault_json::JsonVault;
 use do_context_shield_vault_memory::MemoryVault;
 use std::path::Path;
+use std::time::Duration;
 use thiserror::Error;
 
 /// Registry errors.
@@ -142,14 +143,24 @@ pub fn vault(name: &str) -> Result<Box<dyn Vault>, RegistryError> {
 /// key file (`vault_key_file` / `--vault-key-file`), and the TTL validation;
 /// this is the registry entry point for the documented `json` vault so every
 /// consumer builds the same implementation. With a key file the vault state is
-/// encrypted at rest.
+/// encrypted at rest; with a TTL a stored mapping stops resolving once it is
+/// older than the lifetime (see [`JsonVault::with_ttl`] for the exact
+/// semantics).
 ///
 /// # Errors
 ///
 /// Returns the vault's own error when the key file cannot be read or the file
 /// cannot be opened in the selected format.
-pub fn json_vault(path: &Path, key_file: Option<&Path>) -> Result<Box<dyn Vault>, VaultError> {
-    Ok(Box::new(JsonVault::open_with_key_file(path, key_file)?))
+pub fn json_vault(
+    path: &Path,
+    key_file: Option<&Path>,
+    ttl: Option<Duration>,
+) -> Result<Box<dyn Vault>, VaultError> {
+    let vault = JsonVault::open_with_key_file(path, key_file)?;
+    Ok(match ttl {
+        Some(ttl) => Box::new(vault.with_ttl(ttl)),
+        None => Box::new(vault),
+    })
 }
 
 #[cfg(test)]
@@ -216,7 +227,7 @@ mod tests {
             Err(error) => panic!("cannot create a temp directory: {error}"),
         };
         let path = dir.path().join("vault.json");
-        let mut vault = match json_vault(&path, None) {
+        let mut vault = match json_vault(&path, None, None) {
             Ok(vault) => vault,
             Err(error) => panic!("json vault must construct: {error}"),
         };

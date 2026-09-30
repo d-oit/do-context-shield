@@ -239,6 +239,44 @@ fn vault_ttl_expires_mappings_inside_one_server() {
     session.close();
 }
 
+#[test]
+fn vault_ttl_expires_json_mappings_across_restarts() {
+    // The JSON vault persists mappings across processes; the TTL bounds how
+    // long a persisted original stays resolvable, so a restarted server must
+    // not resurrect an expired placeholder.
+    let dir = temp_dir();
+    let vault = dir.path().join("ttl.json");
+    let Some(vault_path) = vault.to_str() else {
+        panic!("vault path is not valid UTF-8");
+    };
+    let flags = [
+        "--tools",
+        "all",
+        "--vault",
+        "json",
+        "--vault-file",
+        vault_path,
+        "--vault-ttl-seconds",
+        "1",
+    ];
+    let mut session = McpSession::start_with(&flags);
+    let sanitized = content_text(&session.send(&tool_call(
+        "context.sanitize",
+        &json!({"text": "alice@example.com", "session": "ttl"}),
+    )));
+    common::assert_placeholder(&sanitized, "EMAIL", 1);
+    session.close();
+
+    std::thread::sleep(std::time::Duration::from_millis(1_200));
+    let mut restarted = McpSession::start_with(&flags);
+    let restored = content_text(&restarted.send(&tool_call(
+        "context.restore",
+        &json!({"text": &sanitized, "session": "ttl"}),
+    )));
+    assert_eq!(restored, sanitized);
+    restarted.close();
+}
+
 /// Spawn `mcp-stdio` with `extra` and return its exit code and stderr.
 fn mcp_startup_failure(extra: &[&str]) -> (i32, String) {
     let home = match tempfile::tempdir() {
@@ -262,20 +300,14 @@ fn mcp_startup_failure(extra: &[&str]) -> (i32, String) {
 }
 
 #[test]
-fn vault_ttl_with_a_non_memory_vault_fails_at_startup() {
-    let dir = match tempfile::tempdir() {
-        Ok(dir) => dir,
-        Err(error) => panic!("cannot create a temp directory: {error}"),
-    };
-    let vault = dir.path().join("vault.json");
-    let Some(vault_path) = vault.to_str() else {
-        panic!("vault path is not valid UTF-8");
-    };
+fn vault_ttl_with_a_process_vault_fails_at_startup() {
+    // Memory and JSON vaults both have a lifetime policy; a process vault
+    // keeps retention on the child's side, so a TTL is rejected.
     let (code, stderr) = mcp_startup_failure(&[
         "--vault",
-        "json",
-        "--vault-file",
-        vault_path,
+        "process",
+        "--vault-command",
+        "does-not-matter",
         "--vault-ttl-seconds",
         "5",
     ]);

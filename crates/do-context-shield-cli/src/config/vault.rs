@@ -20,7 +20,7 @@ pub(super) fn validate_vault(vault: &VaultConfig) -> Result<(), Box<dyn std::err
                 return Err(vault_file_conflict("process"));
             }
             if ttl {
-                return Err(ttl_requires_memory("process"));
+                return Err(ttl_needs_a_lifetime_vault("process"));
             }
             if key {
                 return Err(key_requires_json_vault("process"));
@@ -34,19 +34,16 @@ pub(super) fn validate_vault(vault: &VaultConfig) -> Result<(), Box<dyn std::err
                 return Err(key_requires_json_vault("memory"));
             }
         }
+        // The JSON vault carries a write timestamp per mapping, so a TTL
+        // applies to persisted state too; only the process vault has no
+        // lifetime policy.
         Some("json") => {
             if !file {
                 return Err("config: vault `json` requires `vault_file`".into());
             }
-            if ttl {
-                return Err(ttl_requires_memory("json"));
-            }
         }
         // No explicit vault name: a `vault_file` selects the JSON vault.
         _ => {
-            if file && ttl {
-                return Err(ttl_requires_memory("json"));
-            }
             if key && !file {
                 return Err(
                     "config: `vault_key_file` requires `vault_file` (the JSON vault)".into(),
@@ -73,9 +70,10 @@ fn vault_file_conflict(name: &str) -> Box<dyn std::error::Error> {
     .into()
 }
 
-/// A TTL that only the memory vault implements.
-fn ttl_requires_memory(name: &str) -> Box<dyn std::error::Error> {
-    format!("config: `vault_ttl_seconds` requires the memory vault (selected: `{name}`)").into()
+/// A TTL for the one vault that has no lifetime policy.
+fn ttl_needs_a_lifetime_vault(name: &str) -> Box<dyn std::error::Error> {
+    format!("config: `vault_ttl_seconds` requires the memory or JSON vault (selected: `{name}`)")
+        .into()
 }
 
 /// The storage implementation a resolved selection names.

@@ -40,12 +40,11 @@ pub(crate) fn build_vault(
             )?)
         }
         Some("json") => {
-            reject_ttl(ttl, "json")?;
             let path = config.vault_file.take().ok_or(
                 "vault `json` requires a vault file (`vault_file` or `--vault-file <path>`)",
             )?;
             let key_file = config.vault_key_file.take();
-            json_vault(&path, key_file.as_deref())?
+            json_vault(&path, key_file.as_deref(), ttl)?
         }
         Some("memory") => {
             if config.vault_file.is_some() {
@@ -62,9 +61,8 @@ pub(crate) fn build_vault(
         Some(other) => return Err(format!("unknown vault plugin `{other}`").into()),
         None => {
             if let Some(path) = config.vault_file.take() {
-                reject_ttl(ttl, "json")?;
                 let key_file = config.vault_key_file.take();
-                json_vault(&path, key_file.as_deref())?
+                json_vault(&path, key_file.as_deref(), ttl)?
             } else if config.vault_key_file.is_some() {
                 return Err(
                     "`vault_key_file` (`--vault-key-file`) requires a vault file (`vault_file` or `--vault-file <path>`) for the JSON vault"
@@ -87,9 +85,12 @@ pub(crate) fn build_vault(
 fn json_vault(
     path: &Path,
     key_file: Option<&Path>,
+    ttl_seconds: Option<u64>,
 ) -> Result<Box<dyn Vault>, Box<dyn std::error::Error>> {
     Ok(do_context_shield_plugin_registry::json_vault(
-        path, key_file,
+        path,
+        key_file,
+        ttl_seconds.map(Duration::from_secs),
     )?)
 }
 
@@ -101,11 +102,11 @@ fn key_requires_json_vault(name: &str) -> Box<dyn std::error::Error> {
     .into()
 }
 
-/// Reject a TTL that the selected vault has no lifetime policy for.
+/// Reject a TTL for the one vault that has no lifetime policy.
 fn reject_ttl(ttl: Option<u64>, name: &str) -> Result<(), Box<dyn std::error::Error>> {
     if ttl.is_some() {
         return Err(format!(
-            "`vault_ttl_seconds` (`--vault-ttl-seconds`) requires the memory vault (selected: `{name}`)"
+            "`vault_ttl_seconds` (`--vault-ttl-seconds`) requires the memory or JSON vault (selected: `{name}`)"
         )
         .into());
     }
@@ -127,40 +128,43 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn vault_ttl_is_rejected_for_non_memory_vaults() {
-        for name in ["json", "process"] {
-            let mut config = ServerConfig {
-                vault: Some(name.to_owned()),
-                vault_command: Some("does-not-matter".to_owned()),
-                vault_ttl_seconds: Some(60),
-                ..ServerConfig::default()
-            };
-            let error = match build_vault(&mut config, Duration::from_millis(DEFAULT_TIMEOUT_MS)) {
-                Ok(_) => panic!("expected the TTL to be rejected for `{name}`"),
-                Err(error) => error.to_string(),
-            };
-            assert!(error.contains("requires the memory vault"), "{error}");
-        }
-
-        // A lone `vault_file` selects the JSON vault, which has no lifetime policy.
+    fn vault_ttl_is_rejected_only_for_the_process_vault() {
         let mut config = ServerConfig {
-            vault_file: Some(PathBuf::from("/nonexistent/vault.json")),
+            vault: Some("process".to_owned()),
+            vault_command: Some("does-not-matter".to_owned()),
             vault_ttl_seconds: Some(60),
             ..ServerConfig::default()
         };
         let error = match build_vault(&mut config, Duration::from_millis(DEFAULT_TIMEOUT_MS)) {
-            Ok(_) => panic!("expected the TTL to be rejected for a JSON vault file"),
+            Ok(_) => panic!("expected the TTL to be rejected for `process`"),
             Err(error) => error.to_string(),
         };
-        assert!(error.contains("requires the memory vault"), "{error}");
+        assert!(
+            error.contains("requires the memory or JSON vault"),
+            "{error}"
+        );
 
-        // The memory vault is the one vault a TTL applies to.
+        // The memory vault applies the TTL in process.
         let mut config = ServerConfig {
             vault: Some("memory".to_owned()),
             vault_ttl_seconds: Some(60),
             ..ServerConfig::default()
         };
         assert!(build_vault(&mut config, Duration::from_millis(DEFAULT_TIMEOUT_MS)).is_ok());
+
+        // The JSON vault persists a write timestamp per mapping, so a TTL
+        // applies to the file as well.
+        let dir = std::env::temp_dir().join("do-context-shield-mcp-ttl-test");
+        std::fs::create_dir_all(&dir).ok();
+        let path = dir.join("vault.json");
+        let mut config = ServerConfig {
+            vault: Some("json".to_owned()),
+            vault_file: Some(path.clone()),
+            vault_ttl_seconds: Some(60),
+            ..ServerConfig::default()
+        };
+        assert!(build_vault(&mut config, Duration::from_millis(DEFAULT_TIMEOUT_MS)).is_ok());
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
