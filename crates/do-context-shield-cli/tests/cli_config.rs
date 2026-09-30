@@ -221,3 +221,142 @@ fn invalid_env_override_exits_nonzero() {
         .code(1)
         .stderr(predicates::str::contains("DO_CONTEXT_SHIELD_POLICY"));
 }
+
+#[test]
+fn environment_context_precedence_changes_policy_outcome() {
+    let dir = temp_dir();
+    write_config(
+        &dir.path().join("do-context-shield.toml"),
+        "[context]\nrecipient = \"external\"\n",
+    );
+
+    // The environment value beats the file value; a kept value (not a token)
+    // is the policy outcome only a `local` recipient produces.
+    let assert = cmd(dir.path())
+        .env("DO_CONTEXT_SHIELD_RECIPIENT", "local")
+        .args(["sanitize", "--session", "cfg-test"])
+        .write_stdin("alice@example.com")
+        .assert()
+        .success();
+    let kept = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
+    assert_eq!(kept, "alice@example.com");
+
+    // The CLI flag still beats the environment: explicit `external` mints.
+    let assert = cmd(dir.path())
+        .env("DO_CONTEXT_SHIELD_RECIPIENT", "local")
+        .args([
+            "sanitize",
+            "--session",
+            "cfg-test",
+            "--recipient",
+            "external",
+        ])
+        .write_stdin("alice@example.com")
+        .assert()
+        .success();
+    let sanitized = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
+    common::assert_placeholder(&sanitized, "EMAIL", 1);
+}
+
+#[test]
+fn invalid_context_environment_fails_closed() {
+    let dir = temp_dir();
+    // Each variable is checked before any plugin runs; the jurisdiction case
+    // keeps the configuration diagnostic (the environment layer feeds the
+    // same `[context]` validation the file uses).
+    for (name, value, diagnostic) in [
+        ("DO_CONTEXT_SHIELD_RECIPIENT", "nope", "recipient"),
+        ("DO_CONTEXT_SHIELD_DATA_CATEGORY", "nope", "data_category"),
+        (
+            "DO_CONTEXT_SHIELD_JURISDICTION",
+            "Germany",
+            "ISO 3166-1 alpha-2",
+        ),
+    ] {
+        let assert = cmd(dir.path())
+            .env(name, value)
+            .args(["sanitize", "--session", "cfg-test"])
+            .write_stdin("alice@example.com")
+            .assert()
+            .code(1)
+            .stderr(predicates::str::contains(diagnostic));
+        let output = assert.get_output();
+        assert!(
+            output.stdout.is_empty(),
+            "invalid {name} produced sanitized output"
+        );
+        assert!(
+            !String::from_utf8_lossy(&output.stderr).contains("alice@example.com"),
+            "stdin leaked for {name}"
+        );
+    }
+}
+
+#[test]
+fn environment_data_category_reaches_policy() {
+    let dir = temp_dir();
+    // The default recipient is `external`, so a special-category environment
+    // value blocks the call instead of pseudonymizing it.
+    cmd(dir.path())
+        .env("DO_CONTEXT_SHIELD_DATA_CATEGORY", "special_category")
+        .args(["sanitize", "--session", "cfg-test"])
+        .write_stdin("alice@example.com")
+        .assert()
+        .code(1)
+        .stderr(predicates::str::contains("blocked by policy"));
+
+    // The flag override restores the documented pseudonymization.
+    let assert = cmd(dir.path())
+        .env("DO_CONTEXT_SHIELD_DATA_CATEGORY", "special_category")
+        .args([
+            "sanitize",
+            "--session",
+            "cfg-test",
+            "--data-category",
+            "personal",
+        ])
+        .write_stdin("alice@example.com")
+        .assert()
+        .success();
+    let sanitized = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
+    common::assert_placeholder(&sanitized, "EMAIL", 1);
+}
+
+#[test]
+fn environment_selects_non_reversible_transform_and_judge() {
+    let dir = temp_dir();
+    // `generalize` emits kind-only tokens; the bare placeholder proves the
+    // transformer environment value was selected over the pseudonymizing
+    // default.
+    let assert = cmd(dir.path())
+        .env("DO_CONTEXT_SHIELD_TRANSFORMER", "generalize")
+        .args(["sanitize", "--session", "cfg-test"])
+        .write_stdin("alice@example.com")
+        .assert()
+        .success();
+    assert_eq!(
+        String::from_utf8_lossy(&assert.get_output().stdout),
+        "__DO_PRIVATE_EMAIL__"
+    );
+
+    // `heuristics` keeps the reserved-domain address; without a judge the
+    // same address pseudonymizes.
+    let assert = cmd(dir.path())
+        .env("DO_CONTEXT_SHIELD_JUDGE", "heuristics")
+        .args(["sanitize", "--session", "cfg-test"])
+        .write_stdin("test@example.com")
+        .assert()
+        .success();
+    assert_eq!(
+        String::from_utf8_lossy(&assert.get_output().stdout),
+        "test@example.com"
+    );
+
+    let assert = cmd(dir.path())
+        .args(["sanitize", "--session", "cfg-test"])
+        .write_stdin("test@example.com")
+        .assert()
+        .success();
+    let sanitized = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
+    common::assert_placeholder(&sanitized, "EMAIL", 1);
+}

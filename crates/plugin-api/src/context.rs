@@ -91,3 +91,16 @@ pub struct ProcessingContext {
     /// Highest data category present in the input.
     pub data_category: DataCategory,
 }
+
+/// Whether `value` matches the declared-jurisdiction shape: exactly two ASCII
+/// letters (ISO 3166-1 alpha-2).
+///
+/// This is a shape check only: it neither normalizes case nor claims that the
+/// code names a recognized country or an approved transfer. Every configuration
+/// layer (file, environment, CLI flag) and the MCP tool arguments share this
+/// predicate, and a value failing it must be treated as *unknown* by policy
+/// decisions — never as a declaration.
+#[must_use]
+pub fn is_valid_jurisdiction(value: &str) -> bool {
+    value.len() == 2 && value.chars().all(|c| c.is_ascii_alphabetic())
+}

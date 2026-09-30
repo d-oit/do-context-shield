@@ -78,7 +78,7 @@ Default enforcement context. It applies to the CLI `sanitize` call and supplies 
 | `purpose` | free-form string | unset |
 | `jurisdiction` | ISO 3166-1 alpha-2 code | unset |
 
-Field semantics: `recipient` and `data_category` drive the built-in default policy. `jurisdiction` is the governing regime of the transfer when the caller knows it; unset means unknown, and unknown fails closed — special-category data to a non-local recipient is blocked (external and unknown recipients always block, and a trusted recipient blocks while the jurisdiction is unset). `purpose` is free-form intent forwarded to policy plugins; the built-in default policy does not read it, and it never loosens a decision.
+Field semantics: `recipient` and `data_category` drive the built-in default policy. `jurisdiction` is the governing regime of the transfer when the caller knows it; unset means unknown, and unknown fails closed — special-category data to a non-local recipient is blocked (external and unknown recipients always block, and a trusted recipient blocks while the jurisdiction is unset or malformed). `purpose` is free-form intent forwarded to policy plugins; the built-in default policy does not read it, and it never loosens a decision.
 
 ### `[process]`
 
@@ -138,7 +138,7 @@ Startup fails, naming the offending field, when
 - the file contains an unknown key,
 - a plugin, recipient, or data-category name is unknown (the error lists the accepted values),
 - the `[plugins] tools` list is empty or names an unknown tool (the error lists the accepted values),
-- `jurisdiction` is not a two-letter ISO 3166-1 alpha-2 code (the value is forwarded to policies as written, so a typo must not reach them),
+- `jurisdiction` is not a two-letter ISO 3166-1 alpha-2 code (the value is forwarded to policies as written, so a typo must not reach them). The same shape predicate guards every layer: the file and the environment fail at load, `sanitize --jurisdiction` fails at argument parsing with exit 2 before stdin is read, and `context.sanitize` returns an `isError` result — a malformed value never falls back to a valid server default,
 - the `[vault]` combination cannot select one consistent vault:
   - `vault = "json"` without `vault_file`,
   - `vault_file` together with `vault = "memory"` or `vault = "process"`,

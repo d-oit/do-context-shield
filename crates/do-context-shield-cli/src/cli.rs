@@ -3,6 +3,7 @@
 use clap::{Args, Parser, Subcommand};
 use do_context_shield_core::EntitySummary;
 use do_context_shield_mcp_server::ToolSet;
+use do_context_shield_plugin_api::is_valid_jurisdiction;
 use serde::Serialize;
 use std::path::PathBuf;
 
@@ -26,11 +27,17 @@ pub(crate) struct Cli {
 
 #[derive(Subcommand)]
 pub(crate) enum Command {
+    #[command(about = "Sanitize sensitive text from stdin")]
     Sanitize(SanitizeArgs),
+    #[command(about = "Restore placeholders from stdin within an explicit session")]
     Restore(RestoreArgs),
+    #[command(about = "Inspect sensitive entities from stdin without exposing their values")]
     Inspect(InspectArgs),
+    #[command(about = "Delete every mapping stored for a session scope")]
     Forget(ForgetArgs),
+    #[command(about = "Serve the privacy tools over MCP JSON-RPC stdio")]
     McpStdio(McpArgs),
+    #[command(about = "Rewrite an existing plaintext JSON vault in the encrypted format")]
     EncryptVault(EncryptVaultArgs),
 }
 
@@ -144,6 +151,20 @@ fn parse_tools(value: &str) -> Result<ToolSet, String> {
     ToolSet::parse(value)
 }
 
+/// Parse the `--jurisdiction` value with the shared shape predicate.
+///
+/// A rejected value fails argument parsing (exit 2) before stdin is read, so a
+/// malformed code can never satisfy the declared-jurisdiction policy
+/// condition. The rejection message is fixed: it does not echo the rejected
+/// text.
+fn parse_jurisdiction(value: &str) -> Result<String, String> {
+    if is_valid_jurisdiction(value) {
+        Ok(value.to_owned())
+    } else {
+        Err("jurisdiction must be an ISO 3166-1 alpha-2 code".to_owned())
+    }
+}
+
 /// Detector plugin selection shared by sanitize, inspect, and mcp-stdio.
 #[derive(Args, Default)]
 pub(crate) struct DetectorSelection {
@@ -220,8 +241,10 @@ pub(crate) struct ContextArgs {
     #[arg(long)]
     pub(crate) purpose: Option<String>,
     /// Jurisdiction code (ISO 3166-1 alpha-2), if known. Unset counts as
-    /// unknown, which blocks special-category data to any non-local recipient.
-    #[arg(long)]
+    /// unknown, which blocks special-category data to any non-local recipient;
+    /// a malformed value is an argument error instead of an implicit
+    /// declaration.
+    #[arg(long, value_parser = parse_jurisdiction)]
     pub(crate) jurisdiction: Option<String>,
 }
 

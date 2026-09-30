@@ -211,3 +211,30 @@ fn process_timeout_flag_bounds_each_call() {
         started.elapsed()
     );
 }
+
+#[test]
+fn config_file_timeout_bounds_each_call() {
+    let dir = temp_dir();
+    // Same direct `sleep` child as the flag test, but the bound comes from
+    // `[process] timeout_ms` alone: without the merge the built-in 30 000 ms
+    // default would let the child run to completion and this finishes only
+    // because the file value was applied.
+    common::write_config(
+        &dir.path().join("do-context-shield.toml"),
+        "[plugins]\npolicy = \"process\"\npolicy_command = \"sleep 30\"\n\n[process]\ntimeout_ms = 200\n",
+    );
+    let started = Instant::now();
+    cmd(dir.path())
+        .args(["sanitize", "--session", "proc"])
+        .write_stdin("alice@example.com")
+        .assert()
+        .code(1)
+        .stderr(predicates::str::contains(
+            "process policy timed out after 200 ms",
+        ));
+    assert!(
+        started.elapsed() < Duration::from_secs(10),
+        "took {:?}",
+        started.elapsed()
+    );
+}

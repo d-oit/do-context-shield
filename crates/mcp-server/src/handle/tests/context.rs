@@ -52,6 +52,80 @@ fn sanitize_context_data_category_reaches_the_policy() {
 }
 
 #[test]
+fn malformed_jurisdiction_is_rejected_before_the_policy() {
+    let mut pipeline = pipeline();
+    for value in ["", "Germany", "DEU", "de-DE", "D1", "é"] {
+        let extra = format!(
+            r#","recipient":"trusted","data_category":"special_category","jurisdiction":"{value}""#
+        );
+        let Some(response) = context_sanitize(&mut pipeline, "alice@example.com", &extra) else {
+            panic!("expected a response");
+        };
+        assert_eq!(
+            response.pointer("/result/isError").and_then(Value::as_bool),
+            Some(true),
+            "{response}"
+        );
+        assert!(response.get("error").is_none(), "{response}");
+        let message = response
+            .pointer("/result/content/0/text")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        assert!(message.contains("ISO 3166-1 alpha-2"), "{response}");
+        assert!(
+            !response.to_string().contains("alice@example.com"),
+            "{response}"
+        );
+    }
+}
+
+#[test]
+fn invalid_jurisdiction_override_never_inherits_the_server_default() {
+    // The server default declares a valid code; the per-call value replaces it
+    // and must be validated on its own instead of silently falling back.
+    let server = ProcessingContext {
+        recipient: RecipientClass::Trusted,
+        data_category: DataCategory::SpecialCategory,
+        jurisdiction: Some("DE".to_owned()),
+        ..ProcessingContext::default()
+    };
+    let mut pipeline = pipeline();
+    let Some(rejected) = request_with_context(
+        &mut pipeline,
+        ToolSet::all(),
+        &server,
+        &tool_call_with_context(
+            "context.sanitize",
+            "alice@example.com",
+            r#","jurisdiction":"Germany""#,
+        ),
+    ) else {
+        panic!("expected a response");
+    };
+    assert_eq!(
+        rejected.pointer("/result/isError").and_then(Value::as_bool),
+        Some(true),
+        "{rejected}"
+    );
+
+    // Control: a valid override still reaches the policy and declares the
+    // jurisdiction, so the trusted special-category transfer pseudonymizes.
+    let Some(sanitized) = request_with_context(
+        &mut pipeline,
+        ToolSet::all(),
+        &server,
+        &tool_call_with_context(
+            "context.sanitize",
+            "alice@example.com",
+            r#","jurisdiction":"de""#,
+        ),
+    ) else {
+        panic!("expected a response");
+    };
+    assert_placeholder(&content_text(Some(sanitized)), "EMAIL", 1);
+}
+
+#[test]
 fn sanitize_context_purpose_and_jurisdiction_are_accepted() {
     let mut pipeline = pipeline();
     let sanitized = content_text(context_sanitize(

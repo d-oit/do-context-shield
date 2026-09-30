@@ -201,17 +201,20 @@ impl PrivacyPipeline {
     /// Get the detector's current findings without transforming.
     ///
     /// Findings carry kind, byte span, and confidence; the matched text is
-    /// never returned.
+    /// never returned. The same validation and overlap resolution `sanitize`
+    /// applies runs first, so a malformed detector cannot disclose findings it
+    /// would not be allowed to transform.
     ///
     /// # Errors
     ///
-    /// Returns [`PipelineError`] when detection fails.
+    /// Returns [`PipelineError`] when detection or output validation fails.
     pub fn inspect(&self, input: &str) -> Result<Vec<EntitySummary>, PipelineError> {
         let detected = self
             .detector
             .detect(input)
             .map_err(|error| scrub_detector(error, &[input]))?;
-        Ok(detected.iter().map(EntitySummary::from).collect())
+        let entities = validate_spans(input, &detected)?;
+        Ok(entities.iter().map(EntitySummary::from).collect())
     }
 
     /// Delete every mapping stored for a session scope.
@@ -239,10 +242,11 @@ impl PrivacyPipeline {
 /// Validate detector output before the judge and policy see it.
 ///
 /// Every entity must carry a non-empty kind and a confidence in `0..=1`, and
-/// every span must fall on UTF-8 character boundaries, stay within the input,
-/// and carry the value the input actually holds at that span. Overlaps are
-/// resolved by [`resolve_overlaps`] (longest-span-wins, equal lengths keeping
-/// the detector's order), so the transformer never sees overlapping ranges.
+/// every span must be non-empty, fall on UTF-8 character boundaries, stay
+/// within the input, and carry the value the input actually holds at that
+/// span. Overlaps are resolved by [`resolve_overlaps`] (longest-span-wins,
+/// equal lengths keeping the detector's order), so the transformer never sees
+/// overlapping ranges.
 fn validate_spans(input: &str, entities: &[Entity]) -> Result<Vec<Entity>, PipelineError> {
     let mut validated = Vec::with_capacity(entities.len());
     for entity in entities {
@@ -258,6 +262,12 @@ fn validate_spans(input: &str, entities: &[Entity]) -> Result<Vec<Entity>, Pipel
                 entity.start,
                 entity.end,
                 input.len()
+            ))));
+        }
+        if entity.start == entity.end {
+            return Err(PipelineError::Detector(DetectorError::Message(format!(
+                "entity span {}..{} is empty",
+                entity.start, entity.end
             ))));
         }
         if input.get(entity.start..entity.end) != Some(entity.value.as_str()) {
