@@ -1,6 +1,7 @@
 //! Vault-level tests for the encrypted format and the migration path.
 
 use super::*;
+use do_context_shield_plugin_api::Vault;
 
 fn key(seed: u8) -> VaultKey {
     VaultKey::new([seed; 32])

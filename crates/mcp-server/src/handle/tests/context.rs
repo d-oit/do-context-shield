@@ -1,6 +1,7 @@
 //! Enforcement-context tests: server defaults, per-call overrides, fail-closed parsing.
 
 use super::*;
+use do_context_shield_plugin_api::{DataCategory, ProcessingContext, RecipientClass};
 
 #[test]
 fn sanitize_context_recipient_reaches_the_policy() {
