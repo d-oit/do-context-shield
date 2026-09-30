@@ -75,6 +75,7 @@ timeout_ms = 1500
         process: ProcessConfig {
             timeout_ms: Some(1500),
         },
+        env: super::env::EnvSet::default(),
     };
     assert_eq!(config, expected);
     Ok(())
@@ -192,7 +193,7 @@ fn cli_overrides_config_and_defaults_fill_gaps() -> Result<(), Box<dyn std::erro
         },
         ..CliSelection::default()
     };
-    let resolved = resolve(cli, &config);
+    let resolved = resolve(&cli, &config);
     assert_eq!(resolved.detector, "gliner2");
     assert_eq!(resolved.policy, "process");
     assert_eq!(resolved.transformer, "pseudonymize");

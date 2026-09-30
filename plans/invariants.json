@@ -280,5 +280,11 @@
     "rationale": "Auto-merge enforces the check gate mechanically but is blind to review: arming it on a PR with an open question or a CHANGES_REQUESTED review merges over the reviewer, so the merge discipline must state both halves explicitly",
     "sensor": "review-only (GitHub auto-merge bound to the required `CI Success` check; comment triage stays maintainer-enforced)",
     "category": "workflow"
+  },
+  {
+    "invariant": "The effective-configuration diagnostic (`do-context-shield config`) reports only whitelisted settings — validated plugin and vault names, enforcement-context values, numeric limits, and presence booleans — each with the layer that supplied it; raw process commands, filesystem paths, key material, and free-form `purpose` values never appear in its output, and the effective vault plus the contradictory-selection failure come from the same classifier the executing commands use",
+    "rationale": "The report is designed to be pasted into an agent context, so any path, command line, key location, or free-form purpose text would leak operational detail that the four-layer precedence inspection does not need; a second copy of the vault-selection rules would let the report claim a vault the runtime refuses",
+    "sensor": "cargo test -p do-context-shield --test cli_config_diag",
+    "category": "security"
   }
 ]

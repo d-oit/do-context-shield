@@ -52,6 +52,8 @@ printf '%s' 'contact me at alice@example.com' | do-context-shield inspect
 printf '%s' 'contact me at alice@example.com' | do-context-shield sanitize --session work-1 --vault-file ~/.local/share/do-context-shield/vault.json
 
 do-context-shield mcp-stdio --vault-file ~/.local/share/do-context-shield/vault.json
+
+do-context-shield config   # effective plugin/context selection with its source layer
 ```
 
 `restore` only resolves tokens held by the same local vault/session, and only the exact token the vault minted. The built-in memory and JSON vaults add per-mapping entropy, so a fabricated `__DO_PRIVATE_*__` string does not resolve; process vaults own their token policy and must be trusted local plugins. Nothing leaves the process unless a caller explicitly sends sanitized text onward. The optional JSON vault contains original values by design; protect that local file and use it only when cross-process restoration is required.

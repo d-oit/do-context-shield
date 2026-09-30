@@ -2,8 +2,8 @@
 
 use clap::Parser;
 use cli::{
-    Cli, Command, ContextArgs, DetectorSelection, EncryptVaultArgs, ForgetArgs, InspectArgs,
-    InspectOutput, McpArgs, PipelineSelection, RestoreArgs, SanitizeArgs, VaultArgs,
+    Cli, Command, ConfigArgs, ContextArgs, DetectorSelection, EncryptVaultArgs, ForgetArgs,
+    InspectArgs, InspectOutput, McpArgs, PipelineSelection, RestoreArgs, SanitizeArgs, VaultArgs,
     VaultSelection,
 };
 use do_context_shield_core::PrivacyPipeline;
@@ -67,51 +67,16 @@ fn build_vault(
     let timeout = Duration::from_millis(resolved.process_timeout_ms);
     let vault_file = resolved.vault_file.as_deref();
     let vault_key_file = resolved.vault_key_file.as_deref();
-    Ok(match resolved.vault.as_deref() {
-        Some("process") => {
-            if vault_file.is_some() {
-                return Err(
-                    "vault `process` cannot be combined with a vault file (`vault_file` or `--vault-file`)"
-                        .into(),
-                );
-            }
-            if vault_key_file.is_some() {
-                return Err(vault_key_conflict("process"));
-            }
-            Box::new(ProcessVault::from_selection(
-                resolved.vault_command.as_deref(),
-                timeout,
-            )?)
-        }
-        Some("json") => do_context_shield_plugin_registry::json_vault(
-            json_vault_file(vault_file)?,
+    Ok(match config::vault_kind(resolved)? {
+        config::VaultKind::Process => Box::new(ProcessVault::from_selection(
+            resolved.vault_command.as_deref(),
+            timeout,
+        )?),
+        config::VaultKind::Json => do_context_shield_plugin_registry::json_vault(
+            config::json_vault_file(vault_file)?,
             vault_key_file,
         )?,
-        Some("memory") => {
-            if vault_file.is_some() {
-                return Err(
-                    "vault `memory` cannot be combined with a vault file (`vault_file` or `--vault-file`)"
-                        .into(),
-                );
-            }
-            if vault_key_file.is_some() {
-                return Err(vault_key_conflict("memory"));
-            }
-            do_context_shield_plugin_registry::vault("memory")?
-        }
-        Some(other) => return Err(format!("unknown vault plugin `{other}`").into()),
-        None => {
-            if let Some(path) = vault_file {
-                do_context_shield_plugin_registry::json_vault(path, vault_key_file)?
-            } else if vault_key_file.is_some() {
-                return Err(
-                    "vault key file (`vault_key_file` or `--vault-key-file`) requires a vault file (`vault_file` or `--vault-file <path>`) for the JSON vault"
-                        .into(),
-                );
-            } else {
-                do_context_shield_plugin_registry::vault("memory")?
-            }
-        }
+        config::VaultKind::Memory => do_context_shield_plugin_registry::vault("memory")?,
     })
 }
 
@@ -235,21 +200,6 @@ fn inspect_pipeline(
     ))
 }
 
-/// Resolve the JSON vault path or explain what is missing.
-fn json_vault_file(vault_file: Option<&Path>) -> Result<&Path, Box<dyn std::error::Error>> {
-    vault_file.ok_or_else(|| {
-        "vault `json` requires a vault file (`vault_file` or `--vault-file <path>`)".into()
-    })
-}
-
-/// A vault key file alongside a vault that cannot encrypt at rest.
-fn vault_key_conflict(name: &str) -> Box<dyn std::error::Error> {
-    format!(
-        "vault `{name}` cannot be combined with a vault key file (`vault_key_file` or `--vault-key-file`)"
-    )
-    .into()
-}
-
 fn read_stdin() -> Result<String, Box<dyn std::error::Error>> {
     let mut input = String::new();
     io::stdin().read_to_string(&mut input)?;
@@ -264,6 +214,7 @@ fn run_simple(command: Command, config: &config::Config) -> Result<(), Box<dyn s
         Command::Inspect(args) => run_inspect(args, config)?,
         Command::Forget(args) => run_forget(args, config)?,
         Command::McpStdio(args) => run_mcp(args, config)?,
+        Command::Config(args) => run_config(args, config)?,
         Command::EncryptVault(args) => run_encrypt_vault(&args)?,
     }
     io::stdout().flush()?;
@@ -281,7 +232,7 @@ fn run_sanitize(
         store,
     } = args.vault;
     let resolved = config::resolve(
-        config::CliSelection {
+        &config::CliSelection {
             detector: args.detector,
             pipeline: args.pipeline,
             vault: store,
@@ -311,7 +262,7 @@ fn run_restore(
         store,
     } = args.vault;
     let resolved = config::resolve(
-        config::CliSelection {
+        &config::CliSelection {
             detector: DetectorSelection::default(),
             pipeline: PipelineSelection::default(),
             vault: store,
@@ -338,7 +289,7 @@ fn run_inspect(
     config: &config::Config,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let resolved = config::resolve(
-        config::CliSelection {
+        &config::CliSelection {
             detector: args.detector,
             pipeline: PipelineSelection::default(),
             vault: VaultSelection::default(),
@@ -368,7 +319,7 @@ fn run_forget(args: ForgetArgs, config: &config::Config) -> Result<(), Box<dyn s
         store,
     } = args.vault;
     let resolved = config::resolve(
-        config::CliSelection {
+        &config::CliSelection {
             detector: DetectorSelection::default(),
             pipeline: PipelineSelection::default(),
             vault: store,
@@ -389,7 +340,7 @@ fn run_forget(args: ForgetArgs, config: &config::Config) -> Result<(), Box<dyn s
 fn run_mcp(args: McpArgs, config: &config::Config) -> Result<(), Box<dyn std::error::Error>> {
     let tools = config::resolve_tools(args.tools, config)?;
     let resolved = config::resolve(
-        config::CliSelection {
+        &config::CliSelection {
             detector: args.detector,
             pipeline: args.pipeline,
             vault: args.store,
@@ -421,6 +372,33 @@ fn run_mcp(args: McpArgs, config: &config::Config) -> Result<(), Box<dyn std::er
         process_timeout_ms: resolved.process_timeout_ms,
         context,
     })?;
+    Ok(())
+}
+
+/// Print the effective configuration for the given selection flags.
+///
+/// The report never builds a plugin and never reads stdin; it lists the
+/// whitelisted settings with the layer that supplied each one
+/// ([`config::diag`]).
+///
+/// # Errors
+///
+/// Returns the vault-selection conflict when the flags name no consistent
+/// vault, exactly as the executing commands would.
+fn run_config(args: ConfigArgs, config: &config::Config) -> Result<(), Box<dyn std::error::Error>> {
+    let cli = config::CliSelection {
+        detector: args.detector,
+        pipeline: args.pipeline,
+        vault: args.store,
+        vault_file: args.vault_file,
+        vault_key_file: args.vault_key_file,
+        vault_ttl_seconds: None,
+        context: args.context,
+        process: args.process,
+    };
+    let explained = config::diag::explain(&cli, config)?;
+    serde_json::to_writer_pretty(io::stdout(), &explained)?;
+    println!();
     Ok(())
 }
 

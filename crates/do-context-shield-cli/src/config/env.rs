@@ -3,12 +3,39 @@
 //! Precedence is CLI flag > environment variable > file value > built-in
 //! default: [`apply`] runs after the file is read, and every CLI flag still
 //! wins in [`super::resolve`]. An unset or empty variable keeps the file value.
+//! Every applied variable is recorded in [`EnvSet`], which the
+//! effective-configuration diagnostics read to name the supplying layer.
 
 use super::{
     Config, DATA_CATEGORIES, DETECTORS, JUDGES, POLICIES, RECIPIENTS, TRANSFORMERS, VAULTS,
 };
 use do_context_shield_mcp_server::ToolSet;
 use std::path::PathBuf;
+
+/// One flag per `DO_CONTEXT_SHIELD_*` variable [`apply`] recognises.
+///
+/// A flag is set when the variable held a non-empty value and its value was
+/// applied, whatever the file said; the merged value alone cannot distinguish
+/// the environment layer from the file, so the source is recorded here.
+// Named booleans are the representation: a bitset would hide which variable
+// each flag answers for.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct EnvSet {
+    pub(crate) detector: bool,
+    pub(crate) policy: bool,
+    pub(crate) transformer: bool,
+    pub(crate) judge: bool,
+    pub(crate) tools: bool,
+    pub(crate) vault: bool,
+    pub(crate) vault_file: bool,
+    pub(crate) vault_key_file: bool,
+    pub(crate) vault_ttl_seconds: bool,
+    pub(crate) recipient: bool,
+    pub(crate) data_category: bool,
+    pub(crate) purpose: bool,
+    pub(crate) jurisdiction: bool,
+}
 
 /// Apply environment overrides onto `config`.
 ///
@@ -21,10 +48,12 @@ pub(super) fn apply(config: &mut Config) -> Result<(), Box<dyn std::error::Error
     if let Some(value) = var("DO_CONTEXT_SHIELD_DETECTOR") {
         checked(&value, "DO_CONTEXT_SHIELD_DETECTOR", "detector", &DETECTORS)?;
         config.plugins.detector = Some(value);
+        config.env.detector = true;
     }
     if let Some(value) = var("DO_CONTEXT_SHIELD_POLICY") {
         checked(&value, "DO_CONTEXT_SHIELD_POLICY", "policy", &POLICIES)?;
         config.plugins.policy = Some(value);
+        config.env.policy = true;
     }
     if let Some(value) = var("DO_CONTEXT_SHIELD_TRANSFORMER") {
         checked(
@@ -34,10 +63,12 @@ pub(super) fn apply(config: &mut Config) -> Result<(), Box<dyn std::error::Error
             &TRANSFORMERS,
         )?;
         config.plugins.transformer = Some(value);
+        config.env.transformer = true;
     }
     if let Some(value) = var("DO_CONTEXT_SHIELD_JUDGE") {
         checked(&value, "DO_CONTEXT_SHIELD_JUDGE", "judge", &JUDGES)?;
         config.plugins.judge = Some(value);
+        config.env.judge = true;
     }
     if let Some(value) = var("DO_CONTEXT_SHIELD_TOOLS") {
         ToolSet::parse(&value).map_err(|error| {
@@ -46,16 +77,20 @@ pub(super) fn apply(config: &mut Config) -> Result<(), Box<dyn std::error::Error
             )
         })?;
         config.plugins.tools = Some(value);
+        config.env.tools = true;
     }
     if let Some(value) = var("DO_CONTEXT_SHIELD_VAULT") {
         checked(&value, "DO_CONTEXT_SHIELD_VAULT", "vault", &VAULTS)?;
         config.vault.vault = Some(value);
+        config.env.vault = true;
     }
     if let Some(value) = var("DO_CONTEXT_SHIELD_VAULT_FILE") {
         config.vault.vault_file = Some(PathBuf::from(value));
+        config.env.vault_file = true;
     }
     if let Some(value) = var("DO_CONTEXT_SHIELD_VAULT_KEY_FILE") {
         config.vault.vault_key_file = Some(PathBuf::from(value));
+        config.env.vault_key_file = true;
     }
     if let Some(value) = var("DO_CONTEXT_SHIELD_VAULT_TTL_SECONDS") {
         let seconds = value.parse::<u64>().map_err(|error| {
@@ -64,6 +99,7 @@ pub(super) fn apply(config: &mut Config) -> Result<(), Box<dyn std::error::Error
             )
         })?;
         config.vault.vault_ttl_seconds = Some(seconds);
+        config.env.vault_ttl_seconds = true;
     }
     if let Some(value) = var("DO_CONTEXT_SHIELD_RECIPIENT") {
         checked(
@@ -73,6 +109,7 @@ pub(super) fn apply(config: &mut Config) -> Result<(), Box<dyn std::error::Error
             &RECIPIENTS,
         )?;
         config.context.recipient = Some(value);
+        config.env.recipient = true;
     }
     if let Some(value) = var("DO_CONTEXT_SHIELD_DATA_CATEGORY") {
         checked(
@@ -82,12 +119,15 @@ pub(super) fn apply(config: &mut Config) -> Result<(), Box<dyn std::error::Error
             &DATA_CATEGORIES,
         )?;
         config.context.data_category = Some(value);
+        config.env.data_category = true;
     }
     if let Some(value) = var("DO_CONTEXT_SHIELD_PURPOSE") {
         config.context.purpose = Some(value);
+        config.env.purpose = true;
     }
     if let Some(value) = var("DO_CONTEXT_SHIELD_JURISDICTION") {
         config.context.jurisdiction = Some(value);
+        config.env.jurisdiction = true;
     }
     Ok(())
 }

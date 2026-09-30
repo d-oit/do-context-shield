@@ -37,6 +37,10 @@ pub(crate) enum Command {
     Forget(ForgetArgs),
     #[command(about = "Serve the privacy tools over MCP JSON-RPC stdio")]
     McpStdio(McpArgs),
+    #[command(
+        about = "Show the effective plugin selection and enforcement context with their source layer"
+    )]
+    Config(ConfigArgs),
     #[command(about = "Rewrite an existing plaintext JSON vault in the encrypted format")]
     EncryptVault(EncryptVaultArgs),
 }
@@ -131,6 +135,33 @@ pub(crate) struct McpArgs {
     pub(crate) process: ProcessArgs,
 }
 
+/// Selection flags shared by `config` with the executing commands.
+///
+/// `config` accepts the same flags so the four-layer precedence
+/// (CLI > environment > file > default) can be inspected with the exact
+/// invocation it would diagnose; it never reads stdin and never builds a
+/// plugin.
+#[derive(Args, Default, Clone)]
+pub(crate) struct ConfigArgs {
+    #[command(flatten)]
+    pub(crate) detector: DetectorSelection,
+    #[command(flatten)]
+    pub(crate) pipeline: PipelineSelection,
+    #[command(flatten)]
+    pub(crate) store: VaultSelection,
+    /// Optional local file for persistence across separate CLI processes (JSON vault).
+    #[arg(long)]
+    pub(crate) vault_file: Option<PathBuf>,
+    /// Optional 64-hex-character key file that encrypts the JSON vault at rest
+    /// (requires `--vault-file`).
+    #[arg(long)]
+    pub(crate) vault_key_file: Option<PathBuf>,
+    #[command(flatten)]
+    pub(crate) context: ContextArgs,
+    #[command(flatten)]
+    pub(crate) process: ProcessArgs,
+}
+
 /// Rewrite an existing plaintext JSON vault in the encrypted format.
 ///
 /// Both paths are explicit on purpose: a migration rewrites the vault in
@@ -166,7 +197,7 @@ fn parse_jurisdiction(value: &str) -> Result<String, String> {
 }
 
 /// Detector plugin selection shared by sanitize, inspect, and mcp-stdio.
-#[derive(Args, Default)]
+#[derive(Args, Default, Clone)]
 pub(crate) struct DetectorSelection {
     /// Detector plugin (default `regex`): `regex` (built-in), `gliner2` (local ONNX NER),
     /// `hybrid` (regex plus the local ONNX NER model), or `process` (local executable over
@@ -184,7 +215,7 @@ pub(crate) struct DetectorSelection {
 }
 
 /// Vault plugin selection shared by sanitize, restore, and mcp-stdio.
-#[derive(Args, Default)]
+#[derive(Args, Default, Clone)]
 pub(crate) struct VaultSelection {
     /// Vault plugin: `memory`, `json` (with `--vault-file`), or `process` (local executable).
     #[arg(long, value_parser = ["memory", "json", "process"])]
@@ -196,7 +227,7 @@ pub(crate) struct VaultSelection {
 }
 
 /// Policy and transformer selection shared by sanitize and mcp-stdio.
-#[derive(Args, Default)]
+#[derive(Args, Default, Clone)]
 pub(crate) struct PipelineSelection {
     /// Optional semantic judge: `heuristics` (built-in rules) or `process` (local executable
     /// over newline-delimited JSON).
@@ -227,7 +258,7 @@ pub(crate) struct PipelineSelection {
 }
 
 /// Enforcement context for `sanitize`.
-#[derive(Args, Default)]
+#[derive(Args, Default, Clone)]
 pub(crate) struct ContextArgs {
     /// Recipient trust classification used by the policy (default `external`).
     #[arg(long, value_parser = ["local", "trusted", "external", "unknown"])]
@@ -249,7 +280,7 @@ pub(crate) struct ContextArgs {
 }
 
 /// Timeout shared by every process plugin.
-#[derive(Args, Default)]
+#[derive(Args, Default, Clone)]
 pub(crate) struct ProcessArgs {
     /// Milliseconds to wait for one process-plugin response (detector, policy, transformer, vault);
     /// defaults to the config file value or the built-in timeout.
