@@ -115,19 +115,55 @@ fn special_category_to_trusted_without_jurisdiction_blocks() {
 #[test]
 fn special_category_to_trusted_with_a_jurisdiction_pseudonymizes() {
     let dir = temp_dir();
-    let pseudonymized = sanitize(
-        dir.path(),
-        &[
-            "--recipient",
-            "trusted",
-            "--data-category",
-            "special_category",
-            "--jurisdiction",
-            "DE",
-        ],
-        "alice@example.com",
-    );
-    common::assert_placeholder(&pseudonymized, "EMAIL", 1);
+    // The shape contract is exactly two ASCII letters; case is preserved, not
+    // normalized, so both spellings must keep the declared-jurisdiction path.
+    for jurisdiction in ["DE", "de"] {
+        let pseudonymized = sanitize(
+            dir.path(),
+            &[
+                "--recipient",
+                "trusted",
+                "--data-category",
+                "special_category",
+                "--jurisdiction",
+                jurisdiction,
+            ],
+            "alice@example.com",
+        );
+        common::assert_placeholder(&pseudonymized, "EMAIL", 1);
+    }
+}
+
+#[test]
+fn malformed_jurisdiction_exits_2_before_processing() {
+    // A malformed code must never satisfy the declared-jurisdiction condition:
+    // it is an argument error, rejected before stdin is read, so a typo cannot
+    // become another way to declare trust for special-category data.
+    let dir = temp_dir();
+    for value in ["", "Germany", "DEU", "de-DE", "D1", "é"] {
+        let assert = cmd(dir.path())
+            .args([
+                "sanitize",
+                "--session",
+                "ctx",
+                "--recipient",
+                "trusted",
+                "--data-category",
+                "special_category",
+                "--jurisdiction",
+                value,
+            ])
+            .write_stdin("alice@example.com")
+            .assert()
+            .code(2)
+            .stderr(predicates::str::contains("ISO 3166-1 alpha-2"));
+        let output = assert.get_output();
+        assert!(output.stdout.is_empty(), "rejected input produced stdout");
+        assert!(
+            !String::from_utf8_lossy(&output.stderr).contains("alice@example.com"),
+            "stdin must not be echoed"
+        );
+    }
 }
 
 #[test]

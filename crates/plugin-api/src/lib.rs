@@ -72,7 +72,7 @@ mod placeholder;
 mod secret;
 mod spans;
 
-pub use context::{DataCategory, ProcessingContext, RecipientClass};
+pub use context::{DataCategory, ProcessingContext, RecipientClass, is_valid_jurisdiction};
 pub use placeholder::{
     is_minted_placeholder_token, is_placeholder_token, is_valid_placeholder_kind, mint_placeholder,
 };
@@ -214,13 +214,20 @@ pub trait Vault: Send + Sync {
 
     /// Delete every mapping and counter for a session scope.
     ///
+    /// `forget` is a revocation, so a vault must either remove the scope's
+    /// mappings and counters or report that it cannot. A vault that keeps
+    /// state it never deletes inherits this default, which fails instead of
+    /// silently acknowledging a deletion that did not happen — a false
+    /// success would leave resolvable originals behind.
+    ///
     /// # Errors
     ///
-    /// Returns [`VaultError`] when the deletion cannot be completed. Vaults
-    /// that cannot delete state keep the default no-op, so a caller that never
-    /// deletes a scope is unaffected.
+    /// Returns [`VaultError`] when the deletion cannot be completed; every
+    /// vault without deletion support always fails.
     fn delete_scope(&mut self, _scope: &ScopeId) -> Result<(), VaultError> {
-        Ok(())
+        Err(VaultError::Message(
+            "vault does not support scope deletion".to_owned(),
+        ))
     }
 
     /// Remove expired mappings.

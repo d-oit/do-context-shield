@@ -50,7 +50,7 @@ Follow this skill to add a new implementation without breaking the privacy bound
 - Preserve semantic relationships when transforming entities (repeated entity → stable token; detectors drop overlapping candidates through `plugin-api::resolve_overlaps`).
 - Secrets are redacted (`Action::Redact`), never pseudonymized.
 - Policies receive `ProcessingContext` and may block requests via `Action::Block` or `Action::Review`.
-- Vaults support `delete_scope` and `expire` for lifecycle cleanup.
+- Vaults support `delete_scope` and `expire` for lifecycle cleanup. A vault that cannot delete a scope must override `delete_scope` with an error: the trait default fails closed rather than acknowledging a deletion it did not perform. `expire` keeps its no-op default for vaults without a lifetime policy.
 - `unwrap()` and `expect()` are forbidden; propagate typed errors (`DetectorError`, `PolicyError`, `TransformError`, `VaultError`).
 - Document every `Result`-returning function with an `# Errors` section.
 - Keep files under 500 LOC where practical.

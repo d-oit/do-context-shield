@@ -95,3 +95,44 @@ fn forget_removes_session_mappings() {
         Err(error) => panic!("unexpected error: {error}"),
     }
 }
+
+/// A vault that stores and resolves mappings but never implements deletion, so
+/// `delete_scope` stays on the trait default.
+struct NonDeletingVault(MemoryVault);
+
+impl Vault for NonDeletingVault {
+    fn get_or_insert(
+        &mut self,
+        scope: &ScopeId,
+        kind: &str,
+        original: &str,
+    ) -> Result<Mapping, VaultError> {
+        self.0.get_or_insert(scope, kind, original)
+    }
+
+    fn resolve(&self, scope: &ScopeId, token: &str) -> Result<Option<Mapping>, VaultError> {
+        self.0.resolve(scope, token)
+    }
+}
+
+#[test]
+fn unsupported_scope_deletion_fails_closed() {
+    // `forget` is a revocation: a backend that cannot delete must say so
+    // instead of reporting success while the mapping keeps resolving.
+    let mut pipeline = PrivacyPipeline::new(
+        Box::new(RegexDetector),
+        Box::new(DefaultPolicy),
+        Box::new(PseudonymizingTransformer),
+        Box::new(NonDeletingVault(MemoryVault::default())),
+    );
+    let scope = ScopeId("test".to_owned());
+    let result = sanitize_ok(&mut pipeline, "alice@example.com");
+    match pipeline.forget(&scope) {
+        Err(PipelineError::Vault(_)) => {}
+        other => panic!("forget must fail closed, got {other:?}"),
+    }
+    match pipeline.restore(&scope, &result.text) {
+        Ok(restored) => assert_eq!(restored, "alice@example.com"),
+        Err(error) => panic!("unexpected error: {error}"),
+    }
+}

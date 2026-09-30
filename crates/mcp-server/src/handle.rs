@@ -1,7 +1,9 @@
 //! JSON-RPC request handling for the MCP stdio adapter.
 
 use do_context_shield_core::PrivacyPipeline;
-use do_context_shield_plugin_api::{DataCategory, ProcessingContext, RecipientClass, ScopeId};
+use do_context_shield_plugin_api::{
+    DataCategory, ProcessingContext, RecipientClass, ScopeId, is_valid_jurisdiction,
+};
 use serde_json::{Value, json};
 
 use crate::{ToolName, ToolSet};
@@ -182,8 +184,10 @@ fn check_protocol_metadata(id: &Value, params: Option<&Value>) -> Result<(), Val
 ///
 /// Omitted fields fall back to `base`, the server's configured context (by
 /// default the most restrictive one: external recipient, personal data, no
-/// purpose or jurisdiction). An unknown enum name or a wrong JSON type is an
-/// error, never a silent downgrade to a weaker context.
+/// purpose or jurisdiction). An unknown enum name, a wrong JSON type, or a
+/// malformed jurisdiction is an error, never a silent downgrade to a weaker
+/// context: an invalid explicit override does not fall back to a valid server
+/// default either.
 fn processing_context(args: &Value, base: &ProcessingContext) -> Result<ProcessingContext, String> {
     let recipient = match args.get("recipient") {
         None | Some(Value::Null) => base.recipient,
@@ -201,10 +205,16 @@ fn processing_context(args: &Value, base: &ProcessingContext) -> Result<Processi
         })?,
         Some(_) => return Err("data_category must be a string".to_owned()),
     };
+    let jurisdiction = optional_string(args, "jurisdiction")?.or_else(|| base.jurisdiction.clone());
+    if let Some(value) = jurisdiction.as_deref()
+        && !is_valid_jurisdiction(value)
+    {
+        return Err("jurisdiction must be an ISO 3166-1 alpha-2 code".to_owned());
+    }
     Ok(ProcessingContext {
         purpose: optional_string(args, "purpose")?.or_else(|| base.purpose.clone()),
         recipient,
-        jurisdiction: optional_string(args, "jurisdiction")?.or_else(|| base.jurisdiction.clone()),
+        jurisdiction,
         data_category,
     })
 }
@@ -314,7 +324,7 @@ impl ToolName {
     fn schema(self) -> Value {
         match self {
             Self::Sanitize => {
-                json!({"name":"context.sanitize","description":"Detect and sanitize sensitive coding context locally. Optional recipient/data_category/purpose/jurisdiction arguments select the enforcement context; unknown values are rejected. The built-in policy reads recipient and data_category, requires a declared jurisdiction for special-category data to a trusted recipient, and forwards purpose to policy plugins without letting it loosen a decision.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"},"recipient":{"type":"string","enum":["local","trusted","external","unknown"],"default":"external"},"data_category":{"type":"string","enum":["non_personal","personal","special_category"],"default":"personal"},"purpose":{"type":"string"},"jurisdiction":{"type":"string"}},"required":["text","session"]}})
+                json!({"name":"context.sanitize","description":"Detect and sanitize sensitive coding context locally. Optional recipient/data_category/purpose/jurisdiction arguments select the enforcement context; unknown values are rejected. The built-in policy reads recipient and data_category, requires a declared jurisdiction for special-category data to a trusted recipient, and forwards purpose to policy plugins without letting it loosen a decision.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"},"recipient":{"type":"string","enum":["local","trusted","external","unknown"],"default":"external"},"data_category":{"type":"string","enum":["non_personal","personal","special_category"],"default":"personal"},"purpose":{"type":"string"},"jurisdiction":{"type":"string","pattern":"^[A-Za-z]{2}$"}},"required":["text","session"]}})
             }
             Self::Restore => {
                 json!({"name":"context.restore","description":"Restore locally stored placeholders in an explicit session. Requires `session`; there is no fallback scope for restore. Not exposed by default: results return to the calling model, so restore harness-side unless the boundary allows otherwise.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"}},"required":["text","session"]}})

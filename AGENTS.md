@@ -11,7 +11,7 @@
 |Evidence freshness|`do-harness status --set verification`|
 |Skill structure gate|`bash scripts/check-skills.sh`|
 |Hook wiring gate|`bash scripts/check-hooks.sh` (hook files, sensor parity, single hook mode)|
-|Skill evals|`do-harness eval --strict-fixtures` (narrow with `--skill <name>`)|
+|Skill evals|`bash scripts/check-skill-evals.sh` (wraps `do-harness eval --strict-fixtures`; narrow with `--skill <name>`)|
 |Feature build|`cargo check -p <crate> --features <feature>` (e.g. `do-context-shield-detector-gliner2 --features gliner2`)|
 |Setup|`git config core.hooksPath .githooks` after cloning|
 |Sensors|Declared in `do-harness.toml`; procedures in `.agents/skills/harness/SKILL.md`|

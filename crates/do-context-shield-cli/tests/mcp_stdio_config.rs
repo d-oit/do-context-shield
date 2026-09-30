@@ -196,6 +196,30 @@ fn config_file_context_supplies_server_defaults() {
 }
 
 #[test]
+fn environment_context_becomes_server_default() {
+    // `DO_CONTEXT_SHIELD_*` overrides also apply to `mcp-stdio`; the value
+    // becomes the server default for calls that omit the context arguments.
+    let home = temp_dir();
+    let mut session =
+        McpSession::start_configured(home, &[], &[("DO_CONTEXT_SHIELD_RECIPIENT", "local")]);
+
+    // A personal value to a local recipient is kept, not pseudonymized.
+    let kept = content_text(&session.send(&tool_call(
+        "context.sanitize",
+        &json!({"text": "alice@example.com", "session": "env"}),
+    )));
+    assert_eq!(kept, "alice@example.com");
+
+    // A per-call argument still overrides the environment-backed default.
+    let overridden = content_text(&session.send(&tool_call(
+        "context.sanitize",
+        &json!({"text": "bob@example.com", "session": "env", "recipient": "external"}),
+    )));
+    common::assert_placeholder(&overridden, "EMAIL", 1);
+    session.close();
+}
+
+#[test]
 fn vault_ttl_expires_mappings_inside_one_server() {
     let mut session = McpSession::start_with(&["--tools", "all", "--vault-ttl-seconds", "1"]);
     let sanitized = content_text(&session.send(&tool_call(

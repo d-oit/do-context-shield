@@ -5,7 +5,8 @@
 //!
 //! - secret-like kinds and `secret` labels always redact;
 //! - special-category data addressed to external or unknown recipients is
-//!   blocked, and a trusted recipient blocks it while `jurisdiction` is unset;
+//!   blocked, and a trusted recipient blocks it while `jurisdiction` is unset
+//!   or malformed;
 //! - unknown recipients block every non-secret entity that is not `non_personal`;
 //! - `test`/`business` labels at or above 0.90 keep the value;
 //! - a local recipient keeps non-secret values;
@@ -16,7 +17,7 @@
 
 use do_context_shield_plugin_api::{
     Action, DataCategory, Entity, Judgment, PlannedEntity, Policy, PolicyError, ProcessingContext,
-    RecipientClass, SemanticLabel, is_secret_kind,
+    RecipientClass, SemanticLabel, is_secret_kind, is_valid_jurisdiction,
 };
 
 /// Minimum judge confidence required to trust a `test` or `business` label.
@@ -63,12 +64,18 @@ fn decide(kind: &str, decision: Option<&Judgment>, context: &ProcessingContext) 
 
     // Special-category data never reaches a non-local recipient without a
     // declared jurisdiction: external and unknown recipients always block,
-    // and a trusted recipient blocks while the jurisdiction is unknown.
+    // and a trusted recipient blocks while the jurisdiction is missing or
+    // malformed — the shape predicate is the declaration, so a direct library
+    // caller cannot bypass the check with a malformed code.
     if context.data_category == DataCategory::SpecialCategory
         && (matches!(
             context.recipient,
             RecipientClass::External | RecipientClass::Unknown
-        ) || (context.recipient != RecipientClass::Local && context.jurisdiction.is_none()))
+        ) || (context.recipient != RecipientClass::Local
+            && !context
+                .jurisdiction
+                .as_deref()
+                .is_some_and(is_valid_jurisdiction)))
     {
         return Action::Block;
     }
@@ -279,6 +286,27 @@ mod tests {
             ..ProcessingContext::default()
         };
         assert_eq!(action_with("email", &[], &context), Action::Block);
+    }
+
+    #[test]
+    fn malformed_jurisdiction_to_trusted_blocks() {
+        // A malformed code is not a declared jurisdiction: the trusted
+        // special-category transfer blocks exactly as if the field were unset,
+        // so a direct library caller cannot bypass the check by constructing
+        // the context itself.
+        for value in ["", "Germany", "DEU", "de-DE", "D1", "é"] {
+            let context = ProcessingContext {
+                recipient: RecipientClass::Trusted,
+                data_category: DataCategory::SpecialCategory,
+                jurisdiction: Some(value.to_owned()),
+                ..ProcessingContext::default()
+            };
+            assert_eq!(
+                action_with("email", &[], &context),
+                Action::Block,
+                "jurisdiction `{value}` must not count as declared"
+            );
+        }
     }
 
     #[test]
