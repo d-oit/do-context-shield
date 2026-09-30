@@ -60,6 +60,12 @@ forever on a `BEHIND` PR instead of draining a batch.
   *different* existing entry so the next merge does not re-conflict it.
 - Merge with `gh pr merge <n> --squash --delete-branch` (matches the existing history); never
   bypass the required check with `--admin`.
+- Arm auto-merge when the PR is opened (`gh pr merge <n> --squash --delete-branch --auto`):
+  GitHub then merges exactly when the required checks pass on an up-to-date branch.
+- Auto-merge waits for CI, never for review. Arm it only while no review comment or review is
+  unanswered; if a comment arrives before the merge fires, disable auto-merge
+  (`gh pr merge <n> --disable-auto`), address it (fix or reply), then re-arm. Every review
+  comment and review must be addressed before the merge is treated as done.
 
 ## Machine-readable decisions
 

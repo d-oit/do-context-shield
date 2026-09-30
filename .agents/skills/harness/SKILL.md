@@ -80,7 +80,8 @@ A sensor firing more than twice in one task is a feedforward-guide defect. Updat
 - Merge discipline: `main` requires `CI Success` on an up-to-date branch, and the check is bound
   to the PR's merge commit — auto-merge never updates a `BEHIND` head, so run
   `scripts/update-pr-branches.sh` before each merge and re-run it after every merge (see
-  `AGENTS.md` → "Pull-request merges").
+  `AGENTS.md` → "Pull-request merges"). Arm auto-merge (`--auto`) only while no review comment or
+  review is unanswered: it waits for CI, never for comments.
 - Never weaken or delete the sensor that fired; fix the cause.
 - `.do-harness/` (state database, evidence) and `target/` are gitignored local state — never durable evidence, never committed.
 - `do-harness eval` needs `.agents/skills/skill-creator/scripts/quick_validate.py` (dependency-free, no PyYAML) in its sandbox, and `--strict-fixtures` rejects thin datasets; grader drift requires an explicit `--bless`. A *failed graded assertion*, however, still exits 0 (only the per-skill `pass_rate` drops) and `--format json` produced no output in 0.1.1 — so the `skill-evals` sensor wraps the command (`scripts/check-skill-evals.sh`) and fails on any verdict that is not `structure=ok evals=<n>/<n> fixture=ok`; never `--bless` a failure.
