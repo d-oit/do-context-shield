@@ -286,5 +286,11 @@
     "rationale": "The report is designed to be pasted into an agent context, so any path, command line, key location, or free-form purpose text would leak operational detail that the four-layer precedence inspection does not need; a second copy of the vault-selection rules would let the report claim a vault the runtime refuses",
     "sensor": "cargo test -p do-context-shield --test cli_config_diag",
     "category": "security"
+  },
+  {
+    "invariant": "Batch vault resolution (`Vault::resolve_many`, used by `restore`) resolves a token list against one authoritative snapshot per call, and no snapshot or per-token result is cached across calls: a scope deletion performed by another process between two calls stays visible to the second one",
+    "rationale": "Restoring a document with many placeholders re-read and re-parsed the whole JSON vault once per token (measured with a 5k-mapping vault: 9 ms per token, 4.5 s for 500 tokens), while a cross-call cache would hide external forget/revocation — the batch fixes the cost without trading away visibility (measured after: 8 ms for the same 500 tokens)",
+    "sensor": "cargo test -p do-context-shield-vault-json + cargo test -p do-context-shield-vault-memory + cargo test -p do-context-shield-core",
+    "category": "contracts"
   }
 ]

@@ -189,9 +189,18 @@ impl PrivacyPipeline {
             }
         }
 
-        for (start, end) in positions.into_iter().rev() {
-            let token = &output[start..end];
-            if let Some(mapping) = self.vault.resolve(scope, token)? {
+        // One snapshot for the whole pass: a vault that reads authoritative
+        // state per token (JSON file) would otherwise re-read it once per
+        // placeholder. The tokens are collected first because the output is
+        // mutated while applying the replacements.
+        let tokens: Vec<String> = positions
+            .iter()
+            .map(|(start, end)| output[*start..*end].to_owned())
+            .collect();
+        let token_refs: Vec<&str> = tokens.iter().map(String::as_str).collect();
+        let resolved = self.vault.resolve_many(scope, &token_refs)?;
+        for ((start, end), mapping) in positions.into_iter().rev().zip(resolved.into_iter().rev()) {
+            if let Some(mapping) = mapping {
                 output.replace_range(start..end, &mapping.original);
             }
         }

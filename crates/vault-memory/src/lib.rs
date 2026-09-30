@@ -3,7 +3,7 @@
 use do_context_shield_plugin_api::{
     Mapping, ScopeId, Vault, VaultError, is_minted_placeholder_token, mint_placeholder,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 /// Memory-only vault.
@@ -89,6 +89,35 @@ impl Vault for MemoryVault {
                     && !self.expired(entry)
             })
             .map(|(_, entry)| entry.mapping.clone()))
+    }
+
+    /// Resolve every token with one scan over the stored mappings instead of
+    /// one scan per token.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError`] when resolution fails.
+    fn resolve_many(
+        &self,
+        scope: &ScopeId,
+        tokens: &[&str],
+    ) -> Result<Vec<Option<Mapping>>, VaultError> {
+        let wanted: HashSet<&str> = tokens.iter().copied().collect();
+        let mut found: HashMap<&str, &Mapping> = HashMap::with_capacity(wanted.len());
+        for ((saved_scope, _, _), entry) in &self.mappings {
+            let token = entry.mapping.token.as_str();
+            if saved_scope == &scope.0
+                && wanted.contains(token)
+                && is_minted_placeholder_token(token)
+                && !self.expired(entry)
+            {
+                found.entry(token).or_insert(&entry.mapping);
+            }
+        }
+        Ok(tokens
+            .iter()
+            .map(|token| found.get(token).map(|mapping| (*mapping).clone()))
+            .collect())
     }
 
     fn delete_scope(&mut self, scope: &ScopeId) -> Result<(), VaultError> {
@@ -250,5 +279,38 @@ mod tests {
         let scope = scope("s");
         let mapping = stored(&mut vault, &scope, "email", "alice@example.com");
         assert_eq!(resolved(&vault, &scope, &mapping.token), Some(mapping));
+    }
+
+    #[test]
+    fn resolve_many_is_aligned_and_keeps_misses_none() {
+        let mut vault = MemoryVault::default();
+        let session = scope("s");
+        let first = stored(&mut vault, &session, "email", "alice@example.com");
+        let second = stored(&mut vault, &session, "email", "bob@example.com");
+        let unknown = "__DO_PRIVATE_EMAIL_9_0000000000000000__";
+        let tokens = [second.token.as_str(), unknown, first.token.as_str()];
+        let batch = match vault.resolve_many(&session, &tokens) {
+            Ok(batch) => batch,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert_eq!(batch, vec![Some(second.clone()), None, Some(first.clone())]);
+        // Another scope resolves none of them.
+        match vault.resolve_many(&scope("other"), &tokens) {
+            Ok(batch) => assert_eq!(batch, vec![None, None, None]),
+            Err(error) => panic!("unexpected error: {error}"),
+        }
+    }
+
+    #[test]
+    fn resolve_many_does_not_resurrect_expired_mappings() {
+        let mut vault = MemoryVault::with_ttl(Duration::from_millis(1));
+        let session = scope("s");
+        let stale = stored(&mut vault, &session, "email", "alice@example.com");
+        std::thread::sleep(Duration::from_millis(5));
+        let tokens = [stale.token.as_str()];
+        match vault.resolve_many(&session, &tokens) {
+            Ok(batch) => assert_eq!(batch, vec![None]),
+            Err(error) => panic!("unexpected error: {error}"),
+        }
     }
 }
