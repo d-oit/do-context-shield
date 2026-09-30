@@ -126,15 +126,13 @@ jobs:
           tool: cargo-audit,cargo-deny
       - name: Install do-harness (pinned)
         run: |
-          curl -fsSL https://raw.githubusercontent.com/d-o-hub/do-harness/main/scripts/install.sh \
+          curl -fsSL https://raw.githubusercontent.com/d-o-hub/do-harness/32120c3644ac30236970809e2745981657efd5a7/scripts/install.sh \
             | sh -s -- --version v0.1.1
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Run the sensor set
         run: do-harness verify --set ci --format json --strict
       - name: Evidence freshness
         run: do-harness status --set ci
-      - name: Skill evals
-        run: do-harness eval --strict-fixtures
 
   publish-check:
     name: Publish check

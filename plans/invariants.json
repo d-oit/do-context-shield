@@ -104,7 +104,7 @@
   {
     "invariant": "Agent skills pass the structure gate and carry graded eval fixtures",
     "rationale": "Skills are load-bearing feedforward guides; unvalidated guidance drifts silently",
-    "sensor": "bash scripts/check-skills.sh (skills sensor) + do-harness eval --strict-fixtures",
+    "sensor": "bash scripts/check-skills.sh (skills sensor) + bash scripts/check-skill-evals.sh (skill-evals sensor, fails on a failed graded assertion)",
     "category": "skills"
   },
   {

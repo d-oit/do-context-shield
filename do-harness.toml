@@ -6,13 +6,13 @@ pre-push = ["fmt", "check", "clippy", "test", "loc", "shellcheck", "hooks", "dep
 
 [signal-sets]
 feedback = ["fmt", "check", "clippy"]
-verification = ["fmt", "check", "clippy", "test", "loc", "shellcheck", "hooks", "skills", "deps", "audit", "commitlint"]
-release = ["fmt", "check", "clippy", "test", "loc", "shellcheck", "hooks", "skills", "deps", "audit", "commitlint"]
+verification = ["fmt", "check", "clippy", "test", "loc", "shellcheck", "hooks", "skills", "skill-evals", "deps", "audit", "commitlint"]
+release = ["fmt", "check", "clippy", "test", "loc", "shellcheck", "hooks", "skills", "skill-evals", "deps", "audit", "commitlint"]
 # CI runs the same set minus commitlint: pull_request checkouts are merge refs,
 # so `git log --no-merges -n 1` lints the contributor's commit subject, while
 # this repository's policy enforces conventional PR *titles* (commitlint.yml)
 # and lints commits locally via the commit-msg hook and the verification set.
-ci = ["fmt", "check", "clippy", "test", "loc", "shellcheck", "hooks", "skills", "deps", "audit"]
+ci = ["fmt", "check", "clippy", "test", "loc", "shellcheck", "hooks", "skills", "skill-evals", "deps", "audit"]
 
 [[sensors]]
 name = "fmt"
@@ -47,7 +47,12 @@ when-changed = ["**/*.sh", ".githooks/**", "scripts/check-shellcheck.sh"]
 [[sensors]]
 name = "skills"
 argv = ["bash", "scripts/check-skills.sh"]
-when-changed = [".agents/skills/**", "plans/methods.json", "plans/invariants.json", "do-harness.toml", "scripts/check-skills.sh"]
+when-changed = [".agents/skills/**", ".agents/SKILLS.md", "plans/methods.json", "plans/invariants.json", "do-harness.toml", "scripts/check-skills.sh"]
+
+[[sensors]]
+name = "skill-evals"
+argv = ["bash", "scripts/check-skill-evals.sh"]
+when-changed = [".agents/skills/**", ".agents/SKILLS.md", "plans/methods.json", "plans/invariants.json", "do-harness.toml", "scripts/check-skills.sh", "scripts/check-skill-evals.sh"]
 
 [[sensors]]
 name = "hooks"

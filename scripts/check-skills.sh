@@ -10,6 +10,8 @@
 #   4. every plans/invariants.json entry carries invariant/rationale/sensor/category
 #   5. the harness skill's sensor table matches do-harness.toml: every sensor has
 #      a row, and a row may only claim a stage the sensor is wired into
+#   6. `.agents/SKILLS.md` names exactly the skill directories and links each
+#      one at `skills/<name>/SKILL.md`
 #
 # python3 is required for the gate; a missing interpreter WARN-skips locally and
 # fails closed when CI=true or DO_HARNESS_REQUIRE_TOOLS=1.
@@ -76,6 +78,47 @@ for skill in skills:
         assertions = case.get("assertions") or []
         if not any(a.startswith(graded_prefixes) for a in assertions):
             failures.append(f"{skill.name}: case {case.get('id')} has no graded assertions")
+
+# `.agents/SKILLS.md` is the index agents read before choosing a skill, so its
+# table must name exactly the skill directories and link each row at
+# `skills/<name>/SKILL.md`. A missing, unknown, duplicated, or mislinked row
+# would send the next agent to the wrong guide.
+index = root / ".agents/SKILLS.md"
+if not index.is_file():
+    failures.append(".agents/SKILLS.md: missing skill index")
+else:
+    lines = index.read_text().splitlines()
+    header = next(
+        (i for i, line in enumerate(lines) if line.startswith("| Skill | Path |")),
+        None,
+    )
+    if header is None:
+        failures.append(".agents/SKILLS.md: no `| Skill | Path |` table found")
+    else:
+        indexed = {}
+        for line in lines[header + 1 :]:
+            if not line.startswith("|"):
+                break
+            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            if len(cells) < 2 or not cells[0] or set(cells[0]) <= set("- "):
+                continue
+            name = cells[0].strip("`")
+            if name in indexed:
+                failures.append(f".agents/SKILLS.md: duplicate index row for {name}")
+                continue
+            indexed[name] = cells[1]
+        directory_names = {skill.name for skill in skills}
+        for name in sorted(directory_names - set(indexed)):
+            failures.append(f".agents/SKILLS.md: no index row for skill {name}")
+        for name in sorted(set(indexed) - directory_names):
+            failures.append(f".agents/SKILLS.md: index row names unknown skill {name}")
+        for name, link in sorted(indexed.items()):
+            expected = f"skills/{name}/SKILL.md"
+            match = re.fullmatch(r"\[([^\]]+)\]\(([^)]+)\)", link)
+            if not match or match.group(1) != expected or match.group(2) != expected:
+                failures.append(
+                    f".agents/SKILLS.md: row {name} must link [{expected}]({expected}); got {link}"
+                )
 
 config = (root / "do-harness.toml").read_text()
 sensor_names = set(re.findall(r'^name = "([a-z0-9-]+)"', config, re.M))

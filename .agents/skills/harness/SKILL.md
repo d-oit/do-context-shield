@@ -3,8 +3,8 @@ name: harness
 description: >
   Map this repository's feedforward guides and feedback sensors, and run the
   self-correction protocol when a computational sensor fires. Use when a sensor
-  fails (fmt, check, clippy, test, loc, shellcheck, hooks, skills, deps, audit,
-  commitlint),
+  fails (fmt, check, clippy, test, loc, shellcheck, hooks, skills, skill-evals,
+  deps, audit, commitlint),
   before committing, or when setting up agent context for a task.
   Triggers: "harness", "sensor fire", "CI failure", "quality gates",
   "self-correction".
@@ -47,6 +47,7 @@ Agent = Model + Harness. Feedforward guides (this skill, `AGENTS.md`, `CONTRIBUT
 | shellcheck | `bash scripts/check-shellcheck.sh` | pre-push, CI | fix the finding (SC2059: keep `printf` format strings constant, values as arguments) |
 | hooks | `bash scripts/check-hooks.sh` | pre-push, CI | mirror the new sensor in the hand-written hook, make `.githooks/*` executable, or unpick the double hook mode (`core.hooksPath` vs `.git/hooks`) |
 | skills | `bash scripts/check-skills.sh` | `verification` set, CI | fix frontmatter/evals; see skill-creator |
+| skill-evals | `bash scripts/check-skill-evals.sh` | verification, CI | Fix the failing graded assertion or fixture; do not bless a failure |
 | deps | `bash scripts/check-deps.sh` | pre-push, CI | license allow-list, crates.io only, no wildcards, and the offline ban list (`Cargo.lock` must contain no network client, TLS stack, or hosted-model SDK); check feature-gated trees explicitly |
 | audit | `bash scripts/check-audit.sh` | CI | resolve or document the advisory in `deny.toml` / `.cargo/audit.toml` |
 | commitlint | `bash scripts/check-commitlint.sh` | commit-msg hook, `verification` set | conventional commit with a type prefix; PR titles are enforced separately by `commitlint.yml` |
@@ -82,7 +83,7 @@ A sensor firing more than twice in one task is a feedforward-guide defect. Updat
   `AGENTS.md` → "Pull-request merges").
 - Never weaken or delete the sensor that fired; fix the cause.
 - `.do-harness/` (state database, evidence) and `target/` are gitignored local state — never durable evidence, never committed.
-- `do-harness eval` needs `.agents/skills/skill-creator/scripts/quick_validate.py` (dependency-free, no PyYAML) in its sandbox, and `--strict-fixtures` rejects thin datasets; grader drift requires an explicit `--bless`.
+- `do-harness eval` needs `.agents/skills/skill-creator/scripts/quick_validate.py` (dependency-free, no PyYAML) in its sandbox, and `--strict-fixtures` rejects thin datasets; grader drift requires an explicit `--bless`. A *failed graded assertion*, however, still exits 0 (only the per-skill `pass_rate` drops) and `--format json` produced no output in 0.1.1 — so the `skill-evals` sensor wraps the command (`scripts/check-skill-evals.sh`) and fails on any verdict that is not `structure=ok evals=<n>/<n> fixture=ok`; never `--bless` a failure.
 - Feature-gated crates (`--features gliner2`) are not covered by the default suite: run the feature build explicitly. The Linux `Test` job provisions the pinned ONNX Runtime (1.28.0, cached) and sets `DO_HARNESS_REQUIRE_ORT=1` so the runtime-backed tests cannot silently skip there; locally, set `ORT_DYLIB_PATH` (see `docs/plugins.md`) to make them run.
 
 ## References
