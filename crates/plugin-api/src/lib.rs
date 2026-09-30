@@ -33,10 +33,6 @@ pub enum Action {
     Redact,
     /// Reject the entire input; the pipeline returns an error, not sanitized text.
     Block,
-    /// Flag for human review; until a review flow exists the pipeline fails the
-    /// call with a review-specific error (distinct from [`Action::Block`]) and
-    /// never produces sanitized text.
-    Review,
 }
 
 /// Entity plus policy decision.

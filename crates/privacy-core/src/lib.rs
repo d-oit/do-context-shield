@@ -103,9 +103,8 @@ impl PrivacyPipeline {
     /// match, overlaps) before the judge and policy see it. The policy plan is
     /// validated too: exactly one decision per detected entity, on the same
     /// kind and span, with secret-kind entities redacted and never kept or
-    /// pseudonymized. A plan containing [`Action::Block`] or [`Action::Review`]
-    /// fails the call instead of producing text, and the error names which of
-    /// the two it was (`Block` wins when a plan carries both).
+    /// pseudonymized. A plan containing [`Action::Block`] fails the call
+    /// instead of producing text.
     ///
     /// # Errors
     ///
@@ -138,20 +137,12 @@ impl PrivacyPipeline {
             .plan(&entities, &judgments, context)
             .map_err(|error| scrub_policy(error, &sensitive))?;
         validate_plan(&entities, &plan)?;
-        // `Block` and `Review` both fail the call, but they mean different
-        // things to the caller: `Block` is final, while `Review` is a reserved
-        // action with no flow behind it yet. The error keeps that distinction,
-        // so an operator can tell "denied" from "needs a human"; when a plan
-        // carries both, the decisive action names the failure.
+        // `Block` is terminal: the call fails with a named error instead of
+        // producing text. Human review is not part of the boundary (there is no
+        // review action), so every refusal is a block.
         if plan.iter().any(|planned| planned.action == Action::Block) {
             return Err(PipelineError::Policy(PolicyError::Message(
                 "input blocked by policy".to_owned(),
-            )));
-        }
-        if plan.iter().any(|planned| planned.action == Action::Review) {
-            return Err(PipelineError::Policy(PolicyError::Message(
-                "input requires review (Action::Review); no review flow is configured, so the call fails closed"
-                    .to_owned(),
             )));
         }
         let TransformResult { text, .. } = self
@@ -342,11 +333,7 @@ fn validate_plan(entities: &[Entity], plan: &[PlannedEntity]) -> Result<(), Pipe
                 entity.start, entity.end
             ))));
         }
-        if is_secret_kind(&entity.kind)
-            && !matches!(
-                planned.action,
-                Action::Redact | Action::Block | Action::Review
-            )
+        if is_secret_kind(&entity.kind) && !matches!(planned.action, Action::Redact | Action::Block)
         {
             return Err(PipelineError::Policy(PolicyError::Message(format!(
                 "secret-kind entity must be redacted: {}",

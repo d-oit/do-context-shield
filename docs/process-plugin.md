@@ -77,7 +77,7 @@ Response:
 {"plan":[{"index":0,"action":"pseudonymize"}]}
 ```
 
-- `action` is `keep`, `pseudonymize`, `redact`, `block`, or `review`. `pseudonymize` must stay reversible through the vault; `redact` means irreversible removal (a mask or any other literal is a redact). `block` rejects the entire input and `review` flags it for a human; the pipeline fails the call for either, before any transformation, and the error names which one it was — `review` reports `input requires review (Action::Review)`, because no review flow exists yet, while `block` reports `input blocked by policy` (`block` wins when a plan carries both).
+- `action` is `keep`, `pseudonymize`, `redact`, or `block`. `pseudonymize` must stay reversible through the vault; `redact` means irreversible removal (a mask or any other literal is a redact); `block` rejects the entire input and the pipeline fails the call (`input blocked by policy`) before any transformation. Any other value fails closed as an unknown action — including `review`, which was removed when human review was decided to live outside the boundary.
 - Fails closed on an index that is repeated, out of range, or missing for any entity, and on an unknown action.
 
 ## transform

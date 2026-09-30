@@ -52,7 +52,7 @@ impl Transformer for PseudonymizingTransformer {
             let replacement = match planned.action {
                 Action::Keep => planned.entity.value.clone(),
                 Action::Redact => "__DO_PRIVATE_REDACTED__".to_owned(),
-                Action::Block | Action::Review => {
+                Action::Block => {
                     return Err(TransformError::Message("blocked by policy".to_owned()));
                 }
                 Action::Pseudonymize => {
@@ -147,13 +147,11 @@ mod tests {
     }
 
     #[test]
-    fn block_and_review_actions_fail_closed() {
-        for action in [Action::Block, Action::Review] {
-            let plan = vec![planned("email", 0, 17, action)];
-            match transform("alice@example.com", &plan) {
-                Ok(result) => panic!("expected a policy block, got {}", result.text),
-                Err(error) => assert!(error.to_string().contains("blocked by policy")),
-            }
+    fn block_action_fails_closed() {
+        let plan = vec![planned("email", 0, 17, Action::Block)];
+        match transform("alice@example.com", &plan) {
+            Ok(result) => panic!("expected a policy block, got {}", result.text),
+            Err(error) => assert!(error.to_string().contains("blocked by policy")),
         }
     }
 }

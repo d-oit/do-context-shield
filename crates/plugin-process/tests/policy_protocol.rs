@@ -130,10 +130,13 @@ fn forwards_judgments_to_the_child() {
 }
 
 #[test]
-fn parses_block_and_review_actions() {
+fn parses_block_and_rejects_the_removed_review_action() {
     let entities = [entity("email", 0, 17, "alice@example.com")];
     assert_eq!(plan(&policy("plan-block"), &entities), [Action::Block]);
-    assert_eq!(plan(&policy("plan-review"), &entities), [Action::Review]);
+    // `review` left the protocol when the boundary dropped the reserved
+    // action: a child that still sends it fails closed like any unknown action.
+    let message = error_message(&policy("plan-review"), &entities);
+    assert!(message.contains("unknown action `review`"), "{message}");
 }
 
 #[test]
