@@ -133,14 +133,23 @@ fn sensitive_material_never_appears_in_the_report() {
         .assert()
         .success();
     let stdout = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
-    for secret in [
+    for (index, secret) in [
         "SECRET-VAULT",
         "SECRET-KEY",
         "SECRET-PLUGIN",
         "SECRET-PURPOSE-TEXT",
         "CLI-SECRET",
-    ] {
-        assert!(!stdout.contains(secret), "`{secret}` leaked into {stdout}");
+    ]
+    .iter()
+    .enumerate()
+    {
+        // The needle and the report are deliberately not interpolated: the
+        // assertion message must not become a place where a fixture value is
+        // written out (CodeQL flags that as cleartext logging).
+        assert!(
+            !stdout.contains(secret),
+            "sensitive fixture value {index} leaked into the report"
+        );
     }
     let doc = report(&assert);
     // Presence and provenance are reported instead of the values.
