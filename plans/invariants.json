@@ -108,8 +108,8 @@
     "category": "skills"
   },
   {
-    "invariant": "A change is complete only when verification evidence for its signal set is green",
-    "rationale": "Exit codes and recorded evidence, not self-assessment, prove completion",
+    "invariant": "A change is complete only when verification evidence for its signal set is green, and the evidence must be re-recorded after a pull, merge, rebase, or commit before its freshness is quoted",
+    "rationale": "Exit codes and recorded evidence, not self-assessment, prove completion; `do-harness status` (0.1.1) compares the uncommitted workspace and config fingerprints rather than HEAD, so evidence recorded before HEAD moved still reports `current` and must not be trusted until the set has been re-run",
     "sensor": "do-harness verify --set verification --record + do-harness status --set verification",
     "category": "verification"
   },
