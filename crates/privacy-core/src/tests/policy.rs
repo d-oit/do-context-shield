@@ -48,12 +48,43 @@ fn with_policy(policy: impl Policy + 'static) -> PrivacyPipeline {
 
 #[test]
 fn block_action_fails_pipeline() {
-    for action in [Action::Block, Action::Review] {
-        let mut pipeline = with_policy(FixedActionPolicy(action));
-        let error = sanitize_err(&mut pipeline, "alice@example.com");
-        assert!(matches!(error, PipelineError::Policy(_)), "{error:?}");
-        assert!(error.to_string().contains("blocked by policy"), "{error}");
-    }
+    let mut pipeline = with_policy(FixedActionPolicy(Action::Block));
+    let error = sanitize_err(&mut pipeline, "alice@example.com");
+    assert!(matches!(error, PipelineError::Policy(_)), "{error:?}");
+    assert!(error.to_string().contains("blocked by policy"), "{error}");
+}
+
+#[test]
+fn review_action_fails_closed_and_names_review() {
+    // `Review` is a reserved action: no flow exists, so it fails the call like
+    // `Block`, but the error must let an operator tell "needs a human" from
+    // "denied".
+    let mut pipeline = with_policy(FixedActionPolicy(Action::Review));
+    let error = sanitize_err(&mut pipeline, "alice@example.com");
+    assert!(matches!(error, PipelineError::Policy(_)), "{error:?}");
+    let text = error.to_string();
+    assert!(text.contains("requires review"), "{text}");
+    assert!(!text.contains("blocked by policy"), "{text}");
+}
+
+#[test]
+fn block_takes_precedence_over_review_in_one_plan() {
+    // Both actions are terminal and the plan is unusable either way; the
+    // decisive one names the failure.
+    let mut pipeline = with_policy(FixedPlanPolicy(vec![
+        PlannedEntity {
+            entity: entity("email", 0, 17, "alice@example.com"),
+            action: Action::Review,
+        },
+        PlannedEntity {
+            entity: entity("email", 18, 33, "bob@example.com"),
+            action: Action::Block,
+        },
+    ]));
+    let error = sanitize_err(&mut pipeline, "alice@example.com bob@example.com");
+    let text = error.to_string();
+    assert!(text.contains("blocked by policy"), "{text}");
+    assert!(!text.contains("requires review"), "{text}");
 }
 
 #[test]

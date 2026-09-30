@@ -104,7 +104,8 @@ impl PrivacyPipeline {
     /// validated too: exactly one decision per detected entity, on the same
     /// kind and span, with secret-kind entities redacted and never kept or
     /// pseudonymized. A plan containing [`Action::Block`] or [`Action::Review`]
-    /// fails the call instead of producing text.
+    /// fails the call instead of producing text, and the error names which of
+    /// the two it was (`Block` wins when a plan carries both).
     ///
     /// # Errors
     ///
@@ -137,12 +138,20 @@ impl PrivacyPipeline {
             .plan(&entities, &judgments, context)
             .map_err(|error| scrub_policy(error, &sensitive))?;
         validate_plan(&entities, &plan)?;
-        if plan
-            .iter()
-            .any(|planned| matches!(planned.action, Action::Block | Action::Review))
-        {
+        // `Block` and `Review` both fail the call, but they mean different
+        // things to the caller: `Block` is final, while `Review` is a reserved
+        // action with no flow behind it yet. The error keeps that distinction,
+        // so an operator can tell "denied" from "needs a human"; when a plan
+        // carries both, the decisive action names the failure.
+        if plan.iter().any(|planned| planned.action == Action::Block) {
             return Err(PipelineError::Policy(PolicyError::Message(
                 "input blocked by policy".to_owned(),
+            )));
+        }
+        if plan.iter().any(|planned| planned.action == Action::Review) {
+            return Err(PipelineError::Policy(PolicyError::Message(
+                "input requires review (Action::Review); no review flow is configured, so the call fails closed"
+                    .to_owned(),
             )));
         }
         let TransformResult { text, .. } = self
