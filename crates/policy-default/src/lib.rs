@@ -129,7 +129,7 @@ mod tests {
     fn action_with(kind: &str, judgments: &[Judgment], context: &ProcessingContext) -> Action {
         let entities = [entity(kind)];
         match DefaultPolicy.plan(&entities, judgments, context) {
-            Ok(planned) => planned[0].action.clone(),
+            Ok(planned) => planned[0].action,
             Err(error) => panic!("unexpected error: {error}"),
         }
     }

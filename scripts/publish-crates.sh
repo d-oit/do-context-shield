@@ -10,6 +10,7 @@ set -euo pipefail
 
 ORDER=(
     do-context-shield-plugin-api
+    do-context-shield-audit-file
     do-context-shield-detector-regex
     do-context-shield-detector-gliner2
     do-context-shield-policy-default

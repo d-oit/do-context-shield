@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - CI: the Linux `Test` job now provisions the pinned ONNX Runtime (1.28.0, cached per version) and runs `cargo test --workspace --all-features` with `DO_HARNESS_REQUIRE_ORT=1`. The runtime-backed `gliner2` tests previously skipped there in complete silence — an unset `ORT_DYLIB_PATH` was indistinguishable from a passing run — so the feature-gated fail-closed paths now execute in CI and a broken download, a version bump, or a misspelled variable fails the job instead of skipping it. Local runs keep skipping without the variable; the model-backed E2E tests (which also need a real export) moved their setup check into `tests/common` and now treat a model directory without a runtime as a failure.
 
+- Strict private local audit logging (`crates/audit-file`): `--audit-file <path>`, `DO_CONTEXT_SHIELD_AUDIT_FILE`, or `[audit] audit_file` records structure-only operational events (`sanitize`, `restore`, `forget`, and policy blocks) to an explicit, private, append-only JSONL destination with operator-controlled retention. Original values, minted tokens, vault mappings, and free-form purpose text are strictly excluded. The sink enforces Unix-only filesystem safety at startup and on every write (regular file, owner-only permissions `0600`, no hardlinks/symlinks/FIFOs, exclusive advisory file locking, and conflict checks against vault/key paths), and fails closed before input processing on invalid or insecure destinations.
+
 - Initial privacy boundary: regex detector, default policy, pseudonymize transformer, memory/JSON vaults.
 - CLI (`sanitize`, `restore`, `inspect`, `forget`, `mcp-stdio`) and MCP JSON-RPC stdio adapter.
 - Agent skills (`.agents/skills/private-data`, `.agents/skills/plugin-development`, indexed in `.agents/SKILLS.md`).
@@ -97,6 +99,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `Action::Review` is diagnosable: the pipeline still fails the call (no review flow exists), but the error now reads `input requires review (Action::Review); no review flow is configured, so the call fails closed` instead of collapsing into `input blocked by policy`, so an operator or harness can tell "needs a human" from "denied". `Block` keeps its message and wins when a plan carries both actions.
+
+- Configured audit sinks now record `restore` events without changing `PrivacyPipeline::restore` to a mutable receiver; the optional sink is serialized behind a mutex, and a poisoned lock fails closed.
 
 - `plugin-api::resolve_overlaps` resolved equal-length overlapping spans by position, so the left-most span survived a tie that its own documentation — and three call sites — define as "the detector's order decides": `detector-regex` depends on that order for its SPECS precedence, `privacy-core`'s span validation and `plugin-process`'s decoder document it. The sort now compares length only (stable), so equal-length ties keep the reported order and a detector's specificity is preserved; the new test covers equal-length spans that overlap each other at different positions.
 

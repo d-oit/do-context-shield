@@ -12,18 +12,6 @@ Recorded 2026-09-29 from the gap-analysis hardening pass (harness task 24).
 Each item was explicitly out of scope there and needs a product or
 architecture decision before code.
 
-### Audit trail for transform mappings
-
-- **Status**: mappings live only inside the session-scoped vault; nothing
-  records what was transformed. An audit trail is itself sensitive (it would
-  hold raw originals or reversible references), so it needs a design.
-- **Decision needed**: sink (local file, process plugin, vault extension),
-  retention/rotation, who may read it, and how it stays scope-isolated and
-  redaction-safe.
-- **Exit criteria**: an audit surface behind `plugin-api` with scope
-  isolation, secret redaction, and tests proving no raw value leaks outside
-  the boundary.
-
 ### Jurisdiction pairing and purpose-conditional transfers
 
 - **Status**: the conservative default landed — an unset jurisdiction fails

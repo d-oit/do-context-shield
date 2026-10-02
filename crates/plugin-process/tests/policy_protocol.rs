@@ -31,7 +31,7 @@ fn entities() -> Vec<Entity> {
 
 fn plan(policy: &ProcessPolicy, entities: &[Entity]) -> Vec<Action> {
     match policy.plan(entities, &[], &ProcessingContext::default()) {
-        Ok(planned) => planned.iter().map(|entry| entry.action.clone()).collect(),
+        Ok(planned) => planned.iter().map(|entry| entry.action).collect(),
         Err(error) => panic!("expected a plan, got error: {error}"),
     }
 }

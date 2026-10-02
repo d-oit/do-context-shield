@@ -134,6 +134,8 @@ pub struct ServerConfig {
     /// Optional 64-hex-character key file that encrypts the JSON vault at rest
     /// (requires `vault_file`; on Unix the key file must be owner-only).
     pub vault_key_file: Option<PathBuf>,
+    /// Optional private local append-only JSONL audit destination.
+    pub audit_file: Option<PathBuf>,
     /// Vault plugin: `memory` (default without `vault_file`), `json`, or `process`.
     pub vault: Option<String>,
     /// Command line of a local vault executable; required with `process`.
@@ -185,6 +187,7 @@ impl Default for ServerConfig {
         Self {
             vault_file: None,
             vault_key_file: None,
+            audit_file: None,
             vault: None,
             vault_command: None,
             detector: "regex".to_owned(),
@@ -210,6 +213,14 @@ impl Default for ServerConfig {
 ///
 /// Returns an error when stdio I/O fails, a request cannot be answered, or a plugin cannot be constructed.
 pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Error>> {
+    let audit = match config.audit_file.as_deref() {
+        Some(path) => Some(do_context_shield_plugin_registry::file_audit_sink(
+            path,
+            config.vault_file.as_deref(),
+            config.vault_key_file.as_deref(),
+        )?),
+        None => None,
+    };
     let timeout = Duration::from_millis(config.process_timeout_ms);
     let vault = build_vault(&mut config, timeout)?;
     let detector: Box<dyn do_context_shield_plugin_api::Detector> = match config.detector.as_str() {
@@ -260,8 +271,12 @@ pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Err
             None => None,
         };
     let pipeline = PrivacyPipeline::new(detector, policy, transformer, vault);
-    let mut pipeline = match judge {
+    let pipeline = match judge {
         Some(judge) => pipeline.with_judge(judge),
+        None => pipeline,
+    };
+    let mut pipeline = match audit {
+        Some(audit) => pipeline.with_audit_sink(audit),
         None => pipeline,
     };
     let stdin = io::stdin();

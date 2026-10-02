@@ -4,7 +4,7 @@
 #![allow(dead_code)]
 
 use serde_json::{Value, json};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
@@ -41,7 +41,8 @@ fn assert_token_entropy(rest: &str, text: &str) {
 
 /// Every environment variable the binary reads. Cleared by [`cmd`] so an
 /// ambient value can never change a test.
-pub const CONFIG_ENV_VARS: [&str; 13] = [
+pub const CONFIG_ENV_VARS: [&str; 14] = [
+    "DO_CONTEXT_SHIELD_AUDIT_FILE",
     "DO_CONTEXT_SHIELD_DATA_CATEGORY",
     "DO_CONTEXT_SHIELD_DETECTOR",
     "DO_CONTEXT_SHIELD_JUDGE",
@@ -150,6 +151,8 @@ pub struct McpSession {
     child: Child,
     stdin: ChildStdin,
     stdout: BufReader<ChildStdout>,
+    stderr: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+    stderr_reader: std::thread::JoinHandle<Result<(), String>>,
     /// Hermetic `$HOME`, kept alive for as long as the child runs.
     _home: tempfile::TempDir,
 }
@@ -188,7 +191,7 @@ impl McpSession {
             .env("HOME", home.path())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null());
+            .stderr(Stdio::piped());
         for name in CONFIG_ENV_VARS {
             command.env_remove(name);
         }
@@ -205,10 +208,29 @@ impl McpSession {
         let Some(stdout) = child.stdout.take() else {
             panic!("piped stdout missing");
         };
+        let Some(stderr_pipe) = child.stderr.take() else {
+            panic!("piped stderr missing");
+        };
+        let stderr = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let capture = std::sync::Arc::clone(&stderr);
+        let stderr_reader = std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            let mut stderr_pipe = stderr_pipe;
+            stderr_pipe
+                .read_to_end(&mut bytes)
+                .map_err(|error| error.to_string())?;
+            let mut captured = capture
+                .lock()
+                .map_err(|_| "stderr capture lock poisoned".to_owned())?;
+            captured.extend_from_slice(&bytes);
+            Ok(())
+        });
         Self {
             child,
             stdin,
             stdout: BufReader::new(stdout),
+            stderr,
+            stderr_reader,
             _home: home,
         }
     }
@@ -225,11 +247,29 @@ impl McpSession {
     }
 
     /// Close stdin (EOF) and assert the server shut down cleanly.
-    pub fn close(mut self) {
+    pub fn close(self) {
+        let _ = self.finish();
+    }
+
+    /// Close stdin, assert a clean exit, and return captured server stderr.
+    pub fn close_with_stderr(self) -> String {
+        self.finish()
+    }
+
+    fn finish(mut self) -> String {
         drop(self.stdin);
         match self.child.wait() {
             Ok(status) => assert!(status.success(), "mcp-stdio exited with {status}"),
             Err(error) => panic!("cannot wait for mcp-stdio: {error}"),
+        }
+        match self.stderr_reader.join() {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => panic!("cannot capture server stderr: {error}"),
+            Err(panic_payload) => panic!("stderr reader panicked: {panic_payload:?}"),
+        }
+        match self.stderr.lock() {
+            Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
+            Err(error) => panic!("stderr capture lock poisoned: {error}"),
         }
     }
 

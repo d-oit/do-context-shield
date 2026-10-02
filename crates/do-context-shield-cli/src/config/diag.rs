@@ -81,6 +81,7 @@ pub(crate) struct Explained {
     pub(crate) vault: MaybeNamed,
     pub(crate) effective_vault: String,
     pub(crate) vault_file: Presence,
+    pub(crate) audit_file: Presence,
     pub(crate) vault_key_file: Presence,
     pub(crate) vault_ttl_seconds: MaybeNumber,
     pub(crate) model_dir: Presence,
@@ -146,6 +147,11 @@ pub(crate) fn explain(
             cli.vault_file.is_some(),
             env.vault_file,
             config.vault.vault_file.is_some(),
+        ),
+        audit_file: presence(
+            cli.audit_file.is_some(),
+            env.audit_file,
+            config.audit.audit_file.is_some(),
         ),
         vault_key_file: presence(
             cli.vault_key_file.is_some(),

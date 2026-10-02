@@ -42,7 +42,8 @@ fn defaults_name_the_builtin_layer() {
     assert_eq!(doc["judge"]["value"], Value::Null);
     assert_eq!(source(&doc, "/judge"), "none");
     assert_eq!(doc["effective_vault"], "memory");
-    assert_eq!(doc["vault_file"]["configured"], false);
+    assert_eq!(doc["audit_file"]["configured"], false);
+    assert_eq!(source(&doc, "/audit_file"), "none");
     assert_eq!(doc["context"]["recipient"]["value"], "external");
     assert_eq!(source(&doc, "/context/recipient"), "default");
     assert_eq!(source(&doc, "/context/data_category"), "default");
@@ -121,7 +122,10 @@ fn sensitive_material_never_appears_in_the_report() {
          [context]\npurpose = \"SECRET-PURPOSE-TEXT\"\njurisdiction = \"DE\"\n",
     );
 
-    // CLI paths must stay out of the report too.
+    let audit_path = dir.path().join("CLI-SECRET-AUDIT.jsonl");
+    let Some(audit_path_text) = audit_path.to_str() else {
+        panic!("audit fixture path is not valid UTF-8");
+    };
     let assert = cmd(dir.path())
         .args([
             "config",
@@ -129,6 +133,8 @@ fn sensitive_material_never_appears_in_the_report() {
             "/tmp/CLI-SECRET-VAULT.json",
             "--vault-key-file",
             "/tmp/CLI-SECRET-KEY.hex",
+            "--audit-file",
+            audit_path_text,
         ])
         .assert()
         .success();
@@ -139,6 +145,7 @@ fn sensitive_material_never_appears_in_the_report() {
         "SECRET-PLUGIN",
         "SECRET-PURPOSE-TEXT",
         "CLI-SECRET",
+        audit_path_text,
     ]
     .iter()
     .enumerate()
@@ -161,6 +168,11 @@ fn sensitive_material_never_appears_in_the_report() {
         doc["vault_key_file"],
         serde_json::json!({"configured": true, "source": "cli"})
     );
+    assert_eq!(
+        doc["audit_file"],
+        serde_json::json!({"configured": true, "source": "cli"})
+    );
+    assert!(!audit_path.exists());
     assert_eq!(
         doc["detector_command"],
         serde_json::json!({"configured": true, "source": "file"})

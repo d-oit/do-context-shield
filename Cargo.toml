@@ -58,6 +58,7 @@ do-context-shield-detector-hybrid = { path = "crates/detector-hybrid", version =
 do-context-shield-judge-heuristics = { path = "crates/judge-heuristics", version = "0.1.0" }
 do-context-shield-mcp-server = { path = "crates/mcp-server", version = "0.1.0" }
 do-context-shield-plugin-api = { path = "crates/plugin-api", version = "0.1.0" }
+do-context-shield-audit-file = { path = "crates/audit-file", version = "0.1.0" }
 do-context-shield-plugin-process = { path = "crates/plugin-process", version = "0.1.0" }
 do-context-shield-plugin-registry = { path = "crates/plugin-registry", version = "0.1.0" }
 do-context-shield-policy-default = { path = "crates/policy-default", version = "0.1.0" }

@@ -1,4 +1,7 @@
 //! Built-in plugin registry.
+mod audit;
+
+pub use audit::file_audit_sink;
 
 use do_context_shield_detector_gliner2::Gliner2Detector;
 use do_context_shield_detector_hybrid::HybridDetector;

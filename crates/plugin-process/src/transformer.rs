@@ -93,7 +93,7 @@ impl Transformer for ProcessTransformer {
                 start: planned.entity.start,
                 end: planned.entity.end,
                 value: planned.entity.value.as_str(),
-                action: action_name(&planned.action),
+                action: planned.action.as_str(),
             })
             .collect();
         let request = protocol::encode(
@@ -148,16 +148,6 @@ struct WireMapping {
     kind: String,
     original: String,
     token: String,
-}
-
-/// Wire name of a transformation action.
-fn action_name(action: &Action) -> &'static str {
-    match action {
-        Action::Keep => "keep",
-        Action::Pseudonymize => "pseudonymize",
-        Action::Redact => "redact",
-        Action::Block => "block",
-    }
 }
 
 /// Check the child's text and mappings against the plan and the vault.

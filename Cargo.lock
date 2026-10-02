@@ -448,6 +448,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "do-context-shield-audit-file"
+version = "0.1.0"
+dependencies = [
+ "do-context-shield-plugin-api",
+ "fs2",
+ "rustix",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "do-context-shield-core"
 version = "0.1.0"
 dependencies = [
@@ -531,6 +542,7 @@ dependencies = [
 name = "do-context-shield-plugin-registry"
 version = "0.1.0"
 dependencies = [
+ "do-context-shield-audit-file",
  "do-context-shield-detector-gliner2",
  "do-context-shield-detector-hybrid",
  "do-context-shield-detector-regex",
