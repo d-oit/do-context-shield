@@ -50,6 +50,20 @@ pub(crate) fn validate(config: &Config) -> Result<(), Box<dyn std::error::Error>
     if let Some(jurisdiction) = context.jurisdiction.as_deref() {
         validate_jurisdiction(jurisdiction)?;
     }
+    // A `[policy_matrix]` section under an explicitly different file policy
+    // would be loaded and silently ignored, reading as enforced while unused.
+    // An unset file policy is not rejected: the CLI may still select `matrix`.
+    if config.policy_matrix != do_context_shield_policy_matrix::MatrixConfig::default()
+        && plugins
+            .policy
+            .as_deref()
+            .is_some_and(|selected| selected != "matrix")
+    {
+        return Err(
+            "config: `[policy_matrix]` is configured but `plugins.policy` selects another policy"
+                .into(),
+        );
+    }
     vault::validate_vault(&config.vault)
 }
 

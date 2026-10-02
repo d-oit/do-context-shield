@@ -439,6 +439,7 @@ dependencies = [
  "do-context-shield-plugin-api",
  "do-context-shield-plugin-process",
  "do-context-shield-plugin-registry",
+ "do-context-shield-policy-matrix",
  "do-context-shield-vault-json",
  "predicates",
  "serde",
@@ -515,6 +516,7 @@ dependencies = [
  "do-context-shield-plugin-api",
  "do-context-shield-plugin-process",
  "do-context-shield-plugin-registry",
+ "do-context-shield-policy-matrix",
  "do-context-shield-vault-memory",
  "serde_json",
 ]
@@ -525,6 +527,7 @@ version = "0.1.0"
 dependencies = [
  "getrandom",
  "serde",
+ "serde_json",
  "thiserror",
 ]
 
@@ -550,6 +553,7 @@ dependencies = [
  "do-context-shield-plugin-api",
  "do-context-shield-plugin-process",
  "do-context-shield-policy-default",
+ "do-context-shield-policy-matrix",
  "do-context-shield-transformer-generalize",
  "do-context-shield-transformer-mask",
  "do-context-shield-transformer-pseudonymize",
@@ -564,6 +568,14 @@ name = "do-context-shield-policy-default"
 version = "0.1.0"
 dependencies = [
  "do-context-shield-plugin-api",
+]
+
+[[package]]
+name = "do-context-shield-policy-matrix"
+version = "0.1.0"
+dependencies = [
+ "do-context-shield-plugin-api",
+ "serde",
 ]
 
 [[package]]

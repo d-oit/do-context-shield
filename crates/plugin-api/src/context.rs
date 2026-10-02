@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// Recipient trust classification for policy decisions.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum RecipientClass {
     /// Local or trusted process on the same device.
     Local,
@@ -43,6 +44,7 @@ impl RecipientClass {
 
 /// Data category for jurisdiction-aware policy decisions.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum DataCategory {
     /// Non-personal or already anonymised data.
     NonPersonal,
@@ -103,4 +105,52 @@ pub struct ProcessingContext {
 #[must_use]
 pub fn is_valid_jurisdiction(value: &str) -> bool {
     value.len() == 2 && value.chars().all(|c| c.is_ascii_alphabetic())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DataCategory, RecipientClass};
+    use serde::Serialize;
+    use serde::de::DeserializeOwned;
+
+    fn encoded<T: Serialize>(value: &T) -> String {
+        match serde_json::to_string(value) {
+            Ok(name) => name,
+            Err(error) => panic!("unexpected serialization error: {error}"),
+        }
+    }
+
+    fn decoded<T: DeserializeOwned>(name: &str) -> T {
+        match serde_json::from_str(name) {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected deserialization error: {error}"),
+        }
+    }
+
+    /// The serde name and the `as_str`/`parse` name are one contract: every
+    /// user-facing surface (config file, CLI, MCP) names the lowercase form.
+    #[test]
+    fn serde_names_match_the_documented_lowercase_names() {
+        let recipients = [
+            (RecipientClass::Local, "local"),
+            (RecipientClass::Trusted, "trusted"),
+            (RecipientClass::External, "external"),
+            (RecipientClass::Unknown, "unknown"),
+        ];
+        for (variant, name) in recipients {
+            assert_eq!(variant.as_str(), name);
+            assert_eq!(encoded(&variant), format!("\"{name}\""));
+            assert_eq!(decoded::<RecipientClass>(&format!("\"{name}\"")), variant);
+        }
+        let categories = [
+            (DataCategory::NonPersonal, "non_personal"),
+            (DataCategory::Personal, "personal"),
+            (DataCategory::SpecialCategory, "special_category"),
+        ];
+        for (variant, name) in categories {
+            assert_eq!(variant.as_str(), name);
+            assert_eq!(encoded(&variant), format!("\"{name}\""));
+            assert_eq!(decoded::<DataCategory>(&format!("\"{name}\"")), variant);
+        }
+    }
 }

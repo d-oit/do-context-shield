@@ -3,7 +3,7 @@
 # overrides that default and is itself overridden by the matching CLI flag.
 [plugins]
 detector = "regex"                  # regex | gliner2 | hybrid | process
-policy = "default"                  # default | process
+policy = "default"                  # default | matrix | process
 transformer = "pseudonymize"        # pseudonymize | generalize | mask | process
 # judge = "heuristics"             # heuristics | process (optional)
 # tools = "sanitize,inspect"       # mcp-stdio only: sanitize | restore | inspect | forget | all
@@ -32,3 +32,16 @@ transformer = "pseudonymize"        # pseudonymize | generalize | mask | process
 
 [process]
 # timeout_ms = 30000               # per-plugin response timeout
+
+# Opt-in `policy = "matrix"` configuration: jurisdiction adequacy and
+# purpose-conditional rules. Requires `plugins.policy = "matrix"` (or
+# `--policy matrix`); a `[policy_matrix]` section under another policy is
+# rejected at startup. See docs/configuration.md.
+# [policy_matrix]
+# origin = "DE"                    # ISO 3166-1 alpha-2 code of the operator
+# adequate_jurisdictions = ["FR", "GB"]
+# enforce_adequacy_for_trusted = true
+# [[policy_matrix.purpose_rules]]
+# purpose = "internal_analytics"
+# recipients = ["local", "trusted"]
+# action = "keep"                  # keep | pseudonymize | block

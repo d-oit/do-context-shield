@@ -6,7 +6,7 @@ The core does not know which detector, judge, policy, transformer, or vault is u
 | --- | --- | --- | --- |
 | detection | `Detector` | regex, `detector-gliner2` (local ONNX NER), `detector-hybrid` (regex + model), `plugin-process` (`detect`) | custom local NER, rules |
 | judging | `SemanticJudge` | `judge-heuristics` (local rules), `plugin-process` (`judge`) | local model, hosted judge via process |
-| policy | `Policy` | default, `plugin-process` (`plan`) | project policy, enterprise DLP |
+| policy | `Policy` | default, matrix (opt-in jurisdiction adequacy + purpose mapping), `plugin-process` (`plan`) | project policy, enterprise DLP |
 | transformation | `Transformer` | pseudonymize, generalize, mask, `plugin-process` (`transform`) | redact, encrypt, format-preserving |
 | storage | `Vault` | memory, JSON file (`registry::json_vault(path, key_file)`, optionally encrypted at rest), `plugin-process` (`vault_get_or_insert`, `vault_resolve`) | SQLite, OS keychain, encrypted local DB |
 

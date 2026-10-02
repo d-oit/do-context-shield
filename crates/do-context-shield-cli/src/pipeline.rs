@@ -79,6 +79,9 @@ fn build_policy(
 ) -> Result<Box<dyn do_context_shield_plugin_api::Policy>, Box<dyn std::error::Error>> {
     let timeout = Duration::from_millis(resolved.process_timeout_ms);
     Ok(match resolved.policy.as_str() {
+        "matrix" => {
+            do_context_shield_plugin_registry::matrix_policy(resolved.policy_matrix.clone())
+        }
         "process" => Box::new(ProcessPolicy::from_selection(
             resolved.policy_command.as_deref(),
             timeout,

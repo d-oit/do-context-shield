@@ -6,24 +6,28 @@ file is the durable, reviewable copy. Promote an item by giving it a task
 (`do-harness task add "<title>" --method <name>`); remove its section when the
 work lands or the precondition expires.
 
-## Deferred — needs a design decision
-
-Recorded 2026-09-29 from the gap-analysis hardening pass (harness task 24).
-Each item was explicitly out of scope there and needs a product or
-architecture decision before code.
+## Landed
 
 ### Jurisdiction pairing and purpose-conditional transfers
 
-- **Status**: the conservative default landed — an unset jurisdiction fails
-  closed for special-category data to non-local recipients, and `purpose` is
-  documented and tested as forwarded intent that cannot loosen a decision.
-  What remains is the legal/product matrix the default deliberately does not
-  guess.
-- **Decision needed**: which jurisdiction pairs may receive special-category
-  data (adequacy mappings), and which purposes, if any, permit a looser action.
-- **Exit criteria**: a documented matrix implemented as a new opt-in policy
+- **Status**: landed (harness task 34). The opt-in `matrix` policy
+  (`crates/policy-matrix`, `plugins.policy = "matrix"` / `--policy matrix`,
+  config `[policy_matrix]`) implements the decision this item deferred:
+  adequacy is a **pair** decision (a destination is adequate only when it is
+  the declared `origin` itself or a member of `adequate_jurisdictions`; an
+  unset origin makes nothing adequate, so special-category data to a trusted
+  recipient fails closed), and `purpose_rules` map an exact purpose (optionally
+  filtered by data category and recipient) to `keep`/`pseudonymize`/`block` in
+  declaration order. Secrets redact under every rule. The conservative
+  `default` policy is unchanged.
+- **Decision (recorded)**: the matrix deliberately does not hard-code a legal
+  adequacy list; an operator declares their own `origin` and
+  `adequate_jurisdictions`. A `[policy_matrix]` section under another policy is
+  rejected at startup rather than silently ignored.
+- **Exit criteria**: met — a documented matrix implemented as an opt-in policy
   plugin (never in the conservative default), with privacy-invariant tests
-  covering every cell.
+  covering secrets-always-redact, unknown-recipient, failed adequacy, the
+  undeclared-origin cell, rule ordering, and the CLI/file selection surfaces.
 
 ## Blocked — approval-gated
 

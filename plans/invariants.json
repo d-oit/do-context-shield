@@ -315,6 +315,18 @@
     "invariant": "File audit logging (`FileAuditSink`) requires strict Unix filesystem safety: pre-existing parent directory, safe descriptor open with `O_RDWR | O_APPEND | O_CREAT | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC` and mode `0600`, exclusive advisory file locking during validation and append, refusal of non-regular files, multiple links, foreign ownership, symlinks, hardlinks, FIFOs, and paths aliasing vault files; non-Unix platforms fail explicitly without fallback",
     "rationale": "Audit trails are sensitive system metadata and must not be hijacked by symlink attacks, concurrent corruption, or file-descriptor replacement; failing closed before input processing prevents silent loss or disclosure of audit records",
     "sensor": "cargo test -p do-context-shield-audit-file + cargo test -p do-context-shield-plugin-registry",
+"category": "security"
+  },
+  {
+    "invariant": "The opt-in `matrix` policy (`crates/policy-matrix`) never loosens the boundary: secret-kind and judge-`Secret` entities always redact under every purpose rule; unknown recipients block every non-secret entity except `non_personal` data; special-category data to external/unknown recipients blocks; and adequacy is a pair decision — an unset origin or a destination that is neither the origin itself nor a member of `adequate_jurisdictions` blocks special-category data to a trusted recipient, so an unconfigured matrix is never looser than the default policy; country codes are case-normalized",
+    "rationale": "The matrix encodes the jurisdiction-pairing and purpose-mapping decisions the conservative default deliberately refuses to guess, so an operator-declared policy must fail closed on every incomplete pair rather than read as enforced while leaving special-category transfers unguarded; the `origin` field and `enforce_adequacy_for_trusted` default previously made an unconfigured matrix silently permit trusted-recipient transfers",
+    "sensor": "cargo test -p do-context-shield-policy-matrix + cargo test -p do-context-shield --test cli_policy_matrix",
     "category": "security"
-   }
+  },
+  {
+    "invariant": "`RecipientClass` and `DataCategory` serialize with their documented lowercase names (`local`/`trusted`/`external`/`unknown`, `non_personal`/`personal`/`special_category`), identical to `as_str`/`parse` used by the process protocol and MCP arguments, so every user-facing surface (config file, CLI, MCP) accepts the same names",
+    "rationale": "A serde derive had produced PascalCase variants that no documented surface used, so a documented lowercase value failed config parsing (`unknown variant \\`local\\``) the first time these enums became serde-visible in the `[policy_matrix]` purpose rules; one name per enum across every boundary prevents a class of silent-mismatch defects",
+    "sensor": "cargo test -p do-context-shield-plugin-api",
+    "category": "contracts"
+  }
 ]
