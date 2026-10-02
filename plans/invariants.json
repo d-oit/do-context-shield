@@ -340,5 +340,11 @@
     "rationale": "Developer connection strings (`postgres://`, `mysql://`, `mongodb://`, `redis://`) paste into agent contexts frequently; previously, user:password@domain was falsely matched as personal email and pseudonymized while localhost/IP hosts were ignored completely, leaking production database passwords",
     "sensor": "cargo test -p do-context-shield-detector-regex + cargo test -p do-context-shield --test cli_sanitize",
     "category": "security"
+  },
+  {
+    "invariant": "The `ORDER` array in `scripts/publish-crates.sh` lists every workspace crate exactly once and in topological order: each crate appears after every normal, non-optional workspace dependency of that crate (dev-dependencies and optional dependencies are stripped from the packaged manifest and do not gate the registry lookup), and the list contains no crate that is not a workspace member",
+    "rationale": "The array omitted three workspace crates (`detector-hybrid`, `judge-heuristics`, `policy-matrix`) and ordered `plugin-registry` before its dependency `plugin-process`, so `cargo publish` resolved sibling path dependencies against the crates.io index mid-release and failed partway through with crates.io as the only oracle; the order is load-bearing release state that a rename or a new crate would silently drift out of, so completeness and topological validity are asserted against `cargo metadata` rather than maintained by hand",
+    "sensor": "bash scripts/check-publish-order.sh (publish-order sensor, in the verification, release, and ci sets; WARN-skips without python3 locally and fails closed when CI=true or DO_HARNESS_REQUIRE_TOOLS=1, the same policy as check-shellcheck.sh)",
+    "category": "verification"
   }
 ]
