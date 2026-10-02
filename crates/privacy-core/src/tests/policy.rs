@@ -16,7 +16,7 @@ impl Policy for FixedActionPolicy {
             .cloned()
             .map(|entity| PlannedEntity {
                 entity,
-                action: self.0.clone(),
+                action: self.0,
             })
             .collect())
     }

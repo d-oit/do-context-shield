@@ -30,6 +30,7 @@ pub(crate) struct EnvSet {
     pub(crate) vault: bool,
     pub(crate) vault_file: bool,
     pub(crate) vault_key_file: bool,
+    pub(crate) audit_file: bool,
     pub(crate) vault_ttl_seconds: bool,
     pub(crate) recipient: bool,
     pub(crate) data_category: bool,
@@ -91,6 +92,10 @@ pub(super) fn apply(config: &mut Config) -> Result<(), Box<dyn std::error::Error
     if let Some(value) = var("DO_CONTEXT_SHIELD_VAULT_KEY_FILE") {
         config.vault.vault_key_file = Some(PathBuf::from(value));
         config.env.vault_key_file = true;
+    }
+    if let Some(value) = var("DO_CONTEXT_SHIELD_AUDIT_FILE") {
+        config.audit.audit_file = Some(PathBuf::from(value));
+        config.env.audit_file = true;
     }
     if let Some(value) = var("DO_CONTEXT_SHIELD_VAULT_TTL_SECONDS") {
         let seconds = value.parse::<u64>().map_err(|error| {

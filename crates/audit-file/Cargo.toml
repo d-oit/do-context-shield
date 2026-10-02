@@ -1,0 +1,24 @@
+[package]
+name = "do-context-shield-audit-file"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Strict private append-only JSONL audit sink for do-context-shield"
+homepage.workspace = true
+repository.workspace = true
+include = ["src/**/*", "Cargo.toml"]
+
+[lints]
+workspace = true
+
+[dependencies]
+do-context-shield-plugin-api.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+fs2 = "0.4"
+rustix = { version = "1.1", features = ["fs", "process"] }
+
+[dev-dependencies]
+tempfile = "3"

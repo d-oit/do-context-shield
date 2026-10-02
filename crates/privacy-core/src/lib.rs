@@ -1,11 +1,13 @@
 //! Privacy pipeline independent of any LLM provider or agent runtime.
 
 use do_context_shield_plugin_api::{
-    Action, Detector, DetectorError, Entity, JudgeError, PlannedEntity, Policy, PolicyError,
-    ProcessingContext, ScopeId, SemanticJudge, TransformError, TransformResult, Transformer, Vault,
-    VaultError, is_placeholder_token, is_secret_kind, resolve_overlaps, validate_judgments,
+    Action, AuditContext, AuditError, AuditEvent, AuditOutcome, AuditSink, Detector, DetectorError,
+    Entity, JudgeError, PlannedEntity, Policy, PolicyError, ProcessingContext, ScopeId,
+    SemanticJudge, TransformError, TransformResult, Transformer, Vault, VaultError,
+    is_placeholder_token, is_secret_kind, resolve_overlaps, validate_judgments,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
 
 /// Pipeline errors.
 #[derive(Debug, thiserror::Error)]
@@ -25,6 +27,9 @@ pub enum PipelineError {
     /// Judge error.
     #[error(transparent)]
     Judge(#[from] JudgeError),
+    /// Audit error.
+    #[error(transparent)]
+    Audit(#[from] AuditError),
 }
 
 /// Detected entity as disclosed outside the pipeline: kind, byte span, and confidence.
@@ -70,6 +75,7 @@ pub struct PrivacyPipeline {
     policy: Box<dyn Policy>,
     transformer: Box<dyn Transformer>,
     vault: Box<dyn Vault>,
+    audit: Option<Mutex<Box<dyn AuditSink>>>,
 }
 
 impl PrivacyPipeline {
@@ -87,6 +93,7 @@ impl PrivacyPipeline {
             policy,
             transformer,
             vault,
+            audit: None,
         }
     }
 
@@ -95,6 +102,34 @@ impl PrivacyPipeline {
     pub fn with_judge(mut self, judge: Box<dyn SemanticJudge>) -> Self {
         self.judge = Some(judge);
         self
+    }
+
+    /// Attach an optional audit sink.
+    ///
+    /// A configured sink is a hard requirement: a call whose event cannot be
+    /// recorded fails instead of returning text.
+    #[must_use]
+    pub fn with_audit_sink(mut self, sink: Box<dyn AuditSink>) -> Self {
+        self.audit = Some(Mutex::new(sink));
+        self
+    }
+
+    /// Record one event, failing the call when a configured sink cannot write.
+    ///
+    /// The sink's error text is scrubbed of the values the caller passes, like
+    /// every other stage error.
+    fn record(&self, event: &AuditEvent, sensitive: &[&str]) -> Result<(), PipelineError> {
+        let Some(audit) = &self.audit else {
+            return Ok(());
+        };
+        let mut sink = audit.lock().map_err(|_| {
+            PipelineError::Audit(audit::scrub(
+                AuditError::Message("audit sink lock poisoned".to_owned()),
+                sensitive,
+            ))
+        })?;
+        sink.record(event)
+            .map_err(|error| PipelineError::Audit(audit::scrub(error, sensitive)))
     }
 
     /// Detect and sanitize text in a session scope under an enforcement context.
@@ -141,6 +176,15 @@ impl PrivacyPipeline {
         // producing text. Human review is not part of the boundary (there is no
         // review action), so every refusal is a block.
         if plan.iter().any(|planned| planned.action == Action::Block) {
+            self.record(
+                &audit::sanitize(
+                    scope,
+                    AuditOutcome::Blocked,
+                    &AuditContext::from(context),
+                    &plan,
+                ),
+                &sensitive,
+            )?;
             return Err(PipelineError::Policy(PolicyError::Message(
                 "input blocked by policy".to_owned(),
             )));
@@ -149,6 +193,10 @@ impl PrivacyPipeline {
             .transformer
             .transform(input, &plan, scope, self.vault.as_mut())
             .map_err(|error| scrub_transform(error, &sensitive))?;
+        self.record(
+            &audit::sanitize(scope, AuditOutcome::Ok, &AuditContext::from(context), &plan),
+            &sensitive,
+        )?;
         Ok(SanitizeResult {
             text,
             entities: entities.iter().map(EntitySummary::from).collect(),
@@ -199,11 +247,27 @@ impl PrivacyPipeline {
             .collect();
         let token_refs: Vec<&str> = tokens.iter().map(String::as_str).collect();
         let resolved = self.vault.resolve_many(scope, &token_refs)?;
-        for ((start, end), mapping) in positions.into_iter().rev().zip(resolved.into_iter().rev()) {
+        let resolved_count = resolved.iter().filter(|mapping| mapping.is_some()).count();
+        for ((start, end), mapping) in positions.into_iter().rev().zip(resolved.iter().rev()) {
             if let Some(mapping) = mapping {
                 output.replace_range(start..end, &mapping.original);
             }
         }
+        self.record(
+            &audit::restore(scope, u64::try_from(resolved_count).unwrap_or(u64::MAX)),
+            &[input],
+        )
+        .map_err(|error| match error {
+            PipelineError::Audit(error) => {
+                let resolved_originals: Vec<&str> = resolved
+                    .iter()
+                    .flatten()
+                    .map(|mapping| mapping.original.as_str())
+                    .collect();
+                PipelineError::Audit(audit::scrub(error, &resolved_originals))
+            }
+            error => error,
+        })?;
         Ok(output)
     }
 
@@ -233,6 +297,7 @@ impl PrivacyPipeline {
     /// Returns [`PipelineError::Vault`] when the vault cannot delete the scope.
     pub fn forget(&mut self, scope: &ScopeId) -> Result<(), PipelineError> {
         self.vault.delete_scope(scope)?;
+        self.record(&audit::forget(scope), &[])?;
         Ok(())
     }
 
@@ -394,6 +459,8 @@ fn scrub_judge(error: JudgeError, sensitive: &[&str]) -> JudgeError {
         other => other,
     }
 }
+
+mod audit;
 
 #[cfg(test)]
 mod tests;

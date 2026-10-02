@@ -12,6 +12,7 @@ use do_context_shield_policy_default::DefaultPolicy;
 use do_context_shield_transformer_pseudonymize::PseudonymizingTransformer;
 use do_context_shield_vault_memory::MemoryVault;
 
+mod audit;
 mod errors;
 mod flow;
 mod judge;

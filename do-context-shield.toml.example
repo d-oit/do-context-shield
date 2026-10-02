@@ -20,6 +20,9 @@ transformer = "pseudonymize"        # pseudonymize | generalize | mask | process
 # vault_ttl_seconds = 3600         # memory or JSON vault mapping lifetime
 # vault_key_file = "vault.key"     # 64-hex key file that encrypts the JSON vault at rest
 
+[audit]
+# audit_file = "audit.jsonl"         # private local append-only JSONL audit destination
+
 # Default enforcement context for `sanitize`. CLI flags override per call.
 [context]
 # recipient = "external"           # local | trusted | external | unknown

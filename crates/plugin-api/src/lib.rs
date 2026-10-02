@@ -23,7 +23,7 @@ pub struct Entity {
 }
 
 /// Action selected by a policy plugin.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Action {
     /// Leave the value unchanged.
     Keep,
@@ -33,6 +33,19 @@ pub enum Action {
     Redact,
     /// Reject the entire input; the pipeline returns an error, not sanitized text.
     Block,
+}
+
+impl Action {
+    /// Lowercase name used by the process protocol and the audit log.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Keep => "keep",
+            Self::Pseudonymize => "pseudonymize",
+            Self::Redact => "redact",
+            Self::Block => "block",
+        }
+    }
 }
 
 /// Entity plus policy decision.
@@ -64,12 +77,16 @@ pub struct Mapping {
     pub token: String,
 }
 
+mod audit;
 mod context;
 mod placeholder;
 mod secret;
 mod spans;
 mod traits;
 
+pub use audit::{
+    ActionCount, AuditContext, AuditError, AuditEvent, AuditOperation, AuditOutcome, AuditSink,
+};
 pub use context::{DataCategory, ProcessingContext, RecipientClass, is_valid_jurisdiction};
 pub use placeholder::{
     is_minted_placeholder_token, is_placeholder_token, is_valid_placeholder_kind, mint_placeholder,

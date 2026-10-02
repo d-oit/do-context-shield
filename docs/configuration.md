@@ -33,6 +33,7 @@ Every variable is optional; an unset or empty variable keeps the file value. Val
 | `DO_CONTEXT_SHIELD_VAULT_FILE` | `[vault] vault_file` |
 | `DO_CONTEXT_SHIELD_VAULT_TTL_SECONDS` | `[vault] vault_ttl_seconds` |
 | `DO_CONTEXT_SHIELD_VAULT_KEY_FILE` | `[vault] vault_key_file` |
+| `DO_CONTEXT_SHIELD_AUDIT_FILE` | `[audit] audit_file` |
 | `DO_CONTEXT_SHIELD_RECIPIENT` | `[context] recipient` |
 | `DO_CONTEXT_SHIELD_DATA_CATEGORY` | `[context] data_category` |
 | `DO_CONTEXT_SHIELD_PURPOSE` | `[context] purpose` |
@@ -75,6 +76,18 @@ elapsed. Counters are never reset, so an expired token is never reissued for a
 different value. Mappings written before a TTL was configured carry no
 timestamp; they keep resolving until the first locked write stamps them, after
 which the TTL applies normally. `forget` remains the immediate eraser.
+### `[audit]`
+
+| Key | Values | Default | Notes |
+| --- | --- | --- | --- |
+| `audit_file` | path | unset | Private local append-only JSONL audit destination (`0600` on Unix). Fails closed before input if inaccessible, insecure, or aliasing vault paths |
+
+An explicit `audit_file` records structure-only operational events (`sanitize`,
+`restore`, `forget`, policy blocks) without original text, minted tokens,
+vault mappings, or free-form purpose text. Retention is strictly
+operator-controlled (no automatic rotation or silent truncation). On non-Unix
+platforms, opting into file audit logging fails explicitly.
+
 
 ### `[context]`
 
@@ -102,9 +115,9 @@ Bounds one process-plugin response; the child is killed and reaped on timeout (`
 | Command | Reads from the file |
 | --- | --- |
 | `sanitize` | all sections |
-| `restore` | `[vault]`, `[process]`; detector/policy/transformer selections are ignored (only the vault is built, and restore only resolves placeholders) |
-| `inspect` | detector keys of `[plugins]` (`detector`, `model_dir`, `detector_command`) and `[process]`; policy, transformer, and vault selections are ignored |
-| `forget` | `[vault]`, `[process]`; detector/policy/transformer selections are ignored |
+| `restore` | `[vault]`, `[audit]`, `[process]`; detector/policy/transformer selections are ignored (only the vault is built, and restore only resolves placeholders) |
+| `inspect` | detector keys of `[plugins]` (`detector`, `model_dir`, `detector_command`) and `[process]`; policy, transformer, audit, and vault selections are ignored |
+| `forget` | `[vault]`, `[audit]`, `[process]`; detector/policy/transformer selections are ignored |
 | `mcp-stdio` | all sections, but only from a file selected with `--config <path>` (auto-discovery is off); `[context]` becomes the server default for `context.sanitize` and per-call arguments override it (field by field); `[plugins] tools` sets the exposed tool surface |
 | `config` | all sections: it reports the merged one-shot view (the same merge `sanitize` uses) without building a plugin or reading stdin |
 | `encrypt-vault` | nothing: both paths are explicit flags, so an ambient file can never trigger an in-place rewrite |
@@ -149,7 +162,7 @@ shape-checked `jurisdiction`), numeric limits, and *presence booleans* for
 path-shaped and command-shaped settings. It never contains the matched text,
 raw process commands (`detector_command`, `policy_command`, … are reported as
 `configured: true/false` only), filesystem paths (`vault_file`,
-`vault_key_file`, `model_dir`), or the free-form `purpose` value (reported as
+`vault_key_file`, `audit_file`, `model_dir`), or the free-form `purpose` value (reported as
 a presence boolean), so the report is safe to paste into an agent context. The
 MCP tool surface does not expose it: `config` is a CLI diagnostic, and
 `[plugins] tools` is not part of this report (`mcp-stdio --help` and

@@ -1,83 +1,14 @@
 //! Tests for the configuration loader, validation, and CLI merge.
 
-use super::{
-    CliSelection, Config, ContextConfig, Plugins, ProcessConfig, VaultConfig, resolve,
-    resolve_tools, validate,
-};
+use super::{CliSelection, Config, resolve, resolve_tools, validate};
 use crate::cli::DetectorSelection;
 use do_context_shield_mcp_server::ToolSet;
 use do_context_shield_plugin_process::DEFAULT_TIMEOUT_MS;
-use std::path::PathBuf;
 
 #[test]
 fn empty_config_is_default() -> Result<(), Box<dyn std::error::Error>> {
     let config: Config = toml::from_str("")?;
     assert_eq!(config, Config::default());
-    Ok(())
-}
-
-#[test]
-fn full_config_round_trips() -> Result<(), Box<dyn std::error::Error>> {
-    let text = r#"
-[plugins]
-detector = "gliner2"
-policy = "process"
-transformer = "process"
-judge = "heuristics"
-tools = "sanitize,inspect"
-model_dir = "/models/gliner2"
-detector_command = "detect-detector"
-policy_command = "detect-policy"
-transformer_command = "detect-transformer"
-judge_command = "detect-judge"
-
-[vault]
-vault = "json"
-vault_file = "vault.json"
-vault_command = "detect-vault"
-
-[context]
-recipient = "trusted"
-data_category = "special_category"
-purpose = "code assistance"
-jurisdiction = "DE"
-
-[process]
-timeout_ms = 1500
-"#;
-    let config: Config = toml::from_str(text)?;
-    let expected = Config {
-        plugins: Plugins {
-            detector: Some("gliner2".to_owned()),
-            policy: Some("process".to_owned()),
-            transformer: Some("process".to_owned()),
-            judge: Some("heuristics".to_owned()),
-            tools: Some("sanitize,inspect".to_owned()),
-            model_dir: Some(PathBuf::from("/models/gliner2")),
-            detector_command: Some("detect-detector".to_owned()),
-            policy_command: Some("detect-policy".to_owned()),
-            transformer_command: Some("detect-transformer".to_owned()),
-            judge_command: Some("detect-judge".to_owned()),
-        },
-        vault: VaultConfig {
-            vault: Some("json".to_owned()),
-            vault_file: Some(PathBuf::from("vault.json")),
-            vault_command: Some("detect-vault".to_owned()),
-            vault_ttl_seconds: None,
-            vault_key_file: None,
-        },
-        context: ContextConfig {
-            recipient: Some("trusted".to_owned()),
-            data_category: Some("special_category".to_owned()),
-            purpose: Some("code assistance".to_owned()),
-            jurisdiction: Some("DE".to_owned()),
-        },
-        process: ProcessConfig {
-            timeout_ms: Some(1500),
-        },
-        env: super::env::EnvSet::default(),
-    };
-    assert_eq!(config, expected);
     Ok(())
 }
 

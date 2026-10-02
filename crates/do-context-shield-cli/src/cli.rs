@@ -45,6 +45,13 @@ pub(crate) enum Command {
     EncryptVault(EncryptVaultArgs),
 }
 
+/// Explicit local append-only JSONL audit destination.
+#[derive(Args, Default, Clone)]
+pub(crate) struct AuditArgs {
+    /// Record structure-only operation summaries in a private local file.
+    #[arg(long)]
+    pub(crate) audit_file: Option<PathBuf>,
+}
 #[derive(Args)]
 pub(crate) struct SanitizeArgs {
     #[command(flatten)]
@@ -57,6 +64,8 @@ pub(crate) struct SanitizeArgs {
     pub(crate) process: ProcessArgs,
     #[command(flatten)]
     pub(crate) context: ContextArgs,
+    #[command(flatten)]
+    pub(crate) audit: AuditArgs,
 }
 
 #[derive(Args)]
@@ -65,6 +74,8 @@ pub(crate) struct RestoreArgs {
     pub(crate) vault: VaultArgs,
     #[command(flatten)]
     pub(crate) process: ProcessArgs,
+    #[command(flatten)]
+    pub(crate) audit: AuditArgs,
 }
 
 #[derive(Args)]
@@ -82,6 +93,8 @@ pub(crate) struct ForgetArgs {
     pub(crate) vault: VaultArgs,
     #[command(flatten)]
     pub(crate) process: ProcessArgs,
+    #[command(flatten)]
+    pub(crate) audit: AuditArgs,
 }
 
 /// Session scope and vault selection shared by sanitize, restore, and forget.
@@ -133,6 +146,8 @@ pub(crate) struct McpArgs {
     pub(crate) pipeline: PipelineSelection,
     #[command(flatten)]
     pub(crate) process: ProcessArgs,
+    #[command(flatten)]
+    pub(crate) audit: AuditArgs,
 }
 
 /// Selection flags shared by `config` with the executing commands.
@@ -160,6 +175,8 @@ pub(crate) struct ConfigArgs {
     pub(crate) context: ContextArgs,
     #[command(flatten)]
     pub(crate) process: ProcessArgs,
+    #[command(flatten)]
+    pub(crate) audit: AuditArgs,
 }
 
 /// Rewrite an existing plaintext JSON vault in the encrypted format.

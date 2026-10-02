@@ -8,16 +8,17 @@
 
 use crate::cli::{ContextArgs, DetectorSelection, PipelineSelection, ProcessArgs, VaultSelection};
 use do_context_shield_mcp_server::ToolSet;
-use do_context_shield_plugin_api::{
-    DataCategory, ProcessingContext, RecipientClass, is_valid_jurisdiction,
-};
+use do_context_shield_plugin_api::{DataCategory, ProcessingContext, RecipientClass};
 use do_context_shield_plugin_process::DEFAULT_TIMEOUT_MS;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 pub(crate) mod diag;
 mod env;
+mod validation;
 mod vault;
+
+pub(crate) use validation::validate;
 
 pub(crate) use vault::{VaultKind, json_vault_file, vault_kind};
 
@@ -47,6 +48,8 @@ pub(crate) struct Config {
     pub(crate) plugins: Plugins,
     #[serde(default)]
     pub(crate) vault: VaultConfig,
+    #[serde(default)]
+    pub(crate) audit: AuditConfig,
     #[serde(default)]
     pub(crate) context: ContextConfig,
     #[serde(default)]
@@ -83,6 +86,13 @@ pub(crate) struct VaultConfig {
     pub(crate) vault_command: Option<String>,
     pub(crate) vault_ttl_seconds: Option<u64>,
     pub(crate) vault_key_file: Option<PathBuf>,
+}
+
+/// Optional local audit-log destination.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AuditConfig {
+    pub(crate) audit_file: Option<PathBuf>,
 }
 
 /// Default enforcement context for `sanitize`.
@@ -196,98 +206,6 @@ fn home_config_path() -> Option<PathBuf> {
         .map(|home| PathBuf::from(home).join(".config/do-context-shield/config.toml"))
 }
 
-/// Reject unknown plugin and context names, and contradictory vault
-/// combinations, in the file.
-///
-/// # Errors
-///
-/// Returns an error naming the offending field and the accepted values.
-pub(crate) fn validate(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
-    let plugins = &config.plugins;
-    let vault = &config.vault;
-    let context = &config.context;
-    let fields = [
-        (
-            plugins.detector.as_deref(),
-            "detector",
-            DETECTORS.as_slice(),
-        ),
-        (plugins.policy.as_deref(), "policy", POLICIES.as_slice()),
-        (
-            plugins.transformer.as_deref(),
-            "transformer",
-            TRANSFORMERS.as_slice(),
-        ),
-        (plugins.judge.as_deref(), "judge", JUDGES.as_slice()),
-        (vault.vault.as_deref(), "vault", VAULTS.as_slice()),
-        (
-            context.recipient.as_deref(),
-            "recipient",
-            RECIPIENTS.as_slice(),
-        ),
-        (
-            context.data_category.as_deref(),
-            "data_category",
-            DATA_CATEGORIES.as_slice(),
-        ),
-    ];
-    for (value, field, allowed) in fields {
-        if let Some(value) = value {
-            validate_choice(value, field, allowed)?;
-        }
-    }
-    if let Some(tools) = plugins.tools.as_deref() {
-        ToolSet::parse(tools)
-            .map_err(|error| format!("config: invalid `tools` value `{tools}`: {error}"))?;
-    }
-    if let Some(jurisdiction) = context.jurisdiction.as_deref() {
-        validate_jurisdiction(jurisdiction)?;
-    }
-    vault::validate_vault(&config.vault)
-}
-
-/// Reject a `jurisdiction` that is not an ISO 3166-1 alpha-2 code.
-///
-/// The value is forwarded to policies as written, so a typo (`DEU`, `Germany`,
-/// `de-DE`) would silently reach policy decisions that compare it against
-/// two-letter codes. The predicate is the shared
-/// [`is_valid_jurisdiction`], so the file, the environment, the CLI flag, and
-/// the MCP arguments enforce one contract.
-///
-/// # Errors
-///
-/// Returns an error naming the field and the rejected value.
-fn validate_jurisdiction(value: &str) -> Result<(), Box<dyn std::error::Error>> {
-    if !is_valid_jurisdiction(value) {
-        return Err(format!(
-            "config: `jurisdiction` must be an ISO 3166-1 alpha-2 code, got `{value}`"
-        )
-        .into());
-    }
-    Ok(())
-}
-
-/// Reject a value that is not one of the accepted names.
-///
-/// # Errors
-///
-/// Returns an error naming the field, the rejected value, and the accepted
-/// values.
-fn validate_choice(
-    value: &str,
-    field: &str,
-    allowed: &[&str],
-) -> Result<(), Box<dyn std::error::Error>> {
-    if !allowed.contains(&value) {
-        return Err(format!(
-            "config: unknown {field} `{value}` (allowed: {})",
-            allowed.join(", ")
-        )
-        .into());
-    }
-    Ok(())
-}
-
 /// CLI-side selections for one command, before merging with the config file.
 #[derive(Clone, Default)]
 pub(crate) struct CliSelection {
@@ -296,6 +214,7 @@ pub(crate) struct CliSelection {
     pub(crate) vault: VaultSelection,
     pub(crate) vault_file: Option<PathBuf>,
     pub(crate) vault_key_file: Option<PathBuf>,
+    pub(crate) audit_file: Option<PathBuf>,
     pub(crate) vault_ttl_seconds: Option<u64>,
     pub(crate) context: ContextArgs,
     pub(crate) process: ProcessArgs,
@@ -317,6 +236,7 @@ pub(crate) struct Resolved {
     pub(crate) vault: Option<String>,
     pub(crate) vault_file: Option<PathBuf>,
     pub(crate) vault_key_file: Option<PathBuf>,
+    pub(crate) audit_file: Option<PathBuf>,
     pub(crate) vault_command: Option<String>,
     pub(crate) vault_ttl_seconds: Option<u64>,
     pub(crate) recipient: String,
@@ -377,6 +297,7 @@ pub(crate) fn resolve(cli: &CliSelection, config: &Config) -> Resolved {
         vault: cli.vault.vault.or_else(|| vault.vault.clone()),
         vault_file: cli.vault_file.or_else(|| vault.vault_file.clone()),
         vault_key_file: cli.vault_key_file.or_else(|| vault.vault_key_file.clone()),
+        audit_file: cli.audit_file.or_else(|| config.audit.audit_file.clone()),
         vault_command: cli
             .vault
             .vault_command
