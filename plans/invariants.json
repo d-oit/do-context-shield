@@ -328,5 +328,11 @@
     "rationale": "A serde derive had produced PascalCase variants that no documented surface used, so a documented lowercase value failed config parsing (`unknown variant \\`local\\``) the first time these enums became serde-visible in the `[policy_matrix]` purpose rules; one name per enum across every boundary prevents a class of silent-mismatch defects",
     "sensor": "cargo test -p do-context-shield-plugin-api",
     "category": "contracts"
+  },
+  {
+    "invariant": "A PR branch receives no new commits while GitHub auto-merge is armed: the merge fires on the revision that first satisfied the required checks, silently leaving later commits behind, so the whole slice is pushed before arming and an unavoidable follow-up disables auto-merge first (or opens its own PR)",
+    "rationale": "A docs follow-up commit pushed while auto-merge was pending merged #105 without it and recreated the server-side branch head, stranding the change in a separate PR; the race is invisible in GitHub's UI because the PR still shows as merged",
+    "sensor": "review-only (merge discipline; `AGENTS.md` pull-request merges section)",
+    "category": "workflow"
   }
 ]
