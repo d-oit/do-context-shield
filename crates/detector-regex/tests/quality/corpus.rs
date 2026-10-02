@@ -430,6 +430,7 @@ pub(super) fn adversarial_cases(rng: &mut Rng) -> Vec<(&'static str, String)> {
         ),
         ("passport", String::from("ABCD123456")),
         ("slack_token", String::from("xoxb-short")),
+        ("github_token", String::from("github_pat_short")),
         (
             "db_credential",
             String::from("postgres://localhost:5432/app"),
