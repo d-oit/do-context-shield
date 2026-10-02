@@ -28,7 +28,6 @@ fn read_events(path: &Path) -> Vec<AuditEvent> {
 #[cfg(unix)]
 mod unix_tests {
     use super::*;
-    use rustix::fs::{CWD, Mode, mkfifoat};
     use std::collections::BTreeSet;
     use std::os::unix::fs::{PermissionsExt, symlink};
     use std::process::{Command, Stdio};
@@ -149,8 +148,15 @@ mod unix_tests {
             Err(error) => panic!("cannot create fixture directory: {error}"),
         };
         let path = directory.path().join("audit.fifo");
-        if let Err(error) = mkfifoat(CWD, &path, Mode::RUSR | Mode::WUSR) {
-            panic!("cannot create FIFO fixture: {error}");
+        let status = Command::new("mkfifo")
+            .arg("-m")
+            .arg("0600")
+            .arg(&path)
+            .status();
+        match status {
+            Ok(status) if status.success() => {}
+            Ok(status) => panic!("cannot create FIFO fixture: mkfifo exited with {status}"),
+            Err(error) => panic!("cannot spawn mkfifo command: {error}"),
         }
         let executable = match std::env::current_exe() {
             Ok(executable) => executable,
