@@ -304,5 +304,17 @@
     "rationale": "Persisted originals otherwise stayed resolvable until the file was deleted or the scope forgotten, so an operator who set a lifetime got it only for the memory vault (and the config layer rejected the combination outright); the decision needed cross-process semantics that do not destroy pre-existing mappings on upgrade and do not reissue an expired token for a different value",
     "sensor": "cargo test -p do-context-shield-vault-json + cargo test -p do-context-shield --test mcp_stdio_config",
     "category": "security"
-  }
+  },
+  {
+    "invariant": "Audit logging is strictly opt-in and structure-only (`AuditEvent`): operation, session, outcome, enforcement context without free-form purpose, per-kind action counts, and resolution counts; raw values, minted tokens, vault mappings, and purpose text are never representable or recorded, and resolved originals are scrubbed from restore audit error messages",
+    "rationale": "An audit log that recorded original text or reversible tokens would recreate the exact exposure the privacy boundary exists to prevent; scrubbing restore audit errors ensures failure diagnostics cannot leak resolved originals",
+    "sensor": "cargo test -p do-context-shield-core --test audit + cargo test -p do-context-shield --test cli_audit + cargo test -p do-context-shield --test mcp_stdio_audit",
+    "category": "security"
+  },
+  {
+    "invariant": "File audit logging (`FileAuditSink`) requires strict Unix filesystem safety: pre-existing parent directory, safe descriptor open with `O_RDWR | O_APPEND | O_CREAT | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC` and mode `0600`, exclusive advisory file locking during validation and append, refusal of non-regular files, multiple links, foreign ownership, symlinks, hardlinks, FIFOs, and paths aliasing vault files; non-Unix platforms fail explicitly without fallback",
+    "rationale": "Audit trails are sensitive system metadata and must not be hijacked by symlink attacks, concurrent corruption, or file-descriptor replacement; failing closed before input processing prevents silent loss or disclosure of audit records",
+    "sensor": "cargo test -p do-context-shield-audit-file + cargo test -p do-context-shield-plugin-registry",
+    "category": "security"
+   }
 ]
