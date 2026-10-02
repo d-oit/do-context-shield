@@ -187,6 +187,7 @@ fn run_mcp(args: McpArgs, config: &config::Config) -> Result<(), Box<dyn std::er
         policy: resolved.policy,
         policy_command: resolved.policy_command,
         judge: resolved.judge,
+        policy_matrix: resolved.policy_matrix,
         judge_command: resolved.judge_command,
         transformer: resolved.transformer,
         transformer_command: resolved.transformer_command,

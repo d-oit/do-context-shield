@@ -154,6 +154,8 @@ pub struct ServerConfig {
     /// Command line of a local policy executable; required with `process`.
     /// Split on whitespace; quoting and shell expansion are not supported.
     pub policy_command: Option<String>,
+    /// Optional policy matrix configuration; used when `policy` is `matrix`.
+    pub policy_matrix: do_context_shield_policy_matrix::MatrixConfig,
     /// Optional semantic judge: `heuristics` (built-in rules) or `process` (local executable
     /// over newline-delimited JSON).
     pub judge: Option<String>,
@@ -196,6 +198,7 @@ impl Default for ServerConfig {
             policy: "default".to_owned(),
             policy_command: None,
             judge: None,
+            policy_matrix: do_context_shield_policy_matrix::MatrixConfig::default(),
             judge_command: None,
             transformer: "pseudonymize".to_owned(),
             transformer_command: None,
@@ -247,6 +250,7 @@ pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Err
         name => do_context_shield_plugin_registry::detector(name)?,
     };
     let policy: Box<dyn do_context_shield_plugin_api::Policy> = match config.policy.as_str() {
+        "matrix" => do_context_shield_plugin_registry::matrix_policy(config.policy_matrix),
         "process" => Box::new(ProcessPolicy::from_selection(
             config.policy_command.as_deref(),
             timeout,

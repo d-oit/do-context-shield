@@ -46,7 +46,7 @@ Every variable is optional; an unset or empty variable keeps the file value. Val
 | Key | Values | Default | Notes |
 | --- | --- | --- | --- |
 | `detector` | `regex`, `gliner2`, `hybrid`, `process` | `regex` | |
-| `policy` | `default`, `process` | `default` | |
+| `policy` | `default`, `matrix`, `process` | `default` | `matrix` reads `[policy_matrix]` |
 | `transformer` | `pseudonymize`, `generalize`, `mask`, `process` | `pseudonymize` | `generalize`/`mask` are non-reversible: no vault writes, no restorable output |
 | `judge` | `heuristics`, `process` | unset | judging is optional and off by default |
 | `tools` | `sanitize`, `restore`, `inspect`, `forget`, `all` (comma-separated) | `sanitize,inspect` | `mcp-stdio` only; pins the exposed MCP tool surface in the file (equivalent to `--tools`) |
@@ -57,6 +57,67 @@ Every variable is optional; an unset or empty variable keeps the file value. Val
 | `judge_command` | command line | unset | required with `judge = "process"` |
 
 Command lines are split on whitespace; quoting and shell expansion are not supported (`docs/process-plugin.md`).
+
+### `[policy_matrix]`
+
+Configuration for the opt-in `matrix` policy (`plugins.policy = "matrix"`, or
+`--policy matrix` on the command line). It is never the built-in default: the
+conservative `default` policy makes no adequacy or purpose assumptions. The
+matrix implements the jurisdiction-pairing and purpose-mapping decisions the
+default deliberately leaves to an operator.
+
+| Key | Values | Default |
+| --- | --- | --- |
+| `origin` | ISO 3166-1 alpha-2 code | unset |
+| `adequate_jurisdictions` | list of ISO 3166-1 alpha-2 codes | empty |
+| `enforce_adequacy_for_trusted` | boolean | `true` |
+| `purpose_rules` | array of tables (below) | empty |
+
+Adequacy is a **pair** decision: a destination is adequate for
+special-category data only when it is the declared `origin` itself (not a
+cross-border transfer) or a member of `adequate_jurisdictions`. With
+`origin` unset no destination is adequate, so special-category data to a
+trusted recipient fails closed — an unconfigured matrix is never looser than
+the default policy. Codes are normalized to uppercase, so `fr` and `FR` are
+the same destination. External and unknown recipients always block
+special-category data, and unknown recipients block every non-secret entity
+except explicitly `non_personal` data.
+
+`purpose_rules` are matched in declaration order for non-secret entities; the
+first match decides. Each rule is a table:
+
+| Key | Values | Default |
+| --- | --- | --- |
+| `purpose` | string, matched exactly against the enforcement context `purpose` | required |
+| `data_category` | `non_personal`, `personal`, `special_category` | any |
+| `recipients` | list of `local`, `trusted`, `external`, `unknown` | any |
+| `action` | `keep`, `pseudonymize`, `block` | required |
+
+```toml
+[plugins]
+policy = "matrix"
+
+[policy_matrix]
+origin = "DE"
+adequate_jurisdictions = ["FR", "GB"]
+enforce_adequacy_for_trusted = true
+
+[[policy_matrix.purpose_rules]]
+purpose = "internal_analytics"
+recipients = ["local", "trusted"]
+action = "keep"
+
+[[policy_matrix.purpose_rules]]
+purpose = "forbidden_marketing"
+action = "block"
+```
+
+Two invariants hold across every rule: a secret-kind entity (or one the judge
+labels `Secret`) always redacts, whatever a purpose rule says; and a
+`[policy_matrix]` section requires that the matrix policy is actually
+selected — a file that configures the matrix while `[plugins] policy` names
+another policy is rejected at startup rather than silently ignoring the
+section. `purpose` text is never reported by the `config` diagnostic.
 
 ### `[vault]`
 

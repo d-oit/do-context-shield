@@ -14,6 +14,7 @@ use do_context_shield_plugin_process::{
     ProcessDetector, ProcessJudge, ProcessPolicy, ProcessTransformer, ProcessVault,
 };
 use do_context_shield_policy_default::DefaultPolicy;
+use do_context_shield_policy_matrix::{MatrixConfig, MatrixPolicy};
 use do_context_shield_transformer_generalize::GeneralizingTransformer;
 use do_context_shield_transformer_mask::MaskingTransformer;
 use do_context_shield_transformer_pseudonymize::PseudonymizingTransformer;
@@ -89,6 +90,7 @@ pub fn judge(name: &str) -> Result<Box<dyn SemanticJudge>, RegistryError> {
 pub fn policy(name: &str) -> Result<Box<dyn Policy>, RegistryError> {
     match name {
         "default" => Ok(Box::new(DefaultPolicy)),
+        "matrix" => Ok(Box::new(MatrixPolicy::default())),
         "process" => Ok(Box::new(ProcessPolicy::default())),
         _ => Err(RegistryError::Unknown {
             kind: "policy",
@@ -166,6 +168,12 @@ pub fn json_vault(
     })
 }
 
+/// Construct a matrix policy with configuration.
+#[must_use]
+pub fn matrix_policy(config: MatrixConfig) -> Box<dyn Policy> {
+    Box::new(MatrixPolicy::new(config))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -178,7 +186,7 @@ mod tests {
         for name in ["heuristics", "process"] {
             assert!(judge(name).is_ok(), "judge `{name}`");
         }
-        for name in ["default", "process"] {
+        for name in ["default", "matrix", "process"] {
             assert!(policy(name).is_ok(), "policy `{name}`");
         }
         for name in ["pseudonymize", "generalize", "mask", "process"] {

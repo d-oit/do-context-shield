@@ -28,7 +28,7 @@ const CONFIG_FILE_NAME: &str = "do-context-shield.toml";
 /// Detector plugin names accepted in the configuration file.
 const DETECTORS: [&str; 4] = ["regex", "gliner2", "hybrid", "process"];
 /// Policy plugin names accepted in the configuration file.
-const POLICIES: [&str; 2] = ["default", "process"];
+const POLICIES: [&str; 3] = ["default", "matrix", "process"];
 /// Transformer plugin names accepted in the configuration file.
 const TRANSFORMERS: [&str; 4] = ["pseudonymize", "generalize", "mask", "process"];
 /// Judge plugin names accepted in the configuration file.
@@ -50,6 +50,8 @@ pub(crate) struct Config {
     pub(crate) vault: VaultConfig,
     #[serde(default)]
     pub(crate) audit: AuditConfig,
+    #[serde(default)]
+    pub(crate) policy_matrix: do_context_shield_policy_matrix::MatrixConfig,
     #[serde(default)]
     pub(crate) context: ContextConfig,
     #[serde(default)]
@@ -231,6 +233,7 @@ pub(crate) struct Resolved {
     pub(crate) policy_command: Option<String>,
     pub(crate) transformer: String,
     pub(crate) transformer_command: Option<String>,
+    pub(crate) policy_matrix: do_context_shield_policy_matrix::MatrixConfig,
     pub(crate) judge: Option<String>,
     pub(crate) judge_command: Option<String>,
     pub(crate) vault: Option<String>,
@@ -289,6 +292,7 @@ pub(crate) fn resolve(cli: &CliSelection, config: &Config) -> Resolved {
             .pipeline
             .transformer_command
             .or_else(|| plugins.transformer_command.clone()),
+        policy_matrix: config.policy_matrix.clone(),
         judge: cli.pipeline.judge.or_else(|| plugins.judge.clone()),
         judge_command: cli
             .pipeline

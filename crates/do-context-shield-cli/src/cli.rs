@@ -254,9 +254,10 @@ pub(crate) struct PipelineSelection {
     /// Split on whitespace; quoting and shell expansion are not supported.
     #[arg(long)]
     pub(crate) judge_command: Option<String>,
-    /// Policy plugin (default `default`): `default` or `process` (local executable over
-    /// newline-delimited JSON).
-    #[arg(long, value_parser = ["default", "process"])]
+    /// Policy plugin (default `default`): `default`, `matrix` (opt-in jurisdiction
+    /// adequacy and purpose mapping from `[policy_matrix]`), or `process` (local
+    /// executable over newline-delimited JSON).
+    #[arg(long, value_parser = ["default", "matrix", "process"])]
     pub(crate) policy: Option<String>,
     /// Command line of a local policy executable; required with `--policy process`.
     /// Split on whitespace; quoting and shell expansion are not supported.
