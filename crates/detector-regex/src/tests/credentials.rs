@@ -147,7 +147,7 @@ fn detects_db_credential_and_prevents_email_collision() {
         };
         assert!(
             !entities.iter().any(|e| e.kind == "db_credential"),
-            "non-credential URL {non_secret} produced db_credential: {entities:?}"
+            "non-credential URL unexpectedly produced db_credential"
         );
     }
 }
