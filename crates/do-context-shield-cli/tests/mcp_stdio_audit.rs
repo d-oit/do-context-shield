@@ -314,13 +314,13 @@ fn ambient_config_is_ignored_and_explicit_environment_cli_precedence_applies() {
     let cli_log = outer.path().join("cli-layer.jsonl");
     let ambient_cwd = outer.path().join("ambient-cwd.jsonl");
     let ambient_home = outer.path().join("ambient-home.jsonl");
-    let trusted = config_dir.join("trusted.toml");
+    let config_file = config_dir.join("explicit.toml");
     let file_value = path_text(&file_log);
     write_config(
-        &trusted,
+        &config_file,
         &format!("[audit]\naudit_file = \"{file_value}\"\n"),
     );
-    let trusted = path_text(&trusted);
+    let explicit_config = path_text(&config_file);
 
     let ambient_text = format!("[audit]\naudit_file = \"{}\"\n", path_text(&ambient_cwd));
     write_config(&outer.path().join("do-context-shield.toml"), &ambient_text);
@@ -346,7 +346,7 @@ fn ambient_config_is_ignored_and_explicit_environment_cli_precedence_applies() {
 
     let mut explicit = start(
         child_home(outer.path()),
-        &["--config".to_owned(), trusted.clone()],
+        &["--config".to_owned(), explicit_config.clone()],
         &[],
     );
     let _ = explicit.send(&tool_call(
@@ -359,7 +359,7 @@ fn ambient_config_is_ignored_and_explicit_environment_cli_precedence_applies() {
     let env_value = path_text(&env_log);
     let mut environment = start(
         child_home(outer.path()),
-        &["--config".to_owned(), trusted.clone()],
+        &["--config".to_owned(), explicit_config.clone()],
         &[("DO_CONTEXT_SHIELD_AUDIT_FILE", &env_value)],
     );
     let _ = environment.send(&tool_call(
@@ -375,7 +375,7 @@ fn ambient_config_is_ignored_and_explicit_environment_cli_precedence_applies() {
         child_home(outer.path()),
         &[
             "--config".to_owned(),
-            trusted.clone(),
+            explicit_config.clone(),
             "--audit-file".to_owned(),
             cli_value,
         ],
@@ -391,7 +391,7 @@ fn ambient_config_is_ignored_and_explicit_environment_cli_precedence_applies() {
 
     let mut empty_environment = start(
         child_home(outer.path()),
-        &["--config".to_owned(), trusted],
+        &["--config".to_owned(), explicit_config],
         &[("DO_CONTEXT_SHIELD_AUDIT_FILE", "")],
     );
     let _ = empty_environment.send(&tool_call(

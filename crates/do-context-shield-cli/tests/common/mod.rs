@@ -334,9 +334,9 @@ pub fn tool_names(response: &Value) -> Vec<String> {
     }
 }
 
-/// Write `content` to `path`, naming the path on failure.
-pub fn write_config(path: &std::path::Path, content: &str) {
-    if let Err(error) = std::fs::write(path, content) {
-        panic!("cannot write {}: {error}", path.display());
+/// Write configuration text to `destination`.
+pub fn write_config(destination: &std::path::Path, body: &str) {
+    if let Err(error) = std::fs::write(destination, body) {
+        panic!("cannot write configuration file: {error}");
     }
 }
