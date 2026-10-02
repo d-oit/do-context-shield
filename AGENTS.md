@@ -67,6 +67,12 @@ forever on a `BEHIND` PR instead of draining a batch.
   (`gh pr merge <n> --disable-auto`), address it (fix or reply), then re-arm. Every review
   comment and review must be addressed before the merge is treated as done.
 
+- NEVER push a new commit to the PR branch while auto-merge is armed: GitHub merges the
+  revision that first satisfied the checks, so a commit that lands during the CI window is
+  silently left behind (and `--delete-branch` then recreates the branch head from the push).
+  Push the whole slice before arming; if a follow-up commit is unavoidable after arming,
+  disable auto-merge (`--disable-auto`), push, and re-arm — or open it as its own PR.
+
 ## Machine-readable decisions
 
 Every durable rule is recorded in `plans/invariants.json` as `{invariant, rationale, sensor, category}` and seeded into the state database (`do-harness seed --prune`). A rule whose `sensor` is review-only is not machine-enforced — prefer adding the sensor.
