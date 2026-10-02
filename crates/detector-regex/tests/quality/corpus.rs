@@ -202,7 +202,17 @@ fn iban_check_digits(country: &str, bban: &str) -> String {
 fn credential_value_for(kind: &str, rng: &mut Rng) -> Option<String> {
     Some(match kind {
         "api_key" => format!("sk-{}", rng.chars_with_alnum_tail(24, BASE64URL)),
-        "github_token" => format!("ghp_{}", rng.chars_from(30, ALNUM)),
+        "github_token" => {
+            if rng.below(2) == 0 {
+                format!("ghp_{}", rng.chars_from(30, ALNUM))
+            } else {
+                format!(
+                    "github_pat_{}_{}",
+                    rng.chars_from(22, ALNUM),
+                    rng.chars_from(59, ALNUM)
+                )
+            }
+        }
         "slack_token" => format!("xoxb-{}", rng.chars_with_alnum_tail(12, SLACK)),
         "private_key" => format!(
             "-----BEGIN RSA PRIVATE KEY-----\n{}\n-----END RSA PRIVATE KEY-----",
@@ -217,6 +227,31 @@ fn credential_value_for(kind: &str, rng: &mut Rng) -> Option<String> {
             rng.chars_from(16, BASE64URL),
             rng.chars_with_alnum_tail(20, BASE64URL)
         ),
+        "db_credential" => {
+            let scheme = match rng.below(4) {
+                0 => "postgres",
+                1 => "mysql",
+                2 => "mongodb+srv",
+                _ => "redis",
+            };
+            format!(
+                "{scheme}://{}:{}@host{}.example.com:{}/db",
+                rng.chars_from(6, ALNUM),
+                rng.chars_from(10, ALNUM),
+                rng.digits(2),
+                1000 + rng.below(8000)
+            )
+        }
+        "stripe_key" => match rng.below(2) {
+            0 => format!("sk_live_{}", rng.chars_from(24, ALNUM)),
+            _ => format!("whsec_{}", rng.chars_from(32, ALNUM)),
+        },
+        "huggingface_token" => format!("hf_{}", rng.chars_from(34, ALNUM)),
+        "pypi_token" => format!(
+            "pypi-AgEIcHlwaS5vcmcCJ{}",
+            rng.chars_with_alnum_tail(50, BASE64URL)
+        ),
+        "gitlab_token" => format!("glpat-{}", rng.chars_from(20, ALNUM)),
         _ => return None,
     })
 }
@@ -334,7 +369,7 @@ fn aba_check_digit(prefix: &str) -> char {
 pub(super) fn generated_cases(rng: &mut Rng) -> Vec<(&'static str, String)> {
     let kinds = declared_kinds();
     assert!(
-        kinds.len() >= 19,
+        kinds.len() >= 24,
         "pattern-table parser found only {} kinds: {kinds:?}",
         kinds.len()
     );
@@ -395,6 +430,14 @@ pub(super) fn adversarial_cases(rng: &mut Rng) -> Vec<(&'static str, String)> {
         ),
         ("passport", String::from("ABCD123456")),
         ("slack_token", String::from("xoxb-short")),
+        (
+            "db_credential",
+            String::from("postgres://localhost:5432/app"),
+        ),
+        ("stripe_key", String::from("sk_dev_short")),
+        ("huggingface_token", String::from("hf_short")),
+        ("pypi_token", String::from("pypi-short")),
+        ("gitlab_token", String::from("glpat-short")),
     ]
 }
 

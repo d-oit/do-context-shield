@@ -1,3 +1,5 @@
+mod credentials;
+
 use super::*;
 
 #[test]
@@ -312,103 +314,4 @@ fn rejects_invalid_aba_checksum() {
             .any(|entity| entity.kind == "us_bank_routing"),
         "{entities:?}"
     );
-}
-
-#[test]
-fn detects_slack_token() {
-    let detector = RegexDetector;
-    // Synthetic fixture built programmatically so no credential literal is committed.
-    let token = format!("xoxb-{}", "0123456789abcdef");
-    let entities = match detector.detect(&token) {
-        Ok(value) => value,
-        Err(error) => panic!("unexpected error: {error}"),
-    };
-    assert_eq!(entities.len(), 1);
-    assert_eq!(entities[0].kind, "slack_token");
-    assert_eq!(entities[0].value, token);
-}
-
-#[test]
-fn detects_private_key() {
-    let detector = RegexDetector;
-    // Synthetic fixtures built programmatically so no key literal is committed.
-    let header = format!("-----BEGIN {}PRIVATE KEY-----", "RSA ");
-    let body = "MIIEowIBAAKCAQEAx7Vv";
-    let block = format!("{header}\n{body}\n-----END {}PRIVATE KEY-----", "RSA ");
-    let encrypted_flavor = "ENCRYPTED ";
-    let encrypted = format!(
-        "-----BEGIN {encrypted_flavor}PRIVATE KEY-----\n{body}\n-----END {encrypted_flavor}PRIVATE KEY-----"
-    );
-    // Headers without a matching END marker still detect the header alone.
-    let pgp_header = format!("-----BEGIN {}PRIVATE KEY BLOCK-----", "PGP ");
-    let encrypted_header = format!("-----BEGIN {encrypted_flavor}PRIVATE KEY-----");
-    let entities = match detector.detect(&format!(
-        "{block} then {encrypted} then {pgp_header} then {encrypted_header}"
-    )) {
-        Ok(value) => value,
-        Err(error) => panic!("unexpected error: {error}"),
-    };
-    assert_eq!(entities.len(), 4);
-    assert_eq!(entities[0].kind, "private_key");
-    assert_eq!(entities[0].value, block);
-    assert_eq!(entities[1].kind, "private_key");
-    assert_eq!(entities[1].value, encrypted);
-    assert_eq!(entities[2].kind, "private_key");
-    assert_eq!(entities[2].value, pgp_header);
-    assert_eq!(entities[3].kind, "private_key");
-    assert_eq!(entities[3].value, encrypted_header);
-}
-
-#[test]
-fn detects_google_api_key() {
-    let detector = RegexDetector;
-    // Synthetic fixture built programmatically so no credential literal is committed.
-    let key = format!("AIza{}", "0123456789abcdefghijKLMNOPQRSTUVWXY");
-    let entities = match detector.detect(&key) {
-        Ok(value) => value,
-        Err(error) => panic!("unexpected error: {error}"),
-    };
-    assert_eq!(entities.len(), 1);
-    assert_eq!(entities[0].kind, "google_api_key");
-    assert_eq!(entities[0].value, key);
-}
-
-#[test]
-fn detects_generic_secret_assignments() {
-    let detector = RegexDetector;
-    let assignment = format!("password={}", "hunter2hunter2");
-    let entities = match detector.detect(&assignment) {
-        Ok(value) => value,
-        Err(error) => panic!("unexpected error: {error}"),
-    };
-    assert_eq!(entities.len(), 1);
-    assert_eq!(entities[0].kind, "generic_secret");
-    assert_eq!(entities[0].value, assignment);
-
-    // Env-style keys are underscore-prefixed; the separator is consumed
-    // into the span, so the assignment value is still redacted whole.
-    let underscored = format!("DB_PASSWORD={}", "hunter2hunter2");
-    let entities = match detector.detect(&underscored) {
-        Ok(value) => value,
-        Err(error) => panic!("unexpected error: {error}"),
-    };
-    assert_eq!(entities.len(), 1);
-    assert_eq!(entities[0].kind, "generic_secret");
-    assert_eq!(entities[0].value, underscored[2..]);
-
-    let bearer = format!("Authorization: Bearer {}", "abcdef12345678");
-    let entities = match detector.detect(&bearer) {
-        Ok(value) => value,
-        Err(error) => panic!("unexpected error: {error}"),
-    };
-    assert_eq!(entities.len(), 1);
-    assert_eq!(entities[0].kind, "generic_secret");
-    assert_eq!(entities[0].value, "Bearer abcdef12345678");
-
-    // A bare keyword without an assignment or value is not a secret.
-    let bare = match detector.detect("password") {
-        Ok(value) => value,
-        Err(error) => panic!("unexpected error: {error}"),
-    };
-    assert!(bare.is_empty(), "{bare:?}");
 }

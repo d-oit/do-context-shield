@@ -334,5 +334,11 @@
     "rationale": "A docs follow-up commit pushed while auto-merge was pending merged #105 without it and recreated the server-side branch head, stranding the change in a separate PR; the race is invisible in GitHub's UI because the PR still shows as merged",
     "sensor": "review-only (merge discipline; `AGENTS.md` pull-request merges section)",
     "category": "workflow"
+  },
+  {
+    "invariant": "Database connection URIs containing credentials (`db_credential`) and modern developer tokens (`stripe_key`, `huggingface_token`, `pypi_token`, `gitlab_token`, and fine-grained `github_pat_`) are recognized by the default regex detector and redacted as secret kinds (`is_secret_kind` covers any kind with `credential`), preventing connection passwords from being misclassified as `email` or leaked raw on non-domain hosts",
+    "rationale": "Developer connection strings (`postgres://`, `mysql://`, `mongodb://`, `redis://`) paste into agent contexts frequently; previously, user:password@domain was falsely matched as personal email and pseudonymized while localhost/IP hosts were ignored completely, leaking production database passwords",
+    "sensor": "cargo test -p do-context-shield-detector-regex + cargo test -p do-context-shield --test cli_sanitize",
+    "category": "security"
   }
 ]

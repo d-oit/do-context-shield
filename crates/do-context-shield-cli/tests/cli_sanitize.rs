@@ -153,3 +153,56 @@ fn context_flags_drive_the_policy() {
         .success();
     assert_eq!(stdout_of(&kept), "alice@example.com");
 }
+
+#[test]
+fn sanitize_redacts_database_urls_and_developer_tokens() {
+    let dir = temp_dir();
+    let db_domain = "DATABASE_URL=postgres://app:s3cr3tpass@db.example.com:5432/production";
+    let sanitized_domain = cmd(dir.path())
+        .args(["sanitize", "--session", "s_db"])
+        .write_stdin(db_domain)
+        .assert()
+        .success();
+    let out_domain = stdout_of(&sanitized_domain);
+    assert_eq!(
+        out_domain, "DATABASE_URL=__DO_PRIVATE_REDACTED__",
+        "database URL with credentials must be redacted whole, not misclassified as email"
+    );
+    assert!(
+        !out_domain.contains("EMAIL"),
+        "must not contain email placeholder"
+    );
+
+    let db_localhost = "DATABASE_URL=postgres://app:s3cr3tpass@localhost:5432/production";
+    let sanitized_local = cmd(dir.path())
+        .args(["sanitize", "--session", "s_local"])
+        .write_stdin(db_localhost)
+        .assert()
+        .success();
+    assert_eq!(
+        stdout_of(&sanitized_local),
+        "DATABASE_URL=__DO_PRIVATE_REDACTED__",
+        "database URL with localhost must be redacted, not leaked raw"
+    );
+
+    let sk = format!(
+        "sk_live_{}",
+        "51NzABCDEFG1234567890abcdefghijklmnopqrstuvwxyz12345678"
+    );
+    let pat = format!(
+        "github_pat_{}_{}",
+        "11A2B3C4D5E6F7G8H9I0J1",
+        "1234567890123456789012345678901234567890123456789012345678901234567890123456789012"
+    );
+    let tokens = format!("STRIPE={sk} GITHUB={pat}");
+    let sanitized_tokens = cmd(dir.path())
+        .args(["sanitize", "--session", "s_tokens"])
+        .write_stdin(tokens)
+        .assert()
+        .success();
+    assert_eq!(
+        stdout_of(&sanitized_tokens),
+        "STRIPE=__DO_PRIVATE_REDACTED__ GITHUB=__DO_PRIVATE_REDACTED__",
+        "Stripe keys and GitHub PATs must be redacted"
+    );
+}
