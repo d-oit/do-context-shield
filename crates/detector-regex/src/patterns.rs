@@ -23,10 +23,15 @@ pub(crate) const IPV6: &str = concat!(
 /// Pattern specs: entity kind, regex source, and detector confidence.
 ///
 /// The order is part of the contract: for one identical span the overlap pass
-/// keeps the first entity pushed, so `ssn`, `credit_card`, and
-/// `us_bank_routing` precede the looser `phone` shape that also matches their
-/// text.
-pub(crate) const SPECS: [(&str, &str, f32); 19] = [
+/// keeps the first entity pushed, so `db_credential` precedes `email`, and
+/// `ssn`, `credit_card`, and `us_bank_routing` precede the looser `phone` shape
+/// that also matches their text.
+pub(crate) const SPECS: [(&str, &str, f32); 24] = [
+    (
+        "db_credential",
+        r#"(?i)\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|redis|rediss|amqp|amqps|mssql|snowflake):\/\/[^\s/@:]*:[^\s/@]+@[^\s"'`<>,;)]*[A-Za-z0-9/]"#,
+        0.99,
+    ),
     (
         "email",
         r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b",
@@ -46,7 +51,11 @@ pub(crate) const SPECS: [(&str, &str, f32); 19] = [
     ("iban", r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b", 0.99),
     ("ipv4", r"\b(?:\d{1,3}\.){3}\d{1,3}\b", 0.99),
     ("api_key", r"\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}\b", 0.99),
-    ("github_token", r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b", 0.99),
+    (
+        "github_token",
+        r"\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{60,})\b",
+        0.99,
+    ),
     ("slack_token", r"\bxox[bpras]-[A-Za-z0-9-]{10,}\b", 0.99),
     (
         "private_key",
@@ -60,6 +69,18 @@ pub(crate) const SPECS: [(&str, &str, f32); 19] = [
         0.99,
     ),
     ("google_api_key", r"\bAIza[0-9A-Za-z_-]{35}\b", 0.99),
+    (
+        "stripe_key",
+        r"\b(?:(?:sk|pk|rk)_(?:test|live)_[0-9a-zA-Z]{24,}|whsec_[0-9a-zA-Z]{32,})\b",
+        0.99,
+    ),
+    ("huggingface_token", r"\bhf_[A-Za-z0-9]{34,}\b", 0.99),
+    (
+        "pypi_token",
+        r"\bpypi-AgEIcHlwaS5vcmcCJ[A-Za-z0-9_-]{50,}\b",
+        0.99,
+    ),
+    ("gitlab_token", r"\bglpat-[0-9a-zA-Z_\-]{20,}\b", 0.99),
     (
         "generic_secret",
         r"(?i)(?:(?:\b|_)(?:password|passwd|pwd|secret|token)\s*[:=]\s*\S{8,}\b|\bbearer\s+\S{8,}\b)",

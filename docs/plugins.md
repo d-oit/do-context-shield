@@ -38,7 +38,7 @@ It measures three corpora and fails on any deviation:
 - **generated** — every kind declared by the pattern table gets 25 values with
   the shape and checksum that kind requires (Luhn, ABA, IBAN mod-97, IPv6
   forms, PEM blocks, …), and each must be detected at its exact span with that
-  kind (475/475 today);
+  kind (600/600 across 24 kinds today);
 - **adversarial** — values shaped like a kind but invalid by its own rule
   (checksum, octet range, length) must not produce that kind;
 - **benign** — prose, code, and numbers must produce no entities at all.

@@ -7,6 +7,7 @@ pub fn is_secret_kind(kind: &str) -> bool {
         || kind.contains("secret")
         || kind.contains("token")
         || kind.contains("password")
+        || kind.contains("credential")
         || kind == "card_cvv"
         || kind == "recovery_code"
         || kind == "jwt"
@@ -23,14 +24,18 @@ mod tests {
             "api_key",
             "aws_access_key",
             "card_cvv",
+            "db_credential",
             "generic_secret",
             "github_token",
             "google_api_key",
+            "huggingface_token",
             "jwt",
             "password",
             "private_key",
+            "pypi_token",
             "recovery_code",
             "slack_token",
+            "stripe_key",
             "user_password",
         ] {
             assert!(is_secret_kind(kind), "{kind}");
