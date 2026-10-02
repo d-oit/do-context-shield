@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Pre-push hook: mirrors the `pre-push` sensors in do-harness.toml (fmt,
-# check, clippy, test, loc, deps, audit, commitlint) without requiring the
-# do-harness binary, like the hand-written pre-commit hook does. Install with:
+# check, clippy, test, loc, shellcheck, hooks, deps, audit, publish-order,
+# commitlint) without requiring the do-harness binary, like the hand-written
+# pre-commit hook does. Install with:
 # git config core.hooksPath .githooks
 set -uo pipefail
 
@@ -45,6 +46,7 @@ run_sensor "shellcheck" bash scripts/check-shellcheck.sh
 run_sensor "hooks" bash scripts/check-hooks.sh
 run_sensor "deps" bash scripts/check-deps.sh
 run_sensor "audit" bash scripts/check-audit.sh
+run_sensor "publish-order" bash scripts/check-publish-order.sh
 run_sensor "commitlint" bash scripts/check-commitlint.sh
 
 printf '\n'

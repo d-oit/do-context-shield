@@ -38,6 +38,7 @@ sensor_needles() {
         skills) echo "scripts/check-skills.sh" ;;
         deps) echo "scripts/check-deps.sh" ;;
         audit) echo "scripts/check-audit.sh" ;;
+        publish-order) echo "scripts/check-publish-order.sh" ;;
         commitlint) echo "scripts/check-commitlint.sh" ;;
         *) return 1 ;;
     esac

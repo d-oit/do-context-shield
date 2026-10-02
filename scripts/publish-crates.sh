@@ -9,20 +9,26 @@
 set -euo pipefail
 
 ORDER=(
+    # Tier 0 — no workspace dependencies
     do-context-shield-plugin-api
+    # Tier 1 — depends only on plugin-api (dev-deps stripped by cargo publish)
     do-context-shield-audit-file
-    do-context-shield-detector-regex
+    do-context-shield-core
     do-context-shield-detector-gliner2
+    do-context-shield-detector-hybrid
+    do-context-shield-detector-regex
+    do-context-shield-judge-heuristics
+    do-context-shield-plugin-process
     do-context-shield-policy-default
-    do-context-shield-transformer-pseudonymize
+    do-context-shield-policy-matrix
     do-context-shield-transformer-generalize
     do-context-shield-transformer-mask
-    do-context-shield-vault-memory
+    do-context-shield-transformer-pseudonymize
     do-context-shield-vault-json
+    do-context-shield-vault-memory
+    # Tier 2 — depends on the tier-1 plugin crates
     do-context-shield-plugin-registry
-    do-context-shield-core
-    # Dev-dependency on core for the end-to-end protocol test.
-    do-context-shield-plugin-process
+    # Tier 3+4 — depend on plugin-registry and core
     do-context-shield-mcp-server
     do-context-shield
 )
