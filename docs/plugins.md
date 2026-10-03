@@ -55,7 +55,10 @@ detected across their full span without swallowing prose sentence periods.
 The exact-width Google-key pattern accepts every allowed word character at the
 tail end, including `_`, next to its hyphen branch. The benchmark pins these
 spans by generating word-final values, including separator tails (`-` and `_`)
-for the token kinds whose alphabets admit them.
+for the token kinds whose alphabets admit them. Quoted generic secrets
+(`password="pass phrase!"`) capture the full quoted literal including spaces,
+punctuation, and closing quotes, while unquoted assignments preserve the
+8-character floor and boundary.
 
 ## ONNX detector models
 

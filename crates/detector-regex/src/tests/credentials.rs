@@ -166,6 +166,55 @@ fn detects_generic_secret_assignments() {
 }
 
 #[test]
+fn detects_quoted_generic_secret_assignments() {
+    let detector = RegexDetector;
+
+    // 1. Quoted secret with spaces (multi-word passphrase)
+    let with_spaces = r#"password="my secret passphrase with spaces""#;
+    let entities = match detector.detect(with_spaces) {
+        Ok(value) => value,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    assert_eq!(entities.len(), 1, "failed for {with_spaces}");
+    assert_eq!(entities[0].kind, "generic_secret");
+    assert_eq!(
+        entities[0].value, with_spaces,
+        "must capture full quoted assignment including closing quote"
+    );
+
+    // 2. Single-quoted secret with trailing punctuation
+    let single_quoted = "secret='s3cr3t#pass;123!'";
+    let entities = match detector.detect(single_quoted) {
+        Ok(value) => value,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    assert_eq!(entities.len(), 1, "failed for {single_quoted}");
+    assert_eq!(entities[0].kind, "generic_secret");
+    assert_eq!(
+        entities[0].value, single_quoted,
+        "must capture full single-quoted assignment"
+    );
+
+    // 3. Env-style quoted key (consumes leading underscore)
+    let env_quoted = "API_SECRET='s3cr3t#pass;123!'";
+    let entities = match detector.detect(env_quoted) {
+        Ok(value) => value,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    assert_eq!(entities.len(), 1);
+    assert_eq!(entities[0].value, env_quoted[3..]);
+    // 4. Colon assignment with quotes (e.g. JSON / YAML / config)
+    let yaml_style = r#"api_secret: "custom-token-value!""#;
+    let entities = match detector.detect(yaml_style) {
+        Ok(value) => value,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    assert_eq!(entities.len(), 1, "failed for {yaml_style}");
+    assert_eq!(entities[0].kind, "generic_secret");
+    assert_eq!(entities[0].value, yaml_style[3..]);
+}
+
+#[test]
 fn detects_db_credential_and_prevents_email_collision() {
     let detector = RegexDetector;
     let postgres = "postgres://app:s3cr3tpass@db.example.com:5432/production";

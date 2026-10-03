@@ -99,7 +99,7 @@ pub(crate) const SPECS: [(&str, &str, f32); 24] = [
     ),
     (
         "generic_secret",
-        r"(?i)(?:(?:\b|_)(?:password|passwd|pwd|secret|token)\s*[:=]\s*\S{8,}\b|\bbearer\s+\S{8,}\b)",
+        r#"(?i)(?:(?:\b|_)(?:password|passwd|pwd|secret|token)\s*[:=]\s*(?:"[^"\r\n]{4,}"|'[^'\r\n]{4,}'|\S{8,}\b)|\bbearer\s+\S{8,}\b)"#,
         0.80,
     ),
     (
