@@ -346,5 +346,11 @@
     "rationale": "The array omitted three workspace crates (`detector-hybrid`, `judge-heuristics`, `policy-matrix`) and ordered `plugin-registry` before its dependency `plugin-process`, so `cargo publish` resolved sibling path dependencies against the crates.io index mid-release and failed partway through with crates.io as the only oracle; the order is load-bearing release state that a rename or a new crate would silently drift out of, so completeness and topological validity are asserted against `cargo metadata` rather than maintained by hand",
     "sensor": "bash scripts/check-publish-order.sh (publish-order sensor, in the verification, release, and ci sets; WARN-skips without python3 locally and fails closed when CI=true or DO_HARNESS_REQUIRE_TOOLS=1, the same policy as check-shellcheck.sh)",
     "category": "verification"
+  },
+  {
+    "invariant": "Credential patterns must detect every value shape their declared alphabets admit at the declared width: an exact-width pattern's final word-character class includes every allowed word character (`google_api_key` accepts alphanumeric, `_`, and `-` final characters, the latter via the no-anchor hyphen branch), and a floor length counts every tail character including a `-`/`_` final character, so no in-alphabet credential shape passes through undetected and unredacted",
+    "rationale": "The google_api_key final class was `[0-9A-Za-z]`, so an underscore-final 35-character tail matched neither the \\b-anchored word branch nor the hyphen branch and the whole key stayed raw in sanitized output; the boundary only protects values the detector reports",
+    "sensor": "cargo test -p do-context-shield-detector-regex (google_api_key_matches_every_allowed_tail_ending pins all three endings with exact spans plus 34-/36-character width controls; the quality benchmark's separator-tail cases drive the same contract through the compiled SPECS)",
+    "category": "security"
   }
 ]
