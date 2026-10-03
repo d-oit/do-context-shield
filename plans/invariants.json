@@ -352,5 +352,11 @@
     "rationale": "The google_api_key final class was `[0-9A-Za-z]`, so an underscore-final 35-character tail matched neither the \\b-anchored word branch nor the hyphen branch and the whole key stayed raw in sanitized output; the boundary only protects values the detector reports",
     "sensor": "cargo test -p do-context-shield-detector-regex (google_api_key_matches_every_allowed_tail_ending pins all three endings with exact spans plus 34-/36-character width controls; the quality benchmark's separator-tail cases drive the same contract through the compiled SPECS)",
     "category": "security"
+  },
+  {
+    "invariant": "Routable and versioned routable GitLab personal access tokens (`glpat-<payload>.<routing>`) are detected across their full multi-segment span, and dot-separated token segments require at least two characters after any dot (`(?:\\.[0-9a-zA-Z]{2,})*`) so prose sentence periods are never swallowed into the secret span",
+    "rationale": "GitLab 16.9+ appends routing and CRC metadata after dots; omitting dot support truncates the detected span at the dot and leaks the routing suffix raw, while admitting bare dots in the token class would swallow sentence periods in prose",
+    "sensor": "cargo test -p do-context-shield-detector-regex (detects_routable_gitlab_tokens asserts full routable and versioned routable span capture plus prose sentence period exclusion)",
+    "category": "security"
   }
 ]

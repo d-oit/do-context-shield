@@ -305,6 +305,67 @@ fn detects_gitlab_token() {
     assert_eq!(entities[0].value, token);
 }
 
+/// Routable GitLab personal access tokens (GitLab 16.9+) append routing
+/// and CRC information in dot-separated lowercase-alphanumeric segments
+/// (`.us01abcd123` or `.01.us01abcd123`). The detector must match the full
+/// routable token without truncating at the dot, while cleanly excluding
+/// trailing sentence periods in prose.
+#[test]
+fn detects_routable_gitlab_tokens() {
+    let detector = RegexDetector;
+    let payload = "0123456789abcdefghij_klmnopqrstuv";
+
+    // 1. Standard routable PAT
+    let routable = format!("glpat-{payload}.us01abcd123");
+    let entities = match detector.detect(&routable) {
+        Ok(value) => value,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    assert_eq!(entities.len(), 1, "failed for {routable}");
+    assert_eq!(entities[0].kind, "gitlab_token");
+    assert_eq!(
+        entities[0].value, routable,
+        "must capture full routable token"
+    );
+
+    // 2. Versioned routable PAT
+    let versioned = format!("glpat-{payload}.01.us01abcd123");
+    let entities = match detector.detect(&versioned) {
+        Ok(value) => value,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    assert_eq!(entities.len(), 1, "failed for {versioned}");
+    assert_eq!(entities[0].kind, "gitlab_token");
+    assert_eq!(
+        entities[0].value, versioned,
+        "must capture full versioned routable token"
+    );
+
+    // 3. Prose safety: trailing sentence period must NOT be swallowed
+    let prose_routable = format!("Token is {routable}.");
+    let entities = match detector.detect(&prose_routable) {
+        Ok(value) => value,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    assert_eq!(entities.len(), 1);
+    assert_eq!(
+        entities[0].value, routable,
+        "must not swallow trailing sentence period"
+    );
+
+    let classic = format!("glpat-{payload}");
+    let prose_classic = format!("Token is {classic}.");
+    let entities = match detector.detect(&prose_classic) {
+        Ok(value) => value,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    assert_eq!(entities.len(), 1);
+    assert_eq!(
+        entities[0].value, classic,
+        "must not swallow trailing sentence period on classic token"
+    );
+}
+
 /// A floor-satisfying value ending in `-` is inside the declared alphabet,
 /// so the full value including the trailing `-` must be one secret span.
 /// The old right anchor (`\b`) dropped the whole match one character below

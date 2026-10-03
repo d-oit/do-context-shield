@@ -94,7 +94,7 @@ pub(crate) const SPECS: [(&str, &str, f32); 24] = [
     ),
     (
         "gitlab_token",
-        r"\bglpat-(?:[0-9a-zA-Z_\-]{20,}|[0-9a-zA-Z]{19}-)",
+        r"\bglpat-(?:[0-9a-zA-Z_\-]{20,}(?:\.[0-9a-zA-Z]{2,})*|[0-9a-zA-Z]{19}-)",
         0.99,
     ),
     (
