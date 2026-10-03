@@ -50,6 +50,8 @@ the right edge without dropping secret material: a value ending in `-` stays
 inside its declared alphabet, so the full value is reported — a floor-satisfying
 `glpat-…-` is one complete secret span, not a trimmed one, and a value one
 character below the floor followed by `-` is still detected instead of missed.
+GitLab routable and versioned routable tokens (`glpat-<payload>.<routing>`) are
+detected across their full span without swallowing prose sentence periods.
 The exact-width Google-key pattern accepts every allowed word character at the
 tail end, including `_`, next to its hyphen branch. The benchmark pins these
 spans by generating word-final values, including separator tails (`-` and `_`)

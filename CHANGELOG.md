@@ -23,6 +23,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unit tests pin every allowed tail ending with exact byte offsets plus
   34-/36-character width rejections.
 
+- `gitlab_token` detection now covers routable and versioned routable Personal
+  Access Tokens (`crates/detector-regex`): modern GitLab tokens append routing
+  and CRC information in dot-separated lowercase-alphanumeric segments
+  (`glpat-<payload>.<routing>` or `glpat-<payload>.<version>.<routing>`). The
+  pattern was previously limited to `[0-9a-zA-Z_\-]`, which truncated routable
+  tokens at the dot and leaked the suffix. The updated pattern matches the
+  full routable token while requiring at least two characters after any dot
+  (`(?:\.[0-9a-zA-Z]{2,})*`), preventing trailing sentence periods in prose
+  from being swallowed into the secret span.
+
 ### Added
 
 - `deps` sensor: the dependency closure is checked for network clients, TLS stacks, and hosted-model SDKs (`Cargo.lock`, which covers every feature including `gliner2`), because "nothing leaves the process" was only review-enforced. The closure currently contains none of them; the ban list is overridable with `DO_HARNESS_FORBIDDEN_DEPS` for the sensor's own negative tests.
