@@ -44,10 +44,13 @@ It measures three corpora and fails on any deviation:
 - **benign** — prose, code, and numbers must produce no entities at all.
 
 The kind list is read from `patterns.rs`, so a new spec that lacks a generator
-fails the benchmark instead of passing silently. The credential patterns
-anchor their match at a word boundary, so a value ending in `-` is reported
-without the trailing character; that character is not secret material, and the
-benchmark pins the documented span by generating word-final values.
+fails the benchmark instead of passing silently. The credential patterns pin
+the right edge without dropping secret material: a value ending in `-` stays
+inside its declared alphabet, so the full value is reported — a floor-satisfying
+`glpat-…-` is one complete secret span, not a trimmed one, and a value one
+character below the floor followed by `-` is still detected instead of missed.
+The benchmark pins these spans by generating word-final values, including
+hyphen-terminated tails for the token kinds whose alphabets admit `-`.
 
 ## ONNX detector models
 

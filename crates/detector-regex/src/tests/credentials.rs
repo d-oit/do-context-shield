@@ -238,3 +238,65 @@ fn detects_gitlab_token() {
     assert_eq!(entities[0].kind, "gitlab_token");
     assert_eq!(entities[0].value, token);
 }
+
+/// A floor-satisfying value ending in `-` is inside the declared alphabet,
+/// so the full value including the trailing `-` must be one secret span.
+/// The old right anchor (`\b`) dropped the whole match one character below
+/// the floor and trimmed one character above it; the recovery alternation
+/// restores exactly one trailing `-` at the floor.
+#[test]
+fn hyphen_terminated_token_values_keep_the_full_span() {
+    let detector = RegexDetector;
+    // (prefix, tail, kind): tail length == the pattern's floor, so the
+    // trailing `-` makes the value exactly one character past the old
+    // `\b`-trimmed match and exactly one short of the old full match.
+    for (prefix, tail, kind) in [
+        ("glpat-", "0123456789abcdefghij", "gitlab_token"),
+        ("sk-", "0123456789abcdef", "api_key"),
+        ("xoxb-", "0123456789", "slack_token"),
+        (
+            "AIza",
+            "0123456789abcdefghijklmnopqrstuvwx",
+            "google_api_key",
+        ),
+        (
+            "pypi-AgEIcHlwaS5vcmcCJ",
+            "0123456789abcdefghijklmnopqrstuvwxyz0123456789abcd",
+            "pypi_token",
+        ),
+    ] {
+        let token = format!("{prefix}{tail}-");
+        let entities = match detector.detect(&token) {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert_eq!(
+            entities.len(),
+            1,
+            "expected one {kind} entity for {token:?}, got {entities:?}"
+        );
+        assert_eq!(entities[0].kind, kind, "for {token:?}");
+        assert_eq!(entities[0].value, token, "for {token:?}");
+    }
+}
+
+/// A JWT whose signature segment ends with `-` (base64url alphabet) is one
+/// full-span entity including the trailing `-`, via the recovery
+/// alternation; the `eyJ` header prefix stays required.
+#[test]
+fn hyphen_terminated_jwt_keeps_the_full_span() {
+    let detector = RegexDetector;
+    // Each segment sits exactly at the pattern's ten-character floor, and
+    // the value carries the `eyJ` header prefix the pattern requires.
+    let token = format!(
+        "eyJ{}.eyJ{}.{}-",
+        "hbGciOiJIUz", "zdWIiOiIxMj", "c2lnbmF0dXJ"
+    );
+    let entities = match detector.detect(&token) {
+        Ok(value) => value,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    assert_eq!(entities.len(), 1, "{entities:?}");
+    assert_eq!(entities[0].kind, "jwt");
+    assert_eq!(entities[0].value, token);
+}
