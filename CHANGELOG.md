@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `google_api_key` detection now covers exact-width keys whose 35-character
+  tail ends in `_` (`crates/detector-regex`): the final word-character class
+  of the exact-width pattern was `[0-9A-Za-z]`, so an underscore-final
+  tail — inside the declared alphabet — matched neither the `\b`-anchored
+  word branch nor the hyphen branch and the whole key passed through raw
+  (undetected, unredacted). The class is now `[0-9A-Za-z_]`; alphanumeric-,
+  hyphen-, and underscore-final tails all detect at the exact 39-byte span
+  and redact to `__DO_PRIVATE_REDACTED__` (CLI and MCP, all built-in
+  policies/transformers, judge on or off; redaction never mints a
+  reversible vault mapping). The quality benchmark gains an underscore-tail
+  google_api_key case (606 generated cases total) and the detector-regex
+  unit tests pin every allowed tail ending with exact byte offsets plus
+  34-/36-character width rejections.
+
 ### Added
 
 - `deps` sensor: the dependency closure is checked for network clients, TLS stacks, and hosted-model SDKs (`Cargo.lock`, which covers every feature including `gliner2`), because "nothing leaves the process" was only review-enforced. The closure currently contains none of them; the ban list is overridable with `DO_HARNESS_FORBIDDEN_DEPS` for the sensor's own negative tests.

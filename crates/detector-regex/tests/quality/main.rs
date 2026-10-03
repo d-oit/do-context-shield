@@ -16,6 +16,7 @@ use corpus::{Rng, adversarial_cases, benign_corpus, declared_kinds, generated_ca
 use do_context_shield_detector_regex::RegexDetector;
 use do_context_shield_plugin_api::{Detector, Entity};
 
+mod boundary;
 mod corpus;
 
 /// Detect entities, failing the test on a detector error.

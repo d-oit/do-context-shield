@@ -59,6 +59,72 @@ fn detects_google_api_key() {
     assert_eq!(entities[0].value, key);
 }
 
+/// Google keys are exact-width: `AIza` plus exactly 35 tail characters from
+/// the declared alphabet. The tail may end in any allowed word character or
+/// in the alphabet's `-`, so all three endings must produce one full-span
+/// entity with exact byte offsets, bare or inside multibyte surroundings.
+/// The `_` ending was missing from the final word-character class; these
+/// assertions pin every ending next to the width controls.
+#[test]
+fn google_api_key_matches_every_allowed_tail_ending() {
+    let detector = RegexDetector;
+    // 34 head characters from the declared alphabet (digits, letters, and
+    // the `-`/`_` separators) plus one final character: the total tail is
+    // exactly the declared width. Built programmatically so no credential
+    // literal is committed.
+    let head = "0123456789abcdefghij-k_lmnopqrstuv";
+    assert_eq!(head.len(), 34);
+    let surroundings = [("", "", 0usize), ("配置 ", "。", "配置 ".len())];
+    for (final_char, label) in [('w', "alphanumeric"), ('_', "underscore"), ('-', "hyphen")] {
+        let key = format!("AIza{head}{final_char}");
+        assert_eq!(key.len(), 39);
+        for (before, after, start) in surroundings {
+            let text = format!("{before}{key}{after}");
+            let entities = match detector.detect(&text) {
+                Ok(value) => value,
+                Err(error) => panic!("unexpected error: {error}"),
+            };
+            assert_eq!(
+                entities.len(),
+                1,
+                "expected one google_api_key entity for the {label}-ending key in {text:?}, got {entities:?}"
+            );
+            assert_eq!(entities[0].kind, "google_api_key", "{label} ending");
+            assert_eq!(
+                entities[0].value, key,
+                "{label} ending must match the full value"
+            );
+            assert_eq!(
+                entities[0].start, start,
+                "{label} ending must start at the key's first byte"
+            );
+            assert_eq!(
+                entities[0].end,
+                start + key.len(),
+                "{label} ending must end after the key's last byte"
+            );
+        }
+    }
+
+    // Width controls: all-word tails one below and one above the declared
+    // width are not Google keys. All-word so the hyphen branch cannot
+    // recover them; only the exact width matches.
+    let word36 = "abcdefghijklmnopqrstuvwxyz0123456789";
+    for (label, tail) in [("34", &word36[..34]), ("36", word36)] {
+        let text = format!("AIza{tail}");
+        let entities = match detector.detect(&text) {
+            Ok(value) => value,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert!(
+            !entities
+                .iter()
+                .any(|entity| entity.kind == "google_api_key"),
+            "{label}-character all-word tail must not be a google_api_key: {entities:?}"
+        );
+    }
+}
+
 #[test]
 fn detects_generic_secret_assignments() {
     let detector = RegexDetector;
@@ -243,7 +309,8 @@ fn detects_gitlab_token() {
 /// so the full value including the trailing `-` must be one secret span.
 /// The old right anchor (`\b`) dropped the whole match one character below
 /// the floor and trimmed one character above it; the recovery alternation
-/// restores exactly one trailing `-` at the floor.
+/// restores exactly one trailing `-` at the floor. The floor counts every
+/// tail character, including the final `-` itself.
 #[test]
 fn hyphen_terminated_token_values_keep_the_full_span() {
     let detector = RegexDetector;

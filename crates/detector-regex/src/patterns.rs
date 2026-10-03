@@ -78,7 +78,7 @@ pub(crate) const SPECS: [(&str, &str, f32); 24] = [
     ),
     (
         "google_api_key",
-        r"\bAIza(?:[0-9A-Za-z_-]{34}[0-9A-Za-z]\b|[0-9A-Za-z_-]{34}-)",
+        r"\bAIza(?:[0-9A-Za-z_-]{34}[0-9A-Za-z_]\b|[0-9A-Za-z_-]{34}-)",
         0.99,
     ),
     (

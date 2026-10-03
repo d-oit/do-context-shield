@@ -38,7 +38,8 @@ It measures three corpora and fails on any deviation:
 - **generated** — every kind declared by the pattern table gets 25 values with
   the shape and checksum that kind requires (Luhn, ABA, IBAN mod-97, IPv6
   forms, PEM blocks, …), and each must be detected at its exact span with that
-  kind (600/600 across 24 kinds today);
+  kind (606/606 across 24 kinds today: 600 generated values plus six
+  separator-tail boundary cases);
 - **adversarial** — values shaped like a kind but invalid by its own rule
   (checksum, octet range, length) must not produce that kind;
 - **benign** — prose, code, and numbers must produce no entities at all.
@@ -49,8 +50,10 @@ the right edge without dropping secret material: a value ending in `-` stays
 inside its declared alphabet, so the full value is reported — a floor-satisfying
 `glpat-…-` is one complete secret span, not a trimmed one, and a value one
 character below the floor followed by `-` is still detected instead of missed.
-The benchmark pins these spans by generating word-final values, including
-hyphen-terminated tails for the token kinds whose alphabets admit `-`.
+The exact-width Google-key pattern accepts every allowed word character at the
+tail end, including `_`, next to its hyphen branch. The benchmark pins these
+spans by generating word-final values, including separator tails (`-` and `_`)
+for the token kinds whose alphabets admit them.
 
 ## ONNX detector models
 
