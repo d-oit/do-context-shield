@@ -50,13 +50,21 @@ pub(crate) const SPECS: [(&str, &str, f32); 24] = [
     ("phone", r"\b(?:\+?\d[\d ()-]{7,}\d)\b", 0.99),
     ("iban", r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b", 0.99),
     ("ipv4", r"\b(?:\d{1,3}\.){3}\d{1,3}\b", 0.99),
-    ("api_key", r"\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}\b", 0.99),
+    (
+        "api_key",
+        r"\b(?:sk|pk|rk)-(?:[A-Za-z0-9_-]{16,}|[A-Za-z0-9]{15}-)",
+        0.99,
+    ),
     (
         "github_token",
         r"\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{60,})\b",
         0.99,
     ),
-    ("slack_token", r"\bxox[bpras]-[A-Za-z0-9-]{10,}\b", 0.99),
+    (
+        "slack_token",
+        r"\bxox[bpras]-(?:[A-Za-z0-9-]{10,}|[A-Za-z0-9]{9}-)",
+        0.99,
+    ),
     (
         "private_key",
         r"(?s)(?:-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----.*?-----END (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----|-----BEGIN PGP PRIVATE KEY BLOCK-----.*?-----END PGP PRIVATE KEY BLOCK-----|-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY(?: BLOCK)?-----)",
@@ -68,7 +76,11 @@ pub(crate) const SPECS: [(&str, &str, f32); 24] = [
         r"\b(?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}\b",
         0.99,
     ),
-    ("google_api_key", r"\bAIza[0-9A-Za-z_-]{35}\b", 0.99),
+    (
+        "google_api_key",
+        r"\bAIza(?:[0-9A-Za-z_-]{34}[0-9A-Za-z]\b|[0-9A-Za-z_-]{34}-)",
+        0.99,
+    ),
     (
         "stripe_key",
         r"\b(?:(?:sk|pk|rk)_(?:test|live)_[0-9a-zA-Z]{24,}|whsec_[0-9a-zA-Z]{32,})\b",
@@ -77,10 +89,14 @@ pub(crate) const SPECS: [(&str, &str, f32); 24] = [
     ("huggingface_token", r"\bhf_[A-Za-z0-9]{34,}\b", 0.99),
     (
         "pypi_token",
-        r"\bpypi-AgEIcHlwaS5vcmcCJ[A-Za-z0-9_-]{50,}\b",
+        r"\bpypi-AgEIcHlwaS5vcmcCJ(?:[A-Za-z0-9_-]{50,}|[A-Za-z0-9]{49}-)",
         0.99,
     ),
-    ("gitlab_token", r"\bglpat-[0-9a-zA-Z_\-]{20,}\b", 0.99),
+    (
+        "gitlab_token",
+        r"\bglpat-(?:[0-9a-zA-Z_\-]{20,}|[0-9a-zA-Z]{19}-)",
+        0.99,
+    ),
     (
         "generic_secret",
         r"(?i)(?:(?:\b|_)(?:password|passwd|pwd|secret|token)\s*[:=]\s*\S{8,}\b|\bbearer\s+\S{8,}\b)",
@@ -88,7 +104,7 @@ pub(crate) const SPECS: [(&str, &str, f32); 24] = [
     ),
     (
         "jwt",
-        r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b",
+        r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.(?:[A-Za-z0-9_-]{10,}|[A-Za-z0-9]{9}-)",
         0.95,
     ),
 ];

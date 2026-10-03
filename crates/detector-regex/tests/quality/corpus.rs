@@ -79,14 +79,21 @@ impl Rng {
 
     /// `len` characters from `alphabet` with an alphanumeric tail.
     ///
-    /// The credential patterns anchor their match at a word boundary, so a
-    /// value ending in `-` would be reported without that trailing character;
-    /// generated values end on a word character to pin the exact span (a
-    /// trailing hyphen outside the reported span leaks nothing, since it is
-    /// not secret material).
+    /// Generated values end on a word character to pin the exact span for
+    /// the default generated corpus; hyphen-terminated tails are covered
+    /// separately by [`Self::chars_with_hyphen_tail`], whose values the
+    /// patterns must also match across the full span.
     fn chars_with_alnum_tail(&mut self, len: usize, alphabet: &str) -> String {
         let head = self.chars_from(len.saturating_sub(1), alphabet);
         format!("{head}{}", self.chars_from(1, ALNUM))
+    }
+
+    /// `len` characters from `alphabet` ending in `-`: inside the declared
+    /// alphabet of the hyphen-admitting token kinds, so the detector must
+    /// report the full value including the trailing character.
+    fn chars_with_hyphen_tail(&mut self, len: usize, alphabet: &str) -> String {
+        let head = self.chars_from(len.saturating_sub(1), alphabet);
+        format!("{head}-")
     }
 }
 
@@ -386,6 +393,36 @@ pub(super) fn generated_cases(rng: &mut Rng) -> Vec<(&'static str, String)> {
             cases.push((*kind, value));
         }
     }
+    // A trailing `-` stays inside the declared alphabet of these kinds, so
+    // the full value must be one exact-span match (a floor-satisfying value
+    // ending in `-` used to be trimmed or missed entirely below the floor).
+    // The tail length equals the pattern's floor; the prefix matches each
+    // generator in `value_for`.
+    cases.extend([
+        (
+            "api_key",
+            format!("sk-{}", rng.chars_with_hyphen_tail(16, BASE64URL)),
+        ),
+        (
+            "slack_token",
+            format!("xoxb-{}", rng.chars_with_hyphen_tail(10, SLACK)),
+        ),
+        (
+            "google_api_key",
+            format!("AIza{}", rng.chars_with_hyphen_tail(35, BASE64URL)),
+        ),
+        (
+            "pypi_token",
+            format!(
+                "pypi-AgEIcHlwaS5vcmcCJ{}",
+                rng.chars_with_hyphen_tail(50, BASE64URL)
+            ),
+        ),
+        (
+            "gitlab_token",
+            format!("glpat-{}", rng.chars_with_hyphen_tail(20, ALNUM)),
+        ),
+    ]);
     cases
 }
 
