@@ -33,6 +33,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`(?:\.[0-9a-zA-Z]{2,})*`), preventing trailing sentence periods in prose
   from being swallowed into the secret span.
 
+- `generic_secret` detection now covers quoted assignments (`crates/detector-regex`):
+  passwords and secret tokens enclosed in double or single quotes
+  (`password="my secret passphrase with spaces"` or `API_SECRET='s3cr3t#pass;!'`)
+  previously leaked raw or truncated because `\S{8,}` required non-whitespace
+  characters and word boundaries `\b` dropped trailing punctuation and closing
+  quotes. The assignment pattern now explicitly matches quoted literals
+  (`(?:"[^"\r\n]{4,}"|'[^'\r\n]{4,}')`), preserving internal spaces, special
+  characters, and closing quotes while holding the 8-character floor and word
+  boundary for unquoted code assignments to prevent keyword false positives.
+
 ### Added
 
 - `deps` sensor: the dependency closure is checked for network clients, TLS stacks, and hosted-model SDKs (`Cargo.lock`, which covers every feature including `gliner2`), because "nothing leaves the process" was only review-enforced. The closure currently contains none of them; the ban list is overridable with `DO_HARNESS_FORBIDDEN_DEPS` for the sensor's own negative tests.

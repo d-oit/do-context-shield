@@ -358,5 +358,11 @@
     "rationale": "GitLab 16.9+ appends routing and CRC metadata after dots; omitting dot support truncates the detected span at the dot and leaks the routing suffix raw, while admitting bare dots in the token class would swallow sentence periods in prose",
     "sensor": "cargo test -p do-context-shield-detector-regex (detects_routable_gitlab_tokens asserts full routable and versioned routable span capture plus prose sentence period exclusion)",
     "category": "security"
+  },
+  {
+    "invariant": "Quoted generic secret assignments (`password=\"pass phrase!\"` and `API_SECRET='s3cr3t#pass;!'`) are detected across their full literal span including matching quotes, internal spaces, and special characters (`(?:\"[^\"]{4,}\"|'[^']{4,}')`), while unquoted assignments enforce an 8-character floor and word boundary (`\\S{8,}\\b`) to prevent keyword false positives in source code",
+    "rationale": "Quoted passwords frequently contain spaces (passphrases) or end in punctuation and semicolons; unquoted non-whitespace matching `\\S{8,}` truncated multi-word passphrases at the first space and dropped closing quotes and trailing punctuation, leaking sensitive values raw",
+    "sensor": "cargo test -p do-context-shield-detector-regex (detects_quoted_generic_secret_assignments asserts full quoted literal capture for spaces, trailing punctuation, and single/double quote delimiters)",
+    "category": "security"
   }
 ]
