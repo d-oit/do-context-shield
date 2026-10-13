@@ -33,7 +33,7 @@ work lands or the precondition expires.
 
 ### Client end-to-end checks are manual and require explicit human approval
 
-- **Status**: 2026-09-19 — both CLIs are installed but unusable in this environment: Codex is account usage-limited (`try again at Oct 15th, 2026 10:04 PM`), Claude Code `-p` produces no output and dies on timeout (exit 124), and its 1.0.44 attempt returned `401 Invalid Authentication`.
+- **Progress review (2026-10-13)**: `plans/tasks.json` reports 40 done, 0 pending, 0 in progress, and 0 failed. No implementation task remains open in the harness plan. These client checks are still outstanding: Codex is account usage-limited (`try again at Oct 15th, 2026 10:04 PM`), Claude Code `-p` produced no output and died on timeout (exit 124), and its 1.0.44 attempt returned `401 Invalid Authentication`.
 - **Rule**: never invoke `claude` or `codex` in an agent session without explicit human approval. Registration mechanics are verified and documented (`docs/client-integration.md` → "Other clients"); everything beyond that is human-driven.
 - **Remaining work (human-run only)**: Codex — one non-interactive turn calling `context.inspect` + `context.sanitize` (session `codex-probe-1`) and a placeholder-only reply. Claude Code — approve the project server once, then the same turn with session `cc-probe-1`.
 - **Exit criteria**: a transcript proving the tool invocation and the sanitized reply, recorded here and in `docs/client-integration.md`.
