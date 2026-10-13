@@ -9,7 +9,7 @@ fn detect_one(input: &str) -> Entity {
     };
     match entities.as_slice() {
         [entity] => entity.clone(),
-        other => panic!("expected one entity for {input:?}, got {other:?}"),
+        other => panic!("expected exactly one detector entity, got {}", other.len()),
     }
 }
 
@@ -20,7 +20,10 @@ fn detects_anthropic_key_as_its_own_kind() {
     let key = format!("sk-ant-api03-{}", "0123456789abcdefABCDEFghij".repeat(4));
     let entity = detect_one(&format!("Use {key}."));
     assert_eq!(entity.kind, "anthropic_key");
-    assert_eq!(entity.value, key, "trailing period must not be swallowed");
+    assert!(
+        entity.value == key,
+        "detector should capture the full Anthropic key span without its trailing period"
+    );
     assert!(is_secret_kind(&entity.kind));
 }
 
@@ -36,8 +39,11 @@ fn detects_openai_project_and_service_account_keys() {
     for prefix in ["sk-proj-", "sk-svcacct-"] {
         let key = format!("{prefix}{tail}");
         let entity = detect_one(&key);
-        assert_eq!(entity.kind, "openai_project_key", "{key}");
-        assert_eq!(entity.value, key);
+        assert_eq!(entity.kind, "openai_project_key");
+        assert!(
+            entity.value == key,
+            "detector should capture the full OpenAI key span"
+        );
     }
 }
 
@@ -50,6 +56,9 @@ fn detects_azure_storage_connection_string_including_padding() {
     );
     let entity = detect_one(&format!("conn={connection} end"));
     assert_eq!(entity.kind, "azure_storage_credential");
-    assert_eq!(entity.value, connection);
+    assert!(
+        entity.value == connection,
+        "detector should capture the full Azure connection-string span"
+    );
     assert!(is_secret_kind(&entity.kind));
 }

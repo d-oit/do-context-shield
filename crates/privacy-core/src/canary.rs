@@ -94,22 +94,28 @@ fn hex(bytes: &[u8]) -> String {
     out
 }
 
-fn decode_hex(text: &str) -> Option<Vec<u8>> {
-    if text.len() % 2 != 0 || !text.bytes().all(|b| b.is_ascii_hexdigit()) {
+fn decode_hex(text: &str) -> Option<[u8; 32]> {
+    if text.len() != 64 || !text.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
     }
-    (0..text.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&text[i..i + 2], 16).ok())
-        .collect()
+    let mut bytes = [0u8; 32];
+    for (index, byte) in bytes.iter_mut().enumerate() {
+        let start = index * 2;
+        *byte = u8::from_str_radix(&text[start..start + 2], 16).ok()?;
+    }
+    Some(bytes)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn key() -> Vec<u8> {
-        (0u8..32).collect()
+    fn key() -> [u8; MIN_KEY_BYTES] {
+        let mut bytes = [0u8; MIN_KEY_BYTES];
+        if let Err(error) = getrandom::fill(&mut bytes) {
+            panic!("cannot generate test canary key: {error}");
+        }
+        bytes
     }
 
     fn scope(name: &str) -> ScopeId {
@@ -132,17 +138,19 @@ mod tests {
 
     #[test]
     fn token_is_stable_and_fixed_width() {
-        let first = token(&key(), "s1");
-        assert_eq!(first, token(&key(), "s1"));
+        let key = key();
+        let first = token(&key, "s1");
+        assert_eq!(first, token(&key, "s1"));
         assert_eq!(first.len(), 64);
     }
 
     #[test]
     fn token_differs_across_scopes_and_keys() {
-        let base = token(&key(), "s1");
-        let mut other_key = key();
+        let base_key = key();
+        let base = token(&base_key, "s1");
+        assert_ne!(base, token(&base_key, "s2"));
+        let mut other_key = base_key;
         other_key[0] ^= 0xff;
-        assert_ne!(base, token(&key(), "s2"));
         assert_ne!(base, token(&other_key, "s1"));
     }
 
@@ -156,23 +164,25 @@ mod tests {
 
     #[test]
     fn marker_verifies_only_for_its_scope_and_key() {
-        let text = format!("safe body\n{}\n", marker(&key(), "s1"));
-        assert_eq!(verify_canary(&key(), &scope("s1"), &text), Ok(true));
-        assert_eq!(verify_canary(&key(), &scope("s2"), &text), Ok(false));
-        let mut other = key();
+        let key = key();
+        let text = format!("safe body\n{}\n", marker(&key, "s1"));
+        assert_eq!(verify_canary(&key, &scope("s1"), &text), Ok(true));
+        assert_eq!(verify_canary(&key, &scope("s2"), &text), Ok(false));
+        let mut other = key;
         other[31] ^= 1;
         assert_eq!(verify_canary(&other, &scope("s1"), &text), Ok(false));
     }
 
     #[test]
     fn forged_or_missing_markers_fail_closed() {
+        let key = key();
         let forged = format!("{MARKER_PREFIX}{}{MARKER_SUFFIX}", "00".repeat(32));
-        assert_eq!(verify_canary(&key(), &scope("s1"), &forged), Ok(false));
+        assert_eq!(verify_canary(&key, &scope("s1"), &forged), Ok(false));
         assert_eq!(
-            verify_canary(&key(), &scope("s1"), "no marker here"),
+            verify_canary(&key, &scope("s1"), "no marker here"),
             Ok(false)
         );
         let truncated = format!("{MARKER_PREFIX}abcd");
-        assert_eq!(verify_canary(&key(), &scope("s1"), &truncated), Ok(false));
+        assert_eq!(verify_canary(&key, &scope("s1"), &truncated), Ok(false));
     }
 }

@@ -21,6 +21,7 @@ thiserror.workspace = true
 
 [dev-dependencies]
 do-context-shield-detector-regex.workspace = true
+getrandom.workspace = true
 do-context-shield-policy-default.workspace = true
 do-context-shield-transformer-pseudonymize.workspace = true
 do-context-shield-vault-memory.workspace = true

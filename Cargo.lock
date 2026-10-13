@@ -528,6 +528,7 @@ dependencies = [
  "do-context-shield-policy-default",
  "do-context-shield-transformer-pseudonymize",
  "do-context-shield-vault-memory",
+ "getrandom",
  "hmac",
  "serde",
  "sha2",
