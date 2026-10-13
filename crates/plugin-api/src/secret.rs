@@ -21,8 +21,10 @@ mod tests {
     fn credential_kinds_are_secrets() {
         for kind in [
             "access_token",
+            "anthropic_key",
             "api_key",
             "aws_access_key",
+            "azure_storage_credential",
             "card_cvv",
             "db_credential",
             "generic_secret",

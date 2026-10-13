@@ -14,7 +14,9 @@ workspace = true
 
 [dependencies]
 do-context-shield-plugin-api.workspace = true
+hmac.workspace = true
 serde.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

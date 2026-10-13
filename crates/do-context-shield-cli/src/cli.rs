@@ -43,6 +43,8 @@ pub(crate) enum Command {
     Config(ConfigArgs),
     #[command(about = "Rewrite an existing plaintext JSON vault in the encrypted format")]
     EncryptVault(EncryptVaultArgs),
+    #[command(about = "Check stdin for a canary marker issued by this shield for a session")]
+    VerifyCanary(VerifyCanaryArgs),
 }
 
 /// Explicit local append-only JSONL audit destination.
@@ -66,6 +68,10 @@ pub(crate) struct SanitizeArgs {
     pub(crate) context: ContextArgs,
     #[command(flatten)]
     pub(crate) audit: AuditArgs,
+    /// Append a keyed canary marker (HMAC-SHA256 over the session) to the output.
+    /// The key file holds 64 hex characters and must be owner-only on Unix.
+    #[arg(long)]
+    pub(crate) canary_key_file: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -192,6 +198,17 @@ pub(crate) struct EncryptVaultArgs {
     /// (owner-only on Unix).
     #[arg(long)]
     pub(crate) vault_key_file: PathBuf,
+}
+
+/// Verify a canary marker on stdin for one session.
+#[derive(Args)]
+pub(crate) struct VerifyCanaryArgs {
+    /// Session scope the marker was issued for.
+    #[arg(long)]
+    pub(crate) session: String,
+    /// Canary key file (64 hex characters, owner-only on Unix).
+    #[arg(long)]
+    pub(crate) canary_key_file: PathBuf,
 }
 
 /// Parse the `--tools` value into a [`ToolSet`].

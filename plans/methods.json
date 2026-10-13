@@ -42,6 +42,35 @@
           "description": "A design or dependency verdict (adopt, hold, reject) is being recorded in plans/invariants.json with its invariant/rationale/sensor/category header. Feature-gated surfaces (for example --features gliner2) are verified with an explicit feature build, not the default suite."
         }
       ]
+    },
+    {
+      "name": "detector-expansion",
+      "subtasks": [
+        { "name": "define-pattern-contract", "sensor": null, "spike_candidate": false },
+        { "name": "write-failing-corpus-test", "sensor": null, "spike_candidate": false },
+        { "name": "implement-pattern", "sensor": "test", "spike_candidate": false },
+        { "name": "benchmark-quality", "sensor": "check", "spike_candidate": false },
+        { "name": "distill-heuristics", "sensor": "clippy", "spike_candidate": false }
+      ],
+      "preconditions": [
+        {
+          "description": "A new credential format or entity pattern is being added to detector-regex or detector-gliner2 with defined false-positive and false-negative boundaries."
+        }
+      ]
+    },
+    {
+      "name": "workflow-improvement",
+      "subtasks": [
+        { "name": "measure-baseline", "sensor": null, "spike_candidate": false },
+        { "name": "implement-workflow-change", "sensor": "check", "spike_candidate": false },
+        { "name": "verify-sensor-parity", "sensor": "test", "spike_candidate": false },
+        { "name": "distill-learning", "sensor": "clippy", "spike_candidate": false }
+      ],
+      "preconditions": [
+        {
+          "description": "A harness workflow, sensor, or skill change is being made and its effect must be measured against a recorded baseline before and after."
+        }
+      ]
     }
   ]
 }

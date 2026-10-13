@@ -461,6 +461,7 @@ fn scrub_judge(error: JudgeError, sensitive: &[&str]) -> JudgeError {
 }
 
 mod audit;
+pub mod canary;
 
 #[cfg(test)]
 mod tests;

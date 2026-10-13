@@ -1,4 +1,4 @@
-//! Local privacy boundary CLI: sanitize, restore, and inspect over stdin/stdout.
+//! Local privacy boundary CLI: sanitize, restore, inspect, and canary checks over stdin/stdout.
 
 use clap::Parser;
 use cli::{
@@ -6,9 +6,11 @@ use cli::{
     InspectArgs, InspectOutput, McpArgs, PipelineSelection, RestoreArgs, SanitizeArgs, VaultArgs,
     VaultSelection,
 };
+use do_context_shield_core::canary::{canary_marker, verify_canary};
 use do_context_shield_plugin_api::ScopeId;
 use std::io::{self, Read, Write};
 
+mod canary_key;
 mod cli;
 mod config;
 mod pipeline;
@@ -31,6 +33,7 @@ fn run_simple(command: Command, config: &config::Config) -> Result<(), Box<dyn s
         Command::McpStdio(args) => run_mcp(args, config)?,
         Command::Config(args) => run_config(args, config)?,
         Command::EncryptVault(args) => run_encrypt_vault(&args)?,
+        Command::VerifyCanary(args) => run_verify_canary(&args)?,
     }
     io::stdout().flush()?;
     Ok(())
@@ -40,12 +43,14 @@ fn run_sanitize(
     args: SanitizeArgs,
     config: &config::Config,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let canary_key_file = args.canary_key_file.clone();
     let VaultArgs {
         session,
         vault_file,
         vault_key_file,
         store,
     } = args.vault;
+    let scope = ScopeId(session);
     let resolved = config::resolve(
         &config::CliSelection {
             detector: args.detector,
@@ -62,9 +67,25 @@ fn run_sanitize(
     );
     let mut pipeline = build_pipeline(&resolved)?;
     let input = read_stdin()?;
-    let result = pipeline.sanitize(&ScopeId(session), &input, &resolved.to_context())?;
+    let result = pipeline.sanitize(&scope, &input, &resolved.to_context())?;
     print!("{}", result.text);
+    if let Some(path) = &canary_key_file {
+        let key = canary_key::read_canary_key(path)?;
+        print!("\n{}\n", canary_marker(&key, &scope)?);
+    }
     Ok(())
+}
+
+/// Check stdin for a valid canary marker; fails closed when it is absent or forged.
+fn run_verify_canary(args: &cli::VerifyCanaryArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let key = canary_key::read_canary_key(&args.canary_key_file)?;
+    let input = read_stdin()?;
+    if verify_canary(&key, &ScopeId(args.session.clone()), &input)? {
+        println!("ok");
+        Ok(())
+    } else {
+        Err("canary marker missing or invalid for this session".into())
+    }
 }
 
 fn run_restore(

@@ -26,7 +26,7 @@ pub(crate) const IPV6: &str = concat!(
 /// keeps the first entity pushed, so `db_credential` precedes `email`, and
 /// `ssn`, `credit_card`, and `us_bank_routing` precede the looser `phone` shape
 /// that also matches their text.
-pub(crate) const SPECS: [(&str, &str, f32); 24] = [
+pub(crate) const SPECS: [(&str, &str, f32); 27] = [
     (
         "db_credential",
         r#"(?i)\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|redis|rediss|amqp|amqps|mssql|snowflake):\/\/[^\s/@:]*:[^\s/@]+@[^\s"'`<>,;)]*[A-Za-z0-9/]"#,
@@ -50,6 +50,16 @@ pub(crate) const SPECS: [(&str, &str, f32); 24] = [
     ("phone", r"\b(?:\+?\d[\d ()-]{7,}\d)\b", 0.99),
     ("iban", r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b", 0.99),
     ("ipv4", r"\b(?:\d{1,3}\.){3}\d{1,3}\b", 0.99),
+    (
+        "anthropic_key",
+        r"\bsk-ant-(?:api03|admin01)-[A-Za-z0-9_-]{86,}",
+        0.99,
+    ),
+    (
+        "openai_project_key",
+        r"\bsk-(?:proj|svcacct)-[A-Za-z0-9_-]{48,}",
+        0.99,
+    ),
     (
         "api_key",
         r"\b(?:sk|pk|rk)-(?:[A-Za-z0-9_-]{16,}|[A-Za-z0-9]{15}-)",
@@ -95,6 +105,11 @@ pub(crate) const SPECS: [(&str, &str, f32); 24] = [
     (
         "gitlab_token",
         r"\bglpat-(?:[0-9a-zA-Z_\-]{20,}(?:\.[0-9a-zA-Z]{2,})*|[0-9a-zA-Z]{19}-)",
+        0.99,
+    ),
+    (
+        "azure_storage_credential",
+        r"(?i)\bDefaultEndpointsProtocol=https?;AccountName=[A-Za-z0-9]+;AccountKey=[A-Za-z0-9+/=]{64,}(?:;EndpointSuffix=[A-Za-z0-9.]+)?",
         0.99,
     ),
     (

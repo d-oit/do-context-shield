@@ -204,6 +204,13 @@ fn iban_check_digits(country: &str, bban: &str) -> String {
 fn credential_value_for(kind: &str, rng: &mut Rng) -> Option<String> {
     Some(match kind {
         "api_key" => format!("sk-{}", rng.chars_with_alnum_tail(24, BASE64URL)),
+        "anthropic_key" => format!("sk-ant-api03-{}", rng.chars_with_alnum_tail(86, BASE64URL)),
+        "openai_project_key" => format!("sk-proj-{}", rng.chars_with_alnum_tail(48, BASE64URL)),
+        "azure_storage_credential" => format!(
+            "DefaultEndpointsProtocol=https;AccountName=acct{};AccountKey={}==;EndpointSuffix=core.windows.net",
+            rng.digits(4),
+            rng.chars_from(86, ALNUM)
+        ),
         "github_token" => {
             if rng.below(2) == 0 {
                 format!("ghp_{}", rng.chars_from(30, ALNUM))

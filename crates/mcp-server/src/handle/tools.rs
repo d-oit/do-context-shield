@@ -39,7 +39,7 @@ impl ToolName {
 
     /// Catalogue entry: name, description, and input schema.
     fn schema(self) -> Value {
-        match self {
+        let mut schema = match self {
             Self::Sanitize => {
                 json!({"name":"context.sanitize","description":"Detect and sanitize sensitive coding context locally. Optional recipient/data_category/purpose/jurisdiction arguments select the enforcement context; unknown values are rejected. The built-in policy reads recipient and data_category, requires a declared jurisdiction for special-category data to a trusted recipient, and forwards purpose to policy plugins without letting it loosen a decision.","inputSchema":{"type":"object","properties":{"text":{"type":"string"},"session":{"type":"string"},"recipient":{"type":"string","enum":["local","trusted","external","unknown"],"default":"external"},"data_category":{"type":"string","enum":["non_personal","personal","special_category"],"default":"personal"},"purpose":{"type":"string"},"jurisdiction":{"type":"string","pattern":"^[A-Za-z]{2}$"}},"required":["text","session"]}})
             }
@@ -52,6 +52,16 @@ impl ToolName {
             Self::Forget => {
                 json!({"name":"context.forget","description":"Delete all locally stored placeholders for an explicit session. Requires `session`; there is no fallback scope.","inputSchema":{"type":"object","properties":{"session":{"type":"string"}},"required":["session"]}})
             }
-        }
+        };
+        schema["annotations"] = match self {
+            Self::Sanitize | Self::Restore => {
+                json!({"readOnlyHint":false,"destructiveHint":false,"openWorldHint":false})
+            }
+            Self::Inspect => json!({"readOnlyHint":true,"openWorldHint":false}),
+            Self::Forget => {
+                json!({"readOnlyHint":false,"destructiveHint":true,"openWorldHint":false})
+            }
+        };
+        schema
     }
 }
