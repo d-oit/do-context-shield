@@ -156,8 +156,9 @@ mod tests {
 
     #[test]
     fn short_key_is_rejected() {
+        let key = key();
         assert_eq!(
-            canary_token(&[1u8; 8], &scope("s1")),
+            canary_token(&key[..8], &scope("s1")),
             Err(CanaryError::KeyTooShort)
         );
     }
