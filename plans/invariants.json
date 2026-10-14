@@ -354,9 +354,21 @@
     "category": "security"
   },
   {
+    "invariant": "Modern developer and cloud credentials (`anthropic_key` for `sk-ant-api03-`/`sk-ant-admin01-`, `openai_project_key` for `sk-proj-`/`sk-svcacct-`, and `azure_storage_credential` for Azure storage `DefaultEndpointsProtocol=...;AccountKey=...` connection strings) are detected as their own kinds, win over the generic `api_key` span, and are redacted as secret kinds; quality-corpus boundary cases verify full spans for `-`/`_` payload endings and Azure `==` padding",
+    "rationale": "These tokens are pasted into agent contexts routinely; the generic `sk-` pattern would otherwise report them as `api_key` by span precedence, and an Azure connection string carries a raw account key that must never be pseudonymized into a reversible vault mapping",
+    "sensor": "cargo test -p do-context-shield-detector-regex (unit and quality targets) + cargo test -p do-context-shield-plugin-api + cargo test -p do-context-shield-core",
+    "category": "security"
+  },
+  {
     "invariant": "Routable and versioned routable GitLab personal access tokens (`glpat-<payload>.<routing>`) are detected across their full multi-segment span, and dot-separated token segments require at least two characters after any dot (`(?:\\.[0-9a-zA-Z]{2,})*`) so prose sentence periods are never swallowed into the secret span",
     "rationale": "GitLab 16.9+ appends routing and CRC metadata after dots; omitting dot support truncates the detected span at the dot and leaks the routing suffix raw, while admitting bare dots in the token class would swallow sentence periods in prose",
     "sensor": "cargo test -p do-context-shield-detector-regex (detects_routable_gitlab_tokens asserts full routable and versioned routable span capture plus prose sentence period exclusion)",
+    "category": "security"
+  },
+  {
+    "invariant": "Canary boundary markers are HMAC-SHA256 tags over a domain-separated session scope, keyed by a per-install key file that is separate from the vault key and must be owner-only on Unix; `verify-canary` fails closed (non-zero exit) on a missing, forged, wrong-session, or wrong-key marker and never echoes the checked input",
+    "rationale": "A canary an attacker can mint proves nothing at an egress firewall, and sharing the vault key would let a leaked canary key expose vault ciphertext; a plain string comparison would leak the tag through timing, so verification goes through the MAC's constant-time verifier",
+    "sensor": "cargo test -p do-context-shield-core canary + cargo test -p do-context-shield (CLI suites)",
     "category": "security"
   },
   {
@@ -364,5 +376,11 @@
     "rationale": "Quoted passwords frequently contain spaces (passphrases) or end in punctuation and semicolons; unquoted non-whitespace matching `\\S{8,}` truncated multi-word passphrases at the first space and dropped closing quotes and trailing punctuation, leaking sensitive values raw",
     "sensor": "cargo test -p do-context-shield-detector-regex (detects_quoted_generic_secret_assignments asserts full quoted literal capture for spaces, trailing punctuation, and single/double quote delimiters)",
     "category": "security"
+  },
+  {
+    "invariant": "MCP `tools/list` emits schema-defined `ToolAnnotations` that match local tool effects: `context.inspect` is read-only, `context.sanitize` and `context.restore` are non-read-only but non-destructive, `context.forget` is destructive, and all four use `openWorldHint: false`; missing or malformed `clientCapabilities` for an explicitly supported namespaced version remains `-32602` invalid params, while `-32021` is reserved for an actually required undeclared capability",
+    "rationale": "Tool annotations are untrusted hints that can drive client confirmation and display behavior; `priority`/`audience` are content/resource annotation fields, not tool annotation fields, and a wrong read-only/destructive claim misleads clients",
+    "sensor": "cargo test -p do-context-shield-mcp-server (tools_list_advertises_spec_defined_behavior_hints and protocol_version_metadata_is_enforced)",
+    "category": "contracts"
   }
 ]

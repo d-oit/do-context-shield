@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Keyed egress canary markers (`crates/privacy-core/src/canary.rs`):
+  `sanitize --canary-key-file <path>` appends
+  `<!-- do-context-shield-canary: <hex> -->`, an HMAC-SHA256 tag over the
+  domain-separated session scope. `verify-canary --session <id>
+  --canary-key-file <path>` checks stdin and exits non-zero on a missing,
+  forged, wrong-session, or wrong-key marker. The canary key is a separate
+  per-install file (64 hex characters, owner-only on Unix) so a leaked canary
+  key cannot expose vault ciphertext. Verification uses the MAC's
+  constant-time verifier.
+- Detection for Anthropic keys (`anthropic_key`: `sk-ant-api03-` /
+  `sk-ant-admin01-`), OpenAI project and service-account keys
+  (`openai_project_key`: `sk-proj-` / `sk-svcacct-`), and Azure storage
+  connection strings (`azure_storage_credential`). All three are secret kinds
+  and are redacted, never pseudonymized.
+- MCP `tools/list` advertises the 2026-07-28 schema-defined tool behavior
+  hints (`readOnlyHint`, `destructiveHint`, `openWorldHint`) for the four
+  `context.*` tools. Cache hints remain `ttlMs: 300000` and
+  `cacheScope: "private"`. Malformed or missing `clientCapabilities` remains
+  an invalid-params error (`-32602`); `-32021` is for a missing required
+  capability, not malformed metadata.
+
+
 ### Fixed
 
 - `google_api_key` detection now covers exact-width keys whose 35-character

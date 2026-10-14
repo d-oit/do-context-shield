@@ -28,6 +28,76 @@ fn default_tool_set_exposes_only_sanitize_and_inspect() {
     assert_eq!(names, ["context.sanitize", "context.inspect"]);
 }
 
+fn annotations<'a>(tools: &'a [Value], name: &str) -> &'a Value {
+    let Some(tool) = tools
+        .iter()
+        .find(|tool| tool.get("name").and_then(Value::as_str) == Some(name))
+    else {
+        panic!("missing tool `{name}`");
+    };
+    tool.get("annotations")
+        .unwrap_or_else(|| panic!("missing annotations for `{name}`"))
+}
+
+#[test]
+fn tools_list_advertises_spec_defined_behavior_hints() {
+    let mut pipeline = pipeline();
+    let response = request(
+        &mut pipeline,
+        r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#,
+    );
+    let Some(value) = response else {
+        panic!("expected a response");
+    };
+    let tools = value
+        .pointer("/result/tools")
+        .and_then(Value::as_array)
+        .unwrap_or_else(|| panic!("missing tools in {value}"));
+
+    let inspect = annotations(tools, "context.inspect");
+    assert_eq!(
+        inspect.get("readOnlyHint").and_then(Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        inspect.get("openWorldHint").and_then(Value::as_bool),
+        Some(false)
+    );
+
+    for name in ["context.sanitize", "context.restore"] {
+        let annotation = annotations(tools, name);
+        assert_eq!(
+            annotation.get("readOnlyHint").and_then(Value::as_bool),
+            Some(false),
+            "{name}"
+        );
+        assert_eq!(
+            annotation.get("destructiveHint").and_then(Value::as_bool),
+            Some(false),
+            "{name}"
+        );
+        assert_eq!(
+            annotation.get("openWorldHint").and_then(Value::as_bool),
+            Some(false),
+            "{name}"
+        );
+    }
+
+    let forget = annotations(tools, "context.forget");
+    assert_eq!(
+        forget.get("readOnlyHint").and_then(Value::as_bool),
+        Some(false)
+    );
+    assert_eq!(
+        forget.get("destructiveHint").and_then(Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        forget.get("openWorldHint").and_then(Value::as_bool),
+        Some(false)
+    );
+}
+
 #[test]
 fn disabled_tools_are_rejected_with_guidance() {
     let mut pipeline = pipeline();

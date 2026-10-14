@@ -1,4 +1,5 @@
 mod credentials;
+mod modern_credentials;
 
 use super::*;
 

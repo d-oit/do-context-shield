@@ -35,6 +35,9 @@ chacha20poly1305 = { version = "0.10", default-features = false, features = [
 ] }
 # OS entropy for unguessable placeholder tokens (`mint_placeholder`).
 getrandom = "0.3"
+# Keyed canary boundary marker (`privacy-core::canary`); pure Rust, MIT/Apache-2.0.
+hmac = "0.13"
+sha2 = "0.11"
 # Fragment orchestrator for GLiNER2 span exports (encoder + 7 fragments).
 # `default-features = false` keeps the hf-hub download stack (and its TLS
 # dependencies) out of the binary: the privacy boundary never fetches models.
