@@ -13,6 +13,12 @@ require_tools() { [[ "${CI:-}" == "true" || "${DO_HARNESS_REQUIRE_TOOLS:-}" == "
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+LOCK="$ROOT/Cargo.lock"
+if [[ ! -f "$LOCK" ]]; then
+    echo "FAIL: Cargo.lock is missing; the tracked lockfile cannot be audited."
+    exit 1
+fi
+
 if ! cargo audit --version >/dev/null 2>&1; then
     if require_tools; then
         echo "FAIL: cargo-audit is required when CI=true or DO_HARNESS_REQUIRE_TOOLS=1."
@@ -22,4 +28,4 @@ if ! cargo audit --version >/dev/null 2>&1; then
     exit 0
 fi
 
-cargo audit --deny warnings
+cargo audit --file Cargo.lock --deny warnings
