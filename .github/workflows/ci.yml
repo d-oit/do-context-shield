@@ -93,8 +93,7 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-audit
-      - run: cargo generate-lockfile
-      - run: cargo audit
+      - run: cargo audit --file Cargo.lock
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
