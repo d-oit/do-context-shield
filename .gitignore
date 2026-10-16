@@ -1,5 +1,12 @@
 # Rust build artifacts
 /target/
+# The detached cargo-fuzz workspace builds into its own target directory;
+# `fuzz/Cargo.lock` is committed (like the root lockfile) for reproducibility.
+/fuzz/target/
+# Fuzzer-written coverage/build scratch and crashing reproducers: CI uploads
+# the artifacts, minimized seeds live under `fuzz/corpus/`.
+/fuzz/coverage/
+/fuzz/artifacts/
 
 # do-harness local state and evidence artifacts
 .do-harness/

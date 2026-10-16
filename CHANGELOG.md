@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Fuzzing and mutation-test signal for the secret-detection and sanitization boundary (`fuzz/`, `.github/workflows/fuzz.yml`, `.github/workflows/mutants.yml`). Four cargo-fuzz targets cover the regex detector, the sanitize pipeline (redaction invariant), the JSON vault parser, and the MCP request parser. The `fuzz/` workspace is detached from the shipping lockfile and policy, so libFuzzer never enters the dependency closure. `fuzz/tests/seed_corpus.rs` pins every committed CHANGELOG regression seed at its exact kind and span and keeps every seeded credential `SYNTHETIC`-marked, so the gitleaks allowlist stays scoped to the marked value rather than to a path. The `fuzz-check` CI job compiles the targets and runs the seed tests on every pull request; fuzzing and mutation testing run only on schedule or manual dispatch. Mutation reports keep surviving mutants (exit 2) separate from tool failures, which fail the job.
+
 - Keyed egress canary markers (`crates/privacy-core/src/canary.rs`):
   `sanitize --canary-key-file <path>` appends
   `<!-- do-context-shield-canary: <hex> -->`, an HMAC-SHA256 tag over the

@@ -382,5 +382,17 @@
     "rationale": "Tool annotations are untrusted hints that can drive client confirmation and display behavior; `priority`/`audience` are content/resource annotation fields, not tool annotation fields, and a wrong read-only/destructive claim misleads clients",
     "sensor": "cargo test -p do-context-shield-mcp-server (tools_list_advertises_spec_defined_behavior_hints and protocol_version_metadata_is_enforced)",
     "category": "contracts"
+  },
+  {
+    "invariant": "Committed fuzz seed corpora contain only SYNTHETIC-marked credentials, and every CHANGELOG secret regression seed is pinned at its exact detected kind and byte span by fuzz/tests/seed_corpus.rs; the detached fuzz workspace stays out of the shipping lockfile and license policy",
+    "rationale": "A real credential in fuzz/corpus would be committed history, and the gitleaks allowlist must target only the marked value (never the path) so scanning stays active; an unpinned seed loses its regression value silently, shrinking fuzz coverage without any failing test",
+    "sensor": "cargo test --manifest-path fuzz/Cargo.toml --locked --test seed_corpus (CI fuzz-check job) + gitleaks secret-scan (.gitleaks.toml `(?i)synthetic` allowlist)",
+    "category": "security"
+  },
+  {
+    "invariant": "Fuzzing and mutation testing are scheduled or manually dispatched only and never a pull-request merge gate; the PR-time gate is the fuzz-check job, which compiles the targets and runs the seed tests",
+    "rationale": "Full fuzz and mutation runs take hours and do not belong on every PR; a mutation survivor is a test-gap signal, so cargo-mutants exit 2 must warn while tool or setup failures (any other exit code) fail the job, so the signal is never silently skipped",
+    "sensor": "review-only (workflow triggers in .github/workflows/fuzz.yml and mutants.yml; fuzz-check compile gate in ci.yml)",
+    "category": "workflow"
   }
 ]

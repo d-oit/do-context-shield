@@ -1,0 +1,1 @@
+{"mappings":[{"scope":"s1","mapping":{"kind":"email","original":"user@example.com","token":"__DO_PRIVATE_EMAIL_1__"},"created_at":1700000000}],"counters":[{"scope":"s1","kind":"email","value":1}]}

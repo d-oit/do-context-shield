@@ -6,11 +6,18 @@
 useDefault = true
 
 [allowlist]
-description = "Synthetic fixtures in privacy invariant tests (no real secrets)"
+description = "Synthetic fixtures (no real secrets anywhere in the repository)"
 paths = [
     '''crates/privacy-core/tests/privacy_invariants\.rs''',
 ]
 regexes = [
     # judge-heuristics inline test: synthetic key used for the kind-abstention case.
     '''sk-test-0123456789abcdef''',
+    # Committed credential fixtures (fuzz seed corpora, regression corpora)
+    # carry the marker word SYNTHETIC inside the fake value itself. The
+    # allowlist targets the matched secret, not the line, so scanning stays
+    # active for every path — a real credential never contains the marker and
+    # keeps being reported. Never widen this into a path allowlist for
+    # `fuzz/`: the corpus is what must stay verifiably synthetic.
+    '''(?i)synthetic''',
 ]

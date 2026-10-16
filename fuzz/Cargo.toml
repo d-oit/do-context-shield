@@ -1,0 +1,54 @@
+[package]
+name = "do-context-shield-fuzz"
+version = "0.0.0"
+license = "PolyForm-Noncommercial-1.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Detach this crate from the repository workspace (root `Cargo.toml` also
+# excludes it): the fuzz toolchain must not join the shipping lockfile, the
+# dependency/license policy, or the default workspace builds. Build, lint, and
+# test the targets with an explicit manifest path:
+#   cargo check --manifest-path fuzz/Cargo.toml --all-targets
+#   cargo test  --manifest-path fuzz/Cargo.toml
+#   cargo fuzz run fuzz_detector_regex        # from the repository root
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+do-context-shield-core = { path = "../crates/privacy-core", version = "0.1.0" }
+do-context-shield-detector-regex = { path = "../crates/detector-regex", version = "0.1.0" }
+do-context-shield-policy-default = { path = "../crates/policy-default", version = "0.1.0" }
+do-context-shield-transformer-pseudonymize = { path = "../crates/transformer-pseudonymize", version = "0.1.0" }
+do-context-shield-vault-memory = { path = "../crates/vault-memory", version = "0.1.0" }
+do-context-shield-vault-json = { path = "../crates/vault-json", version = "0.1.0" }
+do-context-shield-mcp-server = { path = "../crates/mcp-server", version = "0.1.0" }
+do-context-shield-plugin-api = { path = "../crates/plugin-api", version = "0.1.0" }
+tempfile = "3.10"
+
+[[bin]]
+name = "fuzz_detector_regex"
+path = "fuzz_targets/fuzz_detector_regex.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_sanitize_pipeline"
+path = "fuzz_targets/fuzz_sanitize_pipeline.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_vault_json"
+path = "fuzz_targets/fuzz_vault_json.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_mcp_parse"
+path = "fuzz_targets/fuzz_mcp_parse.rs"
+test = false
+doc = false

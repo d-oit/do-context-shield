@@ -6,6 +6,20 @@ file is the durable, reviewable copy. Promote an item by giving it a task
 (`do-harness task add "<title>" --method <name>`); remove its section when the
 work lands or the precondition expires.
 
+## Open defect
+
+### Credential word-boundary miss: secrets glued to letters or digits leak raw
+
+- **Status**: open. Found by the `fuzz_sanitize_pipeline` target (PR #126 smoke run, two crashing inputs). Deferred to a separate PR by maintainer decision on 2026-10-16; the fuzz target stays in the seed test and is excluded from the scheduled matrix in `.github/workflows/fuzz.yml` until this lands.
+- **Defect**: credential patterns anchor with `\b`, so a secret directly followed by a letter or digit is not matched at all, and its raw value survives `sanitize`. Replayed against `RegexDetector` (`crates/detector-regex`):
+  - `AIzaSYNTHETIC0123456789012345678901234_` alone → detected (`google_api_key`, 0..39)
+  - `AIzaSYNTHETIC0123456789012345678901234_dabc` → **no entities**
+  - `AIzaSYNTHETIC0123456789012345678901234_12345` → **no entities**
+  - `AIzaSYNTHETIC012345678901234567890123Xdabc` → **no entities**
+  - `x AIzaSYNTHETIC0123456789012345678901234_ d` → detected (word-separated)
+- **Scope**: the credential family anchored by `\b` (`google_api_key`, `api_key`, `anthropic_key`, and similar), not only the seed corpus. The documented contract (`docs/plugins.md`, credential span rule) says a value ends at its declared alphabet, so the glued case is a miss, not an intended boundary.
+- **Exit criteria**: a detector fix with exact-span regression tests for the glued cases above; `cargo test --manifest-path fuzz/Cargo.toml --locked` green; `fuzz_sanitize_pipeline` re-added to the `fuzz.yml` matrix; the quality benchmark still passes with its existing boundary cases. The invariant in `fuzz_sanitize_pipeline.rs` is not weakened.
+
 ## Landed
 
 ### Harness tasks 35–40: developer, cloud, and generic credential shapes
