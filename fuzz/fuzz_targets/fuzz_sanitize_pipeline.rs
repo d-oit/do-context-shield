@@ -48,10 +48,12 @@ fuzz_target!(|data: &[u8]| {
 
     let mut pipeline = PrivacyPipeline::new(detector, policy, transformer, vault);
     let scope = ScopeId("fuzz-session".to_owned());
-    let mut context = ProcessingContext::default();
-    context.recipient = recipient;
-    context.data_category = category;
-    context.jurisdiction = Some("US".to_owned());
+    let context = ProcessingContext {
+        recipient,
+        data_category: category,
+        jurisdiction: Some("US".to_owned()),
+        ..ProcessingContext::default()
+    };
 
     if let Ok(result) = pipeline.sanitize(&scope, input, &context) {
         // Redaction invariant: If a secret-kind entity was detected and pipeline succeeded (redact action),
@@ -59,11 +61,9 @@ fuzz_target!(|data: &[u8]| {
         for summary in &result.entities {
             if is_secret_kind(&summary.kind) {
                 let original_secret = &input[summary.start..summary.end];
-                if !original_secret.is_empty() {
-                    assert!(
-                        !result.text.contains(original_secret),
-                        "Sanitized output contains raw secret value `{}` of kind `{}`",
-                        original_secret,
+                if !original_secret.is_empty() && result.text.contains(original_secret) {
+                    panic!(
+                        "Redaction invariant violated for secret kind {}",
                         summary.kind
                     );
                 }

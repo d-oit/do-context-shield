@@ -2,8 +2,8 @@
 
 use do_context_shield_core::PrivacyPipeline;
 use do_context_shield_detector_regex::RegexDetector;
-use do_context_shield_mcp_server::handle_request_for_fuzzing;
 use do_context_shield_mcp_server::ToolSet;
+use do_context_shield_mcp_server::handle_request_for_fuzzing;
 use do_context_shield_plugin_api::ProcessingContext;
 use do_context_shield_policy_default::DefaultPolicy;
 use do_context_shield_transformer_pseudonymize::PseudonymizingTransformer;

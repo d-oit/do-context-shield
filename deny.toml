@@ -27,6 +27,7 @@ version = 2
 allow = [
     "MIT",
     "Apache-2.0",
+    "NCSA",
     # `subtle`, pulled in by chacha20poly1305's Poly1305 MAC (universal-hash)
     # for the encrypted JSON vault. Constant-time primitives, OSI-approved
     # permissive license; reviewed 2026-09-29.
