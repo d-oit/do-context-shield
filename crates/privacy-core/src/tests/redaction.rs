@@ -74,3 +74,27 @@ fn a_kept_value_is_not_checked() {
     };
     assert!(result.text.contains(value), "{result:?}");
 }
+
+#[test]
+fn a_keep_alias_does_not_exempt_a_removed_secret() {
+    // One secret labelled under a secret kind and a non-secret kind: with a
+    // local recipient the default policy redacts `api_key` and keeps `note`.
+    // Exempting a value because some entity keeps it would return the raw
+    // secret at the kept span, so a contradictory plan fails closed.
+    let value = format!("sk-{}", "SYNTHETIC0123456789");
+    let offset = value.len() + " and ".len();
+    let mut pipeline = with_detector(vec![
+        entity("api_key", 0, value.len(), &value),
+        entity("note", offset, offset + value.len(), &value),
+    ]);
+    let context = ProcessingContext {
+        recipient: RecipientClass::Local,
+        ..ProcessingContext::default()
+    };
+    let input = format!("{value} and {value}");
+    let error = match pipeline.sanitize(&ScopeId("test".to_owned()), &input, &context) {
+        Ok(result) => panic!("expected a fail-closed error, got {result:?}"),
+        Err(error) => error,
+    };
+    assert!(matches!(error, PipelineError::Transform(_)), "{error:?}");
+}
