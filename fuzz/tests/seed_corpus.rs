@@ -197,3 +197,38 @@ fn sanitize_seeds_redact_every_detected_secret() -> Result<(), Box<dyn Error>> {
     }
     Ok(())
 }
+
+/// The pipeline fails closed when a removed value survives in an undetected
+/// copy. The seed pairs a detected google-shaped key with a copy glued to word
+/// characters, which the detector's boundary rules cannot see; redacting only
+/// the detected span would emit the raw key.
+#[test]
+fn sanitize_seed_fails_closed_when_a_copy_survives() -> Result<(), Box<dyn Error>> {
+    let text = corpus_text("fuzz_sanitize_pipeline/glued_duplicate.txt")?;
+    let mut pipeline = PrivacyPipeline::new(
+        Box::new(RegexDetector),
+        Box::new(DefaultPolicy),
+        Box::new(PseudonymizingTransformer),
+        Box::new(MemoryVault::default()),
+    );
+    let scope = ScopeId("seed-corpus".to_owned());
+    let context = ProcessingContext {
+        recipient: RecipientClass::External,
+        data_category: DataCategory::Personal,
+        ..ProcessingContext::default()
+    };
+    match pipeline.sanitize(&scope, &text, &context) {
+        Ok(result) => Err(format!(
+            "sanitize seeds: expected a fail-closed error, got {} entities",
+            result.entities.len()
+        )
+        .into()),
+        Err(error) => {
+            // The refusal names the kind only: never echo a detected value.
+            if error.to_string().contains(MARKER) {
+                return Err(format!("sanitize seeds: error echoed the value: {error}").into());
+            }
+            Ok(())
+        }
+    }
+}

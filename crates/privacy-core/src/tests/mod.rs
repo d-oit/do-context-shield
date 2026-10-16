@@ -17,6 +17,7 @@ mod errors;
 mod flow;
 mod judge;
 mod policy;
+mod redaction;
 mod validation;
 
 fn context() -> ProcessingContext {

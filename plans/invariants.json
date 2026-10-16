@@ -394,5 +394,11 @@
     "rationale": "Full fuzz and mutation runs take hours and do not belong on every PR; a mutation survivor is a test-gap signal, so cargo-mutants exit 2 must warn while tool or setup failures (any other exit code) fail the job, so the signal is never silently skipped",
     "sensor": "review-only (workflow triggers in .github/workflows/fuzz.yml and mutants.yml; fuzz-check compile gate in ci.yml)",
     "category": "workflow"
+  },
+  {
+    "invariant": "A successful `sanitize` never returns text that still contains a value the plan removes: after transformation the pipeline verifies that every `Redact`/`Pseudonymize` entity's value is gone (unless the identical value is also planned `Keep`) and fails closed otherwise, so an undetected duplicate — a token glued to a word character or hidden past a declared width — cannot leave the boundary as raw text",
+    "rationale": "Regex detection is boundary- and width-based, so a second copy of a secret can sit just outside every detectable span, and replacing only the detected span would emit the original value as sanitized output. The process transformer already enforced this on its own output; enforcing it centrally makes the promise hold for built-in transformers too, and the refusal names the kind without echoing the value",
+    "sensor": "cargo test -p do-context-shield-core (tests::redaction: glued duplicate, digit-glued duplicate, undetected pseudonymized copy, kept-value control) + cargo test --manifest-path fuzz/Cargo.toml --locked --test seed_corpus (sanitize_seed_fails_closed_when_a_copy_survives) + the fuzz_sanitize_pipeline target in the scheduled fuzz.yml matrix",
+    "category": "security"
   }
 ]
