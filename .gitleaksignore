@@ -1,0 +1,7 @@
+# Historical findings from commit 5913c37 (PR #126 bot commit): three
+# synthetic GitLab-token fixtures that the working tree no longer carries
+# unmarked. Rewriting PR history to drop them would be destructive, so each
+# exact fingerprint below is ignored. Do not add a path or rule-wide allowance.
+5913c37847ae9044f9c9ef79e6d30edd7c42870f:fuzz/corpus/fuzz_sanitize_pipeline/changelog_regressions.txt:gitlab-pat:1
+5913c37847ae9044f9c9ef79e6d30edd7c42870f:fuzz/corpus/fuzz_detector_regex/changelog_regressions.txt:gitlab-pat:2
+5913c37847ae9044f9c9ef79e6d30edd7c42870f:fuzz/corpus/fuzz_detector_regex/changelog_regressions.txt:gitlab-pat:6
