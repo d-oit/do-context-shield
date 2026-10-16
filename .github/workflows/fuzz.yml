@@ -1,20 +1,17 @@
 ---
 name: Fuzz
 
+# Heavy job: scheduled and manual only, never on push or pull request. The
+# PR-time gate is the `fuzz-check` job in ci.yml, which compiles the targets
+# and runs the committed seed-corpus regression tests.
 on:
-  push:
-    branches: [main, develop]
-    paths:
-      - 'crates/**'
-      - 'fuzz/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
   schedule:
     - cron: "0 2 * * 0"  # Weekly Sunday 02:00 UTC
   workflow_dispatch:
     inputs:
       duration:
-        description: "Fuzz duration in seconds (max 3600)"
+        description: "Seconds per fuzz target (digits only; capped at 3600)"
+        required: false
         default: "300"
 
 permissions:
@@ -23,6 +20,8 @@ permissions:
 env:
   CARGO_BUILD_JOBS: "2"
   CARGO_INCREMENTAL: "0"
+  # Hard ceiling per target, applied in the shell regardless of the input.
+  FUZZ_MAX_SECONDS: "3600"
 
 concurrency:
   group: fuzz-${{ github.ref }}
@@ -30,34 +29,70 @@ concurrency:
 
 jobs:
   fuzz:
-    name: Fuzz Run
+    name: Fuzz ${{ matrix.target }}
     runs-on: ubuntu-24.04
+    # Build time plus the 3600 s ceiling, with headroom.
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - fuzz_detector_regex
+          # Excluded until the credential word-boundary defect is fixed (see
+          # plans/backlog.md, "Open defect"). Deviation from "never weaken the
+          # sensor that fired", approved by the maintainer: the target's seed
+          # invariant still runs in ci.yml's fuzz-check job via seed_corpus.
+          # Re-add `fuzz_sanitize_pipeline` when that fix lands.
+          - fuzz_vault_json
+          - fuzz_mcp_parse
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         with:
           toolchain: nightly
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: fuzz
       - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-fuzz
-      - name: Run fuzz_detector_regex
+      - name: Resolve fuzz duration
+        env:
+          REQUESTED: ${{ inputs.duration }}
         run: |
-          DURATION="${{ inputs.duration || 300 }}"
-          if [ "$DURATION" -gt 3600 ]; then DURATION=3600; fi
-          cargo fuzz run fuzz_detector_regex -- -max_total_time=$DURATION
-      - name: Run fuzz_sanitize_pipeline
+          requested="${REQUESTED:-300}"
+          if [[ ! "$requested" =~ ^[0-9]+$ ]]; then
+            echo "::error::duration must be a whole number of seconds, got '$requested'"
+            exit 1
+          fi
+          # 10# forces base 10 so a leading zero is not read as octal.
+          requested=$((10#$requested))
+          if (( requested == 0 )); then
+            echo "::error::duration must be at least 1 second"
+            exit 1
+          fi
+          if (( requested > FUZZ_MAX_SECONDS )); then
+            requested=$FUZZ_MAX_SECONDS
+          fi
+          echo "FUZZ_SECONDS=$requested" >> "$GITHUB_ENV"
+          echo "::notice::fuzzing ${{ matrix.target }} for ${requested}s"
+      - name: Fuzz target
+        env:
+          TARGET: ${{ matrix.target }}
+        # The first corpus directory is scratch space that receives new inputs
+        # for this run. The committed seeds are read-only inputs, so the
+        # repository corpus never changes in CI.
         run: |
-          DURATION="${{ inputs.duration || 300 }}"
-          if [ "$DURATION" -gt 3600 ]; then DURATION=3600; fi
-          cargo fuzz run fuzz_sanitize_pipeline -- -max_total_time=$DURATION
-      - name: Run fuzz_vault_json
-        run: |
-          DURATION="${{ inputs.duration || 300 }}"
-          if [ "$DURATION" -gt 3600 ]; then DURATION=3600; fi
-          cargo fuzz run fuzz_vault_json -- -max_total_time=$DURATION
-      - name: Run fuzz_mcp_parse
-        run: |
-          DURATION="${{ inputs.duration || 300 }}"
-          if [ "$DURATION" -gt 3600 ]; then DURATION=3600; fi
-          cargo fuzz run fuzz_mcp_parse -- -max_total_time=$DURATION
+          mkdir -p "$RUNNER_TEMP/corpus/$TARGET"
+          cargo fuzz run "$TARGET" \
+            "$RUNNER_TEMP/corpus/$TARGET" \
+            "fuzz/corpus/$TARGET" \
+            -- -max_total_time="$FUZZ_SECONDS"
+      - name: Preserve crash reproducers
+        if: failure()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: fuzz-crashes-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}/
+          if-no-files-found: ignore
+          retention-days: 30

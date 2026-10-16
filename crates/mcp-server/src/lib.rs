@@ -16,6 +16,17 @@ use crate::handle::handle_request;
 use crate::vault::build_vault;
 
 /// Internal entrypoint exported for fuzzing MCP request handling.
+///
+/// A `pub` wrapper over the crate-internal dispatcher so the fuzz targets can
+/// drive the wire contract without spawning a process; not part of the
+/// supported API surface.
+///
+/// # Errors
+///
+/// Returns an error only for internal failures that cannot be represented as a
+/// JSON-RPC response (for example serializing an `context.inspect` payload).
+/// Malformed JSON, protocol violations, and tool-call failures are `Ok` values
+/// carrying a JSON-RPC error object, and notifications yield `Ok(None)`.
 #[doc(hidden)]
 pub fn handle_request_for_fuzzing(
     pipeline: &mut PrivacyPipeline,

@@ -1,2 +1,2 @@
-Please sanitize: AIzaSyD123456789012345678901234567890_ and glpat-abcdef12345678901234.v1.route and password="my secret passphrase with spaces"
-Multibyte UTF-8 🔑 sk-ant-api03-abcdef12345678901234567890 in log output
+Please sanitize: AIzaSYNTHETIC0123456789012345678901234_ and glpat-SYNTHETICabcdef1234567890.v1.route and password="SYNTHETIC passphrase with spaces"
+Multibyte UTF-8 🔑 sk-ant-api03-SYNTHETICAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA in log output

@@ -1,7 +1,14 @@
 [workspace]
-members = ["crates/*", "fuzz"]
+members = ["crates/*"]
 default-members = ["crates/do-context-shield-cli"]
 resolver = "3"
+# The cargo-fuzz workspace is deliberately detached (`fuzz/Cargo.toml` declares
+# its own `[workspace]`): the fuzzing toolchain (libfuzzer-sys — which builds
+# the NCSA-licensed libFuzzer C++ library — nightly sanitizer flags) stays out
+# of the shipping lockfile, the dependency/license policy, and every default
+# `cargo check`/`clippy`/`test --workspace` run. CI compiles and tests it with
+# an explicit manifest path (`fuzz-check` job).
+exclude = ["fuzz"]
 
 [workspace.package]
 edition = "2024"

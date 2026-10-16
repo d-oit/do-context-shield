@@ -18,6 +18,23 @@ updates:
         update-types:
           - version-update:semver-major
 
+  # The detached fuzz workspace has its own committed lockfile, which the root
+  # cargo entry does not cover; without this it goes stale silently.
+  - package-ecosystem: cargo
+    directory: "/fuzz"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      fuzz-dependencies:
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:

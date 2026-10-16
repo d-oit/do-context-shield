@@ -1,8 +1,30 @@
-AIzaSyD123456789012345678901234567890_
-glpat-abcdef12345678901234.v1.route
-password="my secret passphrase with spaces"
-API_SECRET='s3cr3t#pass;!'
-AIzaSyD1234567890123456789012345678901
-glpat-12345678901234567890-
-sk-ant-api03-abcdef12345678901234567890
-Multibyte UTF-8 string: 🚀 private value user@domain.com & 🔒 AIzaSyD123456789012345678901234567890_
+# Fuzz seeds for `fuzz_detector_regex`. Every non-comment line pins one
+# CHANGELOG regression that `fuzz/tests/seed_corpus.rs` re-asserts by exact
+# kind and span. Fake credentials carry the marker word SYNTHETIC so the
+# gitleaks allowlist (`.gitleaks.toml`) can ignore the marked value itself
+# while scanning stays active for everything else under `fuzz/`.
+#
+# exact-width google_api_key whose 35-character tail ends in `_` (Fixed)
+AIzaSYNTHETIC0123456789012345678901234_
+# routable glpat payload with a trailing `.routing` suffix
+glpat-SYNTHETICabcdef1234567890.v1.route
+# versioned routable glpat payload (`.version.routing`)
+glpat-SYNTHETICabcdef1234567890.01.us01abcd123
+# 19-character glpat payload with the trailing-hyphen tail
+glpat-SYNTHETIC1234567890-
+# modern Anthropic key at the minimum payload width
+sk-ant-api03-SYNTHETICAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+# OpenAI project key at the minimum payload width
+sk-proj-SYNTHETICAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+# fine-grained GitHub PAT (github_pat_) and classic ghp_ form
+github_pat_SYNTHETICAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ghp_SYNTHETIC0123456789012
+# Azure storage connection string with `==` base64 padding
+DefaultEndpointsProtocol=https;AccountName=syntheticacct;AccountKey=SYNTHETICBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB==;EndpointSuffix=core.windows.net
+# database URI with embedded credentials on a non-domain host
+postgres://user:SYNTHETICpw@localhost:5432/appdb
+# quoted generic-secret assignments with spaces and punctuation
+password="SYNTHETIC passphrase with spaces"
+API_SECRET='SYNTHETIC-pass;!'
+# multibyte text: an email and an underscore-final google key in emoji prose
+Multibyte UTF-8 string: 🚀 private value user@domain.com & 🔒 AIzaSYNTHETIC0123456789012345678901234_
