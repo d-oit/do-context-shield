@@ -46,6 +46,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Found by the `fuzz_sanitize_pipeline` target, which is back in the scheduled
   `fuzz.yml` matrix with a `glued_duplicate` seed pinning the refusal.
 
+- Hardened the redaction postcondition above against two bypasses found in
+  review. A plan decision must now carry the same kind, span, and value as the
+  detected entity it decides: a policy answering with a decoy value had the
+  decoy checked while the real value survived. And a `Keep` on another entity
+  carrying the same bytes no longer exempts a value some decision removes — a
+  detector labelling one secret under both a secret and a non-secret kind made
+  the default policy redact one span and keep the other, returning the raw
+  value for a local recipient. Both bypasses now fail closed, with
+  failing-before regressions in
+  `crates/privacy-core/src/tests/{redaction,policy}.rs`.
+
 - `google_api_key` detection now covers exact-width keys whose 35-character
   tail ends in `_` (`crates/detector-regex`): the final word-character class
   of the exact-width pattern was `[0-9A-Za-z]`, so an underscore-final

@@ -95,3 +95,17 @@ fn reversible_action_on_secret_fails_closed() {
         );
     }
 }
+
+#[test]
+fn substituted_value_fails_closed() {
+    // The post-transformation guard reads the plan's entity value, so a policy
+    // must not be able to answer with a decoy value for the bytes it was asked
+    // to decide: the real value would then survive the check.
+    let mut pipeline = with_policy(FixedPlanPolicy(vec![PlannedEntity {
+        entity: entity("email", 0, 17, "decoy@example.com"),
+        action: Action::Pseudonymize,
+    }]));
+    let error = sanitize_err(&mut pipeline, "alice@example.com");
+    assert!(matches!(error, PipelineError::Policy(_)), "{error:?}");
+    assert!(error.to_string().contains("does not match"), "{error}");
+}

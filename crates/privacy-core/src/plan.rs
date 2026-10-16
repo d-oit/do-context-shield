@@ -1,7 +1,6 @@
 //! Plan postconditions on the transformer's returned text.
 
 use do_context_shield_plugin_api::{Action, PlannedEntity, TransformError};
-use std::collections::HashSet;
 
 /// Validate the transformed text against the plan it was produced from.
 ///
@@ -14,29 +13,28 @@ use std::collections::HashSet;
 /// this rule; this check applies it centrally, so the promise holds for every
 /// transformer, built-in or process.
 ///
+/// A `Keep` on *another* entity carrying the same bytes never exempts the
+/// value. A detector that labels one secret as both a secret kind and a
+/// non-secret kind makes the default policy redact one span and keep the other
+/// (a local recipient keeps every remaining non-secret value), and an
+/// exemption on the kept alias would return the raw secret. A plan that both
+/// removes and keeps identical bytes is contradictory, so the pipeline fails
+/// closed rather than pick a winner.
+///
 /// # Errors
 ///
 /// Returns [`TransformError::Message`] naming the kind — never the value —
-/// when the text still contains the value of an entity the plan redacts or
-/// pseudonymizes, unless the identical value is also planned to be kept.
+/// when the text still contains the value of an entity the plan removes.
 pub(crate) fn validate_transformed_text(
     plan: &[PlannedEntity],
     text: &str,
 ) -> Result<(), TransformError> {
-    let kept: HashSet<&str> = plan
-        .iter()
-        .filter(|planned| planned.action == Action::Keep)
-        .map(|planned| planned.entity.value.as_str())
-        .collect();
     for planned in plan {
         let removes_value = matches!(
             planned.action,
             Action::Pseudonymize | Action::Redact | Action::Block
         );
-        if removes_value
-            && text.contains(&planned.entity.value)
-            && !kept.contains(planned.entity.value.as_str())
-        {
+        if removes_value && text.contains(&planned.entity.value) {
             return Err(TransformError::Message(format!(
                 "transformed text still contains the value of kind `{}`, which the plan removes",
                 planned.entity.kind

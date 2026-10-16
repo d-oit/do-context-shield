@@ -374,16 +374,17 @@ fn validate_spans(input: &str, entities: &[Entity]) -> Result<Vec<Entity>, Pipel
 /// Validate the policy plan against the entity list it was asked to decide.
 ///
 /// The policy contract is exactly one decision per detected entity, for the
-/// same kind and span; a plan that drops an entity would let its raw value
-/// pass through undecided. A secret-kind entity must be redacted (or blocked
-/// or sent to review), never kept or pseudonymized into a reversible vault
+/// same kind, span, and value; a plan that drops an entity or rewrites its
+/// value would let its raw value pass through undecided — and the value is
+/// what the post-transformation check reads. A secret-kind entity must be
+/// redacted (or blocked), never kept or pseudonymized into a reversible vault
 /// mapping.
 ///
 /// # Errors
 ///
 /// Returns [`PipelineError::Policy`] when the plan length differs from the
-/// entity list, a decision substitutes another kind or span, or a secret-kind
-/// entity carries a reversible action.
+/// entity list, a decision substitutes another kind, span, or value, or a
+/// secret-kind entity carries a reversible action.
 fn validate_plan(entities: &[Entity], plan: &[PlannedEntity]) -> Result<(), PipelineError> {
     if plan.len() != entities.len() {
         return Err(PipelineError::Policy(PolicyError::Message(format!(
@@ -396,9 +397,10 @@ fn validate_plan(entities: &[Entity], plan: &[PlannedEntity]) -> Result<(), Pipe
         if planned.entity.kind != entity.kind
             || planned.entity.start != entity.start
             || planned.entity.end != entity.end
+            || planned.entity.value != entity.value
         {
             return Err(PipelineError::Policy(PolicyError::Message(format!(
-                "policy decision does not match the detected entity at {}..{}",
+                "policy decision does not match the detected entity at {}..{}: kind, span, or value differs",
                 entity.start, entity.end
             ))));
         }
