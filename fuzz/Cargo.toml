@@ -1,0 +1,45 @@
+[package]
+name = "do-context-shield-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+do-context-shield-core = { path = "../crates/privacy-core" }
+do-context-shield-detector-regex = { path = "../crates/detector-regex" }
+do-context-shield-policy-default = { path = "../crates/policy-default" }
+do-context-shield-transformer-pseudonymize = { path = "../crates/transformer-pseudonymize" }
+do-context-shield-vault-memory = { path = "../crates/vault-memory" }
+do-context-shield-vault-json = { path = "../crates/vault-json" }
+do-context-shield-mcp-server = { path = "../crates/mcp-server" }
+do-context-shield-plugin-api = { path = "../crates/plugin-api" }
+tempfile = "3.10"
+serde_json = "1.0"
+
+[[bin]]
+name = "fuzz_detector_regex"
+path = "fuzz_targets/fuzz_detector_regex.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_sanitize_pipeline"
+path = "fuzz_targets/fuzz_sanitize_pipeline.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_vault_json"
+path = "fuzz_targets/fuzz_vault_json.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_mcp_parse"
+path = "fuzz_targets/fuzz_mcp_parse.rs"
+test = false
+doc = false

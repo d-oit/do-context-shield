@@ -133,6 +133,16 @@ jobs:
       - name: Evidence freshness
         run: do-harness status --set ci
 
+  fuzz-check:
+    name: Fuzz targets check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Check fuzz targets compilation
+        run: cargo check --package do-context-shield-fuzz --all-targets
+
   publish-check:
     name: Publish check
     runs-on: ubuntu-24.04
@@ -174,13 +184,13 @@ jobs:
 
   ci-success:
     name: CI Success
-    needs: [fmt, clippy, test, cross-platform, audit, deny, structure, harness, publish-check]
+    needs: [fmt, clippy, test, cross-platform, audit, deny, structure, harness, fuzz-check, publish-check]
     runs-on: ubuntu-24.04
     if: always()
     steps:
       - name: Check all jobs passed
         run: |
-          for res in "${{ needs.fmt.result }}" "${{ needs.clippy.result }}" "${{ needs.test.result }}" "${{ needs.cross-platform.result }}" "${{ needs.audit.result }}" "${{ needs.deny.result }}" "${{ needs.structure.result }}" "${{ needs.harness.result }}" "${{ needs.publish-check.result }}"; do
+          for res in "${{ needs.fmt.result }}" "${{ needs.clippy.result }}" "${{ needs.test.result }}" "${{ needs.cross-platform.result }}" "${{ needs.audit.result }}" "${{ needs.deny.result }}" "${{ needs.structure.result }}" "${{ needs.harness.result }}" "${{ needs.fuzz-check.result }}" "${{ needs.publish-check.result }}"; do
             if [ "$res" != "success" ]; then
               echo "Required CI job did not succeed: $res"
               exit 1

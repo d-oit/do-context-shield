@@ -1,0 +1,63 @@
+---
+name: Fuzz
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'crates/**'
+      - 'fuzz/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+  schedule:
+    - cron: "0 2 * * 0"  # Weekly Sunday 02:00 UTC
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: "Fuzz duration in seconds (max 3600)"
+        default: "300"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_BUILD_JOBS: "2"
+  CARGO_INCREMENTAL: "0"
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  fuzz:
+    name: Fuzz Run
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: nightly
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: cargo-fuzz
+      - name: Run fuzz_detector_regex
+        run: |
+          DURATION="${{ inputs.duration || 300 }}"
+          if [ "$DURATION" -gt 3600 ]; then DURATION=3600; fi
+          cargo fuzz run fuzz_detector_regex -- -max_total_time=$DURATION
+      - name: Run fuzz_sanitize_pipeline
+        run: |
+          DURATION="${{ inputs.duration || 300 }}"
+          if [ "$DURATION" -gt 3600 ]; then DURATION=3600; fi
+          cargo fuzz run fuzz_sanitize_pipeline -- -max_total_time=$DURATION
+      - name: Run fuzz_vault_json
+        run: |
+          DURATION="${{ inputs.duration || 300 }}"
+          if [ "$DURATION" -gt 3600 ]; then DURATION=3600; fi
+          cargo fuzz run fuzz_vault_json -- -max_total_time=$DURATION
+      - name: Run fuzz_mcp_parse
+        run: |
+          DURATION="${{ inputs.duration || 300 }}"
+          if [ "$DURATION" -gt 3600 ]; then DURATION=3600; fi
+          cargo fuzz run fuzz_mcp_parse -- -max_total_time=$DURATION

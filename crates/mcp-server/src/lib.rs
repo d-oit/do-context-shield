@@ -15,6 +15,17 @@ mod vault;
 use crate::handle::handle_request;
 use crate::vault::build_vault;
 
+/// Internal entrypoint exported for fuzzing MCP request handling.
+#[doc(hidden)]
+pub fn handle_request_for_fuzzing(
+    pipeline: &mut PrivacyPipeline,
+    tools: ToolSet,
+    default_context: &ProcessingContext,
+    line: &str,
+) -> Result<Option<serde_json::Value>, Box<dyn std::error::Error>> {
+    handle_request(pipeline, tools, default_context, line)
+}
+
 /// One MCP tool, as accepted by `--tools` and offered in `tools/list`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ToolName {

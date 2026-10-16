@@ -1,0 +1,62 @@
+---
+name: Mutation Testing
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+  schedule:
+    - cron: '0 3 * * 1'  # Weekly Monday 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+  CARGO_BUILD_JOBS: "2"
+  CARGO_INCREMENTAL: "0"
+
+concurrency:
+  group: mutants-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mutants:
+    name: cargo-mutants
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: cargo-mutants
+
+      - name: Run mutation tests on security-critical crates
+        run: |
+          cargo mutants \
+            --package do-context-shield-detector-regex \
+            --package do-context-shield-core \
+            --package do-context-shield-policy-default \
+            --package do-context-shield-policy-matrix \
+            --package do-context-shield-vault-json \
+            --package do-context-shield-vault-memory \
+            --package do-context-shield-transformer-generalize \
+            --package do-context-shield-transformer-mask \
+            --package do-context-shield-transformer-pseudonymize \
+            --jobs 2
+        continue-on-error: true
+
+      - name: Upload mutation report
+        uses: actions/upload-artifact@0b2256b8c012f089002d42074150a36ed90754b3 # v4.4.3
+        if: always()
+        with:
+          name: mutants-report
+          path: mutants.out/
+          retention-days: 30
