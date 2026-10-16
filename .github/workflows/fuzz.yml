@@ -38,11 +38,7 @@ jobs:
       matrix:
         target:
           - fuzz_detector_regex
-          # Excluded until the credential word-boundary defect is fixed (see
-          # plans/backlog.md, "Open defect"). Deviation from "never weaken the
-          # sensor that fired", approved by the maintainer: the target's seed
-          # invariant still runs in ci.yml's fuzz-check job via seed_corpus.
-          # Re-add `fuzz_sanitize_pipeline` when that fix lands.
+          - fuzz_sanitize_pipeline
           - fuzz_vault_json
           - fuzz_mcp_parse
     steps:

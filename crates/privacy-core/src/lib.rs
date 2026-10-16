@@ -193,6 +193,10 @@ impl PrivacyPipeline {
             .transformer
             .transform(input, &plan, scope, self.vault.as_mut())
             .map_err(|error| scrub_transform(error, &sensitive))?;
+        // The plan's promise on the output, enforced for every transformer:
+        // a value the plan removes must not survive anywhere in the text.
+        plan::validate_transformed_text(&plan, &text)
+            .map_err(|error| scrub_transform(error, &sensitive))?;
         self.record(
             &audit::sanitize(scope, AuditOutcome::Ok, &AuditContext::from(context), &plan),
             &sensitive,
@@ -462,6 +466,7 @@ fn scrub_judge(error: JudgeError, sensitive: &[&str]) -> JudgeError {
 
 mod audit;
 pub mod canary;
+mod plan;
 
 #[cfg(test)]
 mod tests;

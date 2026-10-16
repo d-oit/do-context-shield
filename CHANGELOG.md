@@ -35,6 +35,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The pipeline enforces the plan's promise on the transformed text
+  (`crates/privacy-core/src/plan.rs`): `sanitize` now fails closed when a value
+  the plan redacts or pseudonymizes still appears anywhere in the output. A
+  duplicated secret sitting just outside every detectable span — one copy
+  glued to a word character, another hidden by a width boundary — was
+  previously redacted only at the detected span, so the raw value left the
+  boundary as "sanitized" text. The check applies to every transformer,
+  built-in or process, and its error names the entity kind, never the value.
+  Found by the `fuzz_sanitize_pipeline` target, which is back in the scheduled
+  `fuzz.yml` matrix with a `glued_duplicate` seed pinning the refusal.
+
 - `google_api_key` detection now covers exact-width keys whose 35-character
   tail ends in `_` (`crates/detector-regex`): the final word-character class
   of the exact-width pattern was `[0-9A-Za-z]`, so an underscore-final
