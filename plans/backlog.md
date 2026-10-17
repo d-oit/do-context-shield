@@ -92,12 +92,13 @@ work lands or the precondition expires.
 
 ## Open
 
-### Mutation-run findings: 62 missed mutants, 3 restore timeouts
+### Mutation-run findings: 31 survivors, 2 restore timeouts
 
-- **Measured** (manual dispatch 39009589543, 2026-10-17): 511 mutants in about six minutes on two cores — 385 caught, 62 missed, 61 unviable, 3 timeouts. The `mutants-report` artifact carries `mutants.out/{missed,timeout}.txt` and the per-mutant diffs.
-- **Timeouts**: three `+`-operator mutants in `PrivacyPipeline::restore` (`crates/privacy-core/src/lib.rs:221` and `:240`) hang the suite — no test bounds the placeholder scan.
-- **Missed**: 62 untested branches across the mutated crates; the report groups them by file.
-- **Next**: add the behavioral tests (start with the restore scan), then re-dispatch and expect both counts to fall. A raw mutation score is not proof of security.
+- **Measured** (manual dispatch 39012269650, 2026-10-17; workspace test scope, 8 shards): 511 mutants in ~16 minutes wall clock (8–16 minutes per shard) on two cores — 417 caught, 31 missed, 61 unviable, 2 timeouts. The earlier package-scoped dispatch (39009589543) reported 62 missed; **31 of those 62 are caught under the workspace scope and no mutant became newly missed**, so the drop is a measurement correction, not new tests. Reports: `gh run download --pattern 'mutants-report-shard-*'`.
+- **Scope correction (why the old list was inflated)**: cargo-mutants' default (`TestPackages::Mutated`) runs only the mutated package's own tests, so behavior a consumer crate asserts was invisible. `plugin-api` contracts dominated the old list (17 `traits.rs` + 15 `context.rs` survivors) because `privacy-core`, the CLI, and the MCP server hold that coverage — the five `validate_judgments` mutants were the clearest case (`traits.rs` now shows 1 survivor, `context.rs` 2). The workflow passes `--test-workspace true`.
+- **Timeouts**: two `+`-operator mutants in `PrivacyPipeline::restore` (`crates/privacy-core/src/lib.rs:221` and `:240`) still hang the suite — no test bounds the placeholder scan. The third (`:221` `+`→`-`) is now caught.
+- **Survivors to work (31)** — contract and vault plumbing, none in the redaction path: `plugin-api` (12) `Action::as_str`, `SemanticLabel::parse`'s `secret` arm, the `placeholder.rs` minted-token guards (3), the `spans.rs` `resolve_overlaps` bounds (2), `DataCategory::parse` arms (2), `audit.rs` `unix_now` (2); `vault-json` (6) `Lock::acquire`/`Drop`, `is_envelope`, `decode_hex`, `persist_locked`, `restrict_permissions`; `vault-memory` (6) the counter arithmetic and `expire`'s bounds and result; `privacy-core` (3) `expire_vault`, the two `validate_plan` disjunctions, and `canary::decode_hex`; `detector-regex` (2) `luhn_valid`'s `>` boundary and `iban_valid`'s `%`; `transformer-mask` (1) one bound. The per-shard `missed.txt` files carry the exact diffs.
+- **Next**: add the behavioral tests (start with the restore scan and the vault/contract bounds), then re-dispatch and expect both counts to fall. A raw mutation score is not proof of security.
 
 ## Blocked — approval-gated
 
