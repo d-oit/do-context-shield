@@ -400,5 +400,11 @@
     "rationale": "Regex detection is boundary- and width-based, so a second copy of a secret can sit just outside every detectable span, and replacing only the detected span would emit the original value as sanitized output. The process transformer already enforced this on its own output; enforcing it centrally makes the promise hold for built-in transformers too. The plan's value is validated because the postcondition reads it, and a keep alias is no exemption because a detector labelling one secret under both a secret and a non-secret kind would otherwise return the raw value; the refusal names the kind without echoing the value",
     "sensor": "cargo test -p do-context-shield-core (tests::redaction: glued duplicate, digit-glued duplicate, undetected pseudonymized copy, kept-value control, keep-alias refusal; tests::policy: substituted value) + cargo test --manifest-path fuzz/Cargo.toml --locked --test seed_corpus (sanitize_seed_fails_closed_when_a_copy_survives) + the fuzz_sanitize_pipeline target in the scheduled fuzz.yml matrix",
     "category": "security"
+  },
+  {
+    "invariant": "A persisted JSON vault file that cannot be parsed is refused with a typed error and left byte-for-byte unchanged — never rewritten into an empty vault — and every token the vault mints round-trips: it resolves in the minting instance, from a fresh instance over the same file, and stops resolving after `delete_scope`",
+    "rationale": "Silently starting over on an unreadable file would both invent data and destroy whatever the operator had persisted, and a token that fails to resolve (or keeps resolving after deletion) breaks restore and erasure; the fuzz target discarded every operation result, so none of these properties were asserted",
+    "sensor": "cargo test --manifest-path fuzz/Cargo.toml --locked --test seed_corpus (vault_seeds_pin_parse_errors_and_round_trips) + the fuzz_vault_json target in the scheduled fuzz.yml matrix",
+    "category": "security"
   }
 ]
