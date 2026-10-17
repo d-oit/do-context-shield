@@ -35,6 +35,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The scheduled-fuzz duration resolver is overflow-proof
+  (`scripts/fuzz-duration.sh`, used by `.github/workflows/fuzz.yml`). It
+  compared digit strings only after `$((10#…))`, so the manual-dispatch request
+  `18446744073709551615` wrapped to `-1` — neither zero nor above the cap — and
+  reached libFuzzer as `-max_total_time=-1`, which libFuzzer documents as
+  limiting the run only when positive, i.e. an unbounded run. The resolver now
+  compares digit counts and strings before any arithmetic, keeps the default,
+  cap, and rejections it always had, and exposes its modes as subcommands
+  (`resolve` / `self-test`) so a request like `--self-test` is validated as data
+  instead of being dispatched. stdout carries only the duration, and the
+  workflow re-asserts that shape and range where the value becomes
+  `-max_total_time`. The `fuzz-check` CI job runs the boundary table (oversized,
+  long-leading-zero, mode-looking, and rejected inputs), and the fuzz step
+  carries its own `timeout-minutes`, so the hard bound does not depend on the
+  arithmetic at all.
+
 - The pipeline enforces the plan's promise on the transformed text
   (`crates/privacy-core/src/plan.rs`): `sanitize` now fails closed when a value
   the plan redacts or pseudonymizes still appears anywhere in the output. A

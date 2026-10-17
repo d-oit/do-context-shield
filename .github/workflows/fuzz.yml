@@ -55,24 +55,32 @@ jobs:
       - name: Resolve fuzz duration
         env:
           REQUESTED: ${{ inputs.duration }}
+        # `resolve` keeps the untrusted value in its own argument slot, and the
+        # shape and range are asserted here — where the value becomes
+        # `-max_total_time` — independently of the resolver's own logic: any
+        # non-numeric text would be parsed as "no limit" by libFuzzer.
         run: |
-          requested="${REQUESTED:-300}"
-          if [[ ! "$requested" =~ ^[0-9]+$ ]]; then
-            echo "::error::duration must be a whole number of seconds, got '$requested'"
+          cap="$FUZZ_MAX_SECONDS"
+          if ! [[ "$cap" =~ ^[1-9][0-9]{0,3}$ ]]; then
+            echo "::error::FUZZ_MAX_SECONDS must be 1..9999 seconds, got '$cap'"
             exit 1
           fi
-          # 10# forces base 10 so a leading zero is not read as octal.
-          requested=$((10#$requested))
-          if (( requested == 0 )); then
-            echo "::error::duration must be at least 1 second"
+          resolved="$(bash scripts/fuzz-duration.sh resolve "$REQUESTED")"
+          if ! [[ "$resolved" =~ ^[1-9][0-9]{0,3}$ ]]; then
+            echo "::error::resolver returned '$resolved', expected a positive duration"
             exit 1
           fi
-          if (( requested > FUZZ_MAX_SECONDS )); then
-            requested=$FUZZ_MAX_SECONDS
+          # Both operands are at most four digits, so this cannot wrap.
+          if (( 10#$resolved > 10#$cap )); then
+            echo "::error::resolved duration $resolved exceeds the $cap s cap"
+            exit 1
           fi
-          echo "FUZZ_SECONDS=$requested" >> "$GITHUB_ENV"
-          echo "::notice::fuzzing ${{ matrix.target }} for ${requested}s"
+          echo "FUZZ_SECONDS=$resolved" >> "$GITHUB_ENV"
+          echo "::notice::fuzzing ${{ matrix.target }} for ${resolved}s"
       - name: Fuzz target
+        # A hard bound independent of the resolver: the step cannot outlive the
+        # 3600 s cap plus a nightly build, whatever FUZZ_SECONDS says.
+        timeout-minutes: 75
         env:
           TARGET: ${{ matrix.target }}
         # The first corpus directory is scratch space that receives new inputs
