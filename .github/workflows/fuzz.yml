@@ -22,6 +22,11 @@ env:
   CARGO_INCREMENTAL: "0"
   # Hard ceiling per target, applied in the shell regardless of the input.
   FUZZ_MAX_SECONDS: "3600"
+  # The repository pins 1.88.0 in rust-toolchain.toml, and that file wins over
+  # the toolchain the setup action installs: cargo-fuzz would then invoke stable
+  # rustc with `-Zsanitizer=…` and die with "the option `Z` is only accepted on
+  # the nightly compiler". The env var is the documented override.
+  RUSTUP_TOOLCHAIN: nightly
 
 concurrency:
   group: fuzz-${{ github.ref }}
@@ -88,7 +93,9 @@ jobs:
         # repository corpus never changes in CI.
         run: |
           mkdir -p "$RUNNER_TEMP/corpus/$TARGET"
-          cargo fuzz run "$TARGET" \
+          # cargo-fuzz defaults to x86_64-unknown-linux-musl on Linux, and ASAN
+          # refuses a statically linked libc, so name the host target.
+          cargo fuzz run --target x86_64-unknown-linux-gnu "$TARGET" \
             "$RUNNER_TEMP/corpus/$TARGET" \
             "fuzz/corpus/$TARGET" \
             -- -max_total_time="$FUZZ_SECONDS"
