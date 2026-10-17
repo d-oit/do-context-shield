@@ -43,6 +43,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The scheduled fuzz workflow now actually runs (`.github/workflows/fuzz.yml`):
+  its first dispatch failed on every target because `rust-toolchain.toml` pins
+  1.88.0 and overrides the toolchain the setup action installs, so cargo-fuzz
+  passed `-Zsanitizer=address` to stable rustc; the job now sets
+  `RUSTUP_TOOLCHAIN=nightly`. With nightly selected, cargo-fuzz then defaulted
+  to `x86_64-unknown-linux-musl`, where ASAN refuses a statically linked libc,
+  so the step also names the host target `x86_64-unknown-linux-gnu`. A dispatch
+  of the branch ran all four targets successfully, and both failure modes are
+  recorded in the harness heuristics.
+
 - The scheduled-fuzz duration resolver is overflow-proof
   (`scripts/fuzz-duration.sh`, used by `.github/workflows/fuzz.yml`). It
   compared digit strings only after `$((10#…))`, so the manual-dispatch request
