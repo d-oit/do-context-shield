@@ -36,9 +36,12 @@ jobs:
           tool: cargo-mutants
 
       # cargo-mutants exit codes (src/exit_code.rs): 0 = every mutant caught,
-      # 2 = one or more mutants survived (a test gap, reported), anything else
-      # (1 usage, 3 timeout, 4 baseline failed, 70 internal) = the tool or the
-      # setup failed and must fail the job. Surviving mutants never fail it.
+      # 2 = one or more mutants missed, 3 = one or more mutant tests timed out
+      # (a mutant hung the suite) — 2 and 3 are result classes and only warn,
+      # because the report is the signal — and anything else (1 usage,
+      # 4 baseline failed, 5/6 diff filters, 70 internal) means the tool or the
+      # setup failed and must fail the job. The first real dispatch (511
+      # mutants: 62 missed, 3 timeouts) proved exit 3 is a result, not infra.
       - name: Run mutation tests on security-critical crates
         id: mutants
         run: |
@@ -63,6 +66,8 @@ jobs:
               echo "::notice::cargo-mutants: all mutants caught" ;;
             2)
               echo "::warning::cargo-mutants: surviving mutants found; see the mutants-report artifact" ;;
+            3)
+              echo "::warning::cargo-mutants: mutant tests timed out; see mutants.out/timeout.txt in the report" ;;
             *)
               echo "::error::cargo-mutants failed to run to a verdict (exit $status)"
               exit "$status" ;;

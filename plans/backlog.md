@@ -90,6 +90,15 @@ work lands or the precondition expires.
   (same-session ok; wrong session, unmarked text, and loose key permissions
   fail), and the verification gate.
 
+## Open
+
+### Mutation-run findings: 62 missed mutants, 3 restore timeouts
+
+- **Measured** (manual dispatch 39009589543, 2026-10-17): 511 mutants in about six minutes on two cores — 385 caught, 62 missed, 61 unviable, 3 timeouts. The `mutants-report` artifact carries `mutants.out/{missed,timeout}.txt` and the per-mutant diffs.
+- **Timeouts**: three `+`-operator mutants in `PrivacyPipeline::restore` (`crates/privacy-core/src/lib.rs:221` and `:240`) hang the suite — no test bounds the placeholder scan.
+- **Missed**: 62 untested branches across the mutated crates; the report groups them by file.
+- **Next**: add the behavioral tests (start with the restore scan), then re-dispatch and expect both counts to fall. A raw mutation score is not proof of security.
+
 ## Blocked — approval-gated
 
 ### Client end-to-end checks are manual and require explicit human approval
