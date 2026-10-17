@@ -55,24 +55,18 @@ jobs:
       - name: Resolve fuzz duration
         env:
           REQUESTED: ${{ inputs.duration }}
+        # The resolver compares digit strings before any shell arithmetic: a
+        # request like 18446744073709551615 used to wrap to -1 (neither zero
+        # nor above the cap) and reach libFuzzer as `-max_total_time=-1`, which
+        # libFuzzer treats as no limit at all.
         run: |
-          requested="${REQUESTED:-300}"
-          if [[ ! "$requested" =~ ^[0-9]+$ ]]; then
-            echo "::error::duration must be a whole number of seconds, got '$requested'"
-            exit 1
-          fi
-          # 10# forces base 10 so a leading zero is not read as octal.
-          requested=$((10#$requested))
-          if (( requested == 0 )); then
-            echo "::error::duration must be at least 1 second"
-            exit 1
-          fi
-          if (( requested > FUZZ_MAX_SECONDS )); then
-            requested=$FUZZ_MAX_SECONDS
-          fi
-          echo "FUZZ_SECONDS=$requested" >> "$GITHUB_ENV"
-          echo "::notice::fuzzing ${{ matrix.target }} for ${requested}s"
+          resolved="$(bash scripts/fuzz-duration.sh "$REQUESTED")"
+          echo "FUZZ_SECONDS=$resolved" >> "$GITHUB_ENV"
+          echo "::notice::fuzzing ${{ matrix.target }} for ${resolved}s"
       - name: Fuzz target
+        # A hard bound independent of the resolver: the step cannot outlive the
+        # 3600 s cap plus a nightly build, whatever FUZZ_SECONDS says.
+        timeout-minutes: 75
         env:
           TARGET: ${{ matrix.target }}
         # The first corpus directory is scratch space that receives new inputs

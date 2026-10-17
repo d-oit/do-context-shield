@@ -146,6 +146,8 @@ jobs:
       # manifest path. `--locked` fails when fuzz/Cargo.lock is stale. Smoke
       # only: the seed-corpus regression tests and target compilation, never a
       # fuzzing run (that lives in fuzz.yml).
+      - name: Self-test the fuzz duration resolver
+        run: bash scripts/fuzz-duration.sh --self-test
       - name: Check fuzz workspace formatting
         run: cargo fmt --manifest-path fuzz/Cargo.toml -- --check
       - name: Lint fuzz workspace
