@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The `fuzz_vault_json` target asserts the JSON vault's persisted-state
+  contract instead of only driving its API: a malformed file is refused with a
+  typed error and left byte-for-byte alone (it is never rewritten into an empty
+  vault), and a token the vault mints resolves in the minting instance, from a
+  fresh instance over the same file, and stops resolving after `delete_scope`.
+  The committed vault seeds pin the same two halves deterministically in
+  `fuzz/tests/seed_corpus.rs`.
+
 - Fuzzing and mutation-test signal for the secret-detection and sanitization boundary (`fuzz/`, `.github/workflows/fuzz.yml`, `.github/workflows/mutants.yml`). Four cargo-fuzz targets cover the regex detector, the sanitize pipeline (redaction invariant), the JSON vault parser, and the MCP request parser. The `fuzz/` workspace is detached from the shipping lockfile and policy, so libFuzzer never enters the dependency closure. `fuzz/tests/seed_corpus.rs` pins every committed CHANGELOG regression seed at its exact kind and span and keeps every seeded credential `SYNTHETIC`-marked, so the gitleaks allowlist stays scoped to the marked value rather than to a path. The `fuzz-check` CI job compiles the targets and runs the seed tests on every pull request; fuzzing and mutation testing run only on schedule or manual dispatch. Mutation reports keep surviving mutants (exit 2) separate from tool failures, which fail the job.
 
 - Keyed egress canary markers (`crates/privacy-core/src/canary.rs`):

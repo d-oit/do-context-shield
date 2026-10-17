@@ -14,10 +14,11 @@
 use do_context_shield_core::PrivacyPipeline;
 use do_context_shield_detector_regex::RegexDetector;
 use do_context_shield_plugin_api::{
-    DataCategory, Detector, ProcessingContext, RecipientClass, ScopeId, is_secret_kind,
+    DataCategory, Detector, ProcessingContext, RecipientClass, ScopeId, Vault, is_secret_kind,
 };
 use do_context_shield_policy_default::DefaultPolicy;
 use do_context_shield_transformer_pseudonymize::PseudonymizingTransformer;
+use do_context_shield_vault_json::JsonVault;
 use do_context_shield_vault_memory::MemoryVault;
 use std::error::Error;
 
@@ -231,4 +232,41 @@ fn sanitize_seed_fails_closed_when_a_copy_survives() -> Result<(), Box<dyn Error
             Ok(())
         }
     }
+}
+
+/// The vault seeds pin both halves of the persisted-state contract: malformed
+/// bytes are refused with a typed error and left alone, and a valid state opens
+/// and round-trips an insert through the same file.
+#[test]
+fn vault_seeds_pin_parse_errors_and_round_trips() -> Result<(), Box<dyn Error>> {
+    let dir = tempfile::tempdir()?;
+
+    let malformed = corpus_text("fuzz_vault_json/malformed_vault.json")?;
+    let malformed_path = dir.path().join("malformed.json");
+    std::fs::write(&malformed_path, &malformed)?;
+    if JsonVault::open(&malformed_path).is_ok() {
+        return Err("a malformed vault seed opened as a valid vault".into());
+    }
+    if std::fs::read(&malformed_path)?.as_slice() != malformed.as_bytes() {
+        return Err("a refused vault file was rewritten".into());
+    }
+
+    let sample = corpus_text("fuzz_vault_json/sample_vault.json")?;
+    let sample_path = dir.path().join("sample.json");
+    std::fs::write(&sample_path, &sample)?;
+    let mut vault = JsonVault::open(&sample_path)?;
+    let scope = ScopeId("seed-corpus".to_owned());
+    let mapping = vault.get_or_insert(&scope, "email", "round-trip@example.com")?;
+    match vault.resolve(&scope, &mapping.token)? {
+        Some(resolved) if resolved.original == "round-trip@example.com" => {}
+        other => {
+            // Name the shape only: never echo a mapping.
+            return Err(format!(
+                "vault seed round-trip failed (a mapping came back: {})",
+                other.is_some()
+            )
+            .into());
+        }
+    }
+    Ok(())
 }
