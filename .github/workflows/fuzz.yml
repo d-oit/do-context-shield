@@ -93,7 +93,9 @@ jobs:
         # repository corpus never changes in CI.
         run: |
           mkdir -p "$RUNNER_TEMP/corpus/$TARGET"
-          cargo fuzz run "$TARGET" \
+          # cargo-fuzz defaults to x86_64-unknown-linux-musl on Linux, and ASAN
+          # refuses a statically linked libc, so name the host target.
+          cargo fuzz run --target x86_64-unknown-linux-gnu "$TARGET" \
             "$RUNNER_TEMP/corpus/$TARGET" \
             "fuzz/corpus/$TARGET" \
             -- -max_total_time="$FUZZ_SECONDS"
