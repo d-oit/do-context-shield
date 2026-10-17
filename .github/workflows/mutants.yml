@@ -29,10 +29,13 @@ jobs:
     timeout-minutes: 120
     strategy:
       # Every shard reports its own verdict; one failing shard must not hide
-      # the others' results.
+      # the others' results. cargo-mutants shard indices are 0-based and must
+      # satisfy k < n, so the valid values for n=8 are 0/8 through 7/8 (an
+      # eighth shard labeled 8/8 is rejected as a usage error, and starting at
+      # 1/8 would never test the first slice).
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
