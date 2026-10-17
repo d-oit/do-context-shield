@@ -67,6 +67,9 @@ jobs:
       # so the whole test suite runs eight times in parallel instead of
       # sequentially; `gh run download` with
       # `--pattern 'mutants-report-shard-*'` merges the reports.
+      #
+      # Mutants proven equivalent are excluded with their proof in
+      # `.cargo/mutants.toml`, so the survivor list stays triageable.
       - name: Run mutation tests on security-critical crates (shard ${{ matrix.shard }}/8)
         id: mutants
         run: |
