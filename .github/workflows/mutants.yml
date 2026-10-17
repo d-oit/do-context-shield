@@ -24,9 +24,18 @@ concurrency:
 
 jobs:
   mutants:
-    name: cargo-mutants
+    name: cargo-mutants (shard ${{ matrix.shard }}/8)
     runs-on: ubuntu-24.04
-    timeout-minutes: 240
+    timeout-minutes: 120
+    strategy:
+      # Every shard reports its own verdict; one failing shard must not hide
+      # the others' results. cargo-mutants shard indices are 0-based and must
+      # satisfy k < n, so the valid values for n=8 are 0/8 through 7/8 (an
+      # eighth shard labeled 8/8 is rejected as a usage error, and starting at
+      # 1/8 would never test the first slice).
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
@@ -42,7 +51,23 @@ jobs:
       # 4 baseline failed, 5/6 diff filters, 70 internal) means the tool or the
       # setup failed and must fail the job. The first real dispatch (511
       # mutants: 62 missed, 3 timeouts) proved exit 3 is a result, not infra.
-      - name: Run mutation tests on security-critical crates
+      #
+      # --test-workspace true is load-bearing. Without it cargo-mutants tests a
+      # mutant only against the mutated package's own tests
+      # (TestPackages::Mutated is the default), so a mutant whose behavior a
+      # consumer crate asserts survives falsely: the first run listed three
+      # `plugin-api::validate_judgments` mutants as missed although privacy-core
+      # tests the rejected-index and duplicate-index paths. Under the workspace
+      # scope those mutants are caught. The unmutated baseline stays
+      # package-scoped, so a test that is red elsewhere in the workspace would
+      # "catch" every mutant — the workspace suite stays green on main, which is
+      # what keeps this signal readable.
+      #
+      # Each shard takes its slice of the (filtered, then shuffled) mutant list,
+      # so the whole test suite runs eight times in parallel instead of
+      # sequentially; `gh run download` with
+      # `--pattern 'mutants-report-shard-*'` merges the reports.
+      - name: Run mutation tests on security-critical crates (shard ${{ matrix.shard }}/8)
         id: mutants
         run: |
           set +e
@@ -57,19 +82,21 @@ jobs:
             --package do-context-shield-transformer-generalize \
             --package do-context-shield-transformer-mask \
             --package do-context-shield-transformer-pseudonymize \
+            --test-workspace true \
+            --shard ${{ matrix.shard }}/8 \
             --jobs 2 \
             --timeout-multiplier 3
           status=$?
           echo "exit_code=$status" >> "$GITHUB_OUTPUT"
           case "$status" in
             0)
-              echo "::notice::cargo-mutants: all mutants caught" ;;
+              echo "::notice::cargo-mutants shard ${{ matrix.shard }}/8: all mutants caught" ;;
             2)
-              echo "::warning::cargo-mutants: surviving mutants found; see the mutants-report artifact" ;;
+              echo "::warning::cargo-mutants shard ${{ matrix.shard }}/8: surviving mutants found; see the mutants-report-shard-${{ matrix.shard }} artifact" ;;
             3)
-              echo "::warning::cargo-mutants: mutant tests timed out; see mutants.out/timeout.txt in the report" ;;
+              echo "::warning::cargo-mutants shard ${{ matrix.shard }}/8: mutant tests timed out; see mutants.out/timeout.txt in the report" ;;
             *)
-              echo "::error::cargo-mutants failed to run to a verdict (exit $status)"
+              echo "::error::cargo-mutants shard ${{ matrix.shard }}/8 failed to run to a verdict (exit $status)"
               exit "$status" ;;
           esac
 
@@ -77,7 +104,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
-          name: mutants-report
+          name: mutants-report-shard-${{ matrix.shard }}
           path: mutants.out/
           if-no-files-found: warn
           retention-days: 30

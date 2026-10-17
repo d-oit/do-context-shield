@@ -391,7 +391,7 @@
   },
   {
     "invariant": "Fuzzing and mutation testing are scheduled or manually dispatched only and never a pull-request merge gate; the PR-time gate is the fuzz-check job, which compiles the targets and runs the seed tests",
-    "rationale": "Full fuzz and mutation runs are heavy — a manual mutation dispatch measured 511 mutants in about six minutes on two cores — and do not belong on every PR; missed mutants (exit 2) and mutant test timeouts (exit 3) are test-gap signals that must only warn, while tool or setup failures (1 usage, 4 baseline failed, 5/6 diff filters, 70 internal) fail the job, so the signal is never silently skipped",
+    "rationale": "Full fuzz and mutation runs are heavy — a workspace-scoped manual mutation dispatch measured 511 mutants in 8–16 minutes per shard on two cores, and the test scope changes the numbers materially — and do not belong on every PR; every mutant must be tested against the whole workspace (`--test-workspace true`), because cargo-mutants' default (`TestPackages::Mutated`) runs only the mutated package's own tests and a mutant whose coverage lives in a consumer crate would survive falsely (privacy-core asserts the `plugin-api::validate_judgments` paths), with the mutant list sharded so each job stays inside its timeout; missed mutants (exit 2) and mutant test timeouts (exit 3) are test-gap signals that must only warn, while tool or setup failures (1 usage, 4 baseline failed, 5/6 diff filters, 70 internal) fail the job, so the signal is never silently skipped",
     "sensor": "review-only (workflow triggers in .github/workflows/fuzz.yml and mutants.yml; fuzz-check compile gate in ci.yml)",
     "category": "workflow"
   },
