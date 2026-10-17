@@ -2,8 +2,17 @@
 # fuzz-duration.sh — resolve the fuzz duration for `.github/workflows/fuzz.yml`.
 #
 # Usage:
-#   scripts/fuzz-duration.sh [<seconds>]   # print the clamped duration
-#   scripts/fuzz-duration.sh --self-test   # run the boundary table
+#   scripts/fuzz-duration.sh resolve [<seconds>]   # prints the duration on stdout
+#   scripts/fuzz-duration.sh self-test             # boundary table, on stderr
+#
+# stdout is reserved for the resolved duration. The self-test reports on stderr
+# on purpose: the workflow captures stdout into `-max_total_time`, where any
+# non-numeric text is not a duration (libFuzzer limits the run only for a
+# positive value), so a message must never be able to land there.
+#
+# The modes are subcommands, never flags matched against the caller's data: the
+# workflow runs `resolve "$REQUESTED"`, so a request like `--self-test` is
+# validated as data and rejected instead of being dispatched as a mode.
 #
 # A request is digits only, leading zeros are ignored, and an absent or empty
 # request means the default. The printed value is between 1 and the cap
@@ -12,13 +21,13 @@
 # Why the digit-string dance: `$((10#…))` wraps around the shell's signed
 # 64-bit arithmetic, so `18446744073709551615` became `-1` — neither zero nor
 # greater than the cap, so it passed both checks and reached libFuzzer as
-# `-max_total_time=-1`, a flag documented as limiting the run only when it is
-# positive (an unbounded fuzz run). Comparing digit counts and then digit
-# strings keeps every parsed value small and every oversized request clamped.
+# `-max_total_time=-1`, which libFuzzer documents as limiting the run only when
+# positive (an unbounded fuzz run). Comparing digit counts and digit strings
+# keeps every parsed value small and every oversized request clamped.
 #
-# Sensor: none of its own; `--self-test` runs in the CI `fuzz-check` job, and
-# the fuzz step carries its own `timeout-minutes` so the bound does not depend
-# on this arithmetic.
+# Sensor: none of its own; `self-test` runs in the CI `fuzz-check` job, and the
+# fuzz step carries its own `timeout-minutes` so the bound does not depend on
+# this arithmetic.
 set -euo pipefail
 
 DEFAULT_SECONDS=300
@@ -89,9 +98,10 @@ resolve() {
     printf '%s\n' "$((10#$capped))"
 }
 
+# Run the boundary table. Everything goes to stderr; stdout stays empty.
 self_test() {
     local failures=0
-    local input expected got
+    local input expected got status out
     while IFS='|' read -r input expected; do
         if [[ -z "$input" && -z "$expected" ]]; then
             continue
@@ -125,21 +135,59 @@ abc|<error>
  300|<error>
 1; rm -rf /|<error>
 CASES
+
+    # The workflow entry point is `resolve "$REQUESTED"`: a request that looks
+    # like a mode or a flag must be rejected as data, never dispatched.
+    for weird in --self-test self-test --help resolve -300 '1; rm -rf /'; do
+        status=0
+        out="$(bash "$0" resolve "$weird" 2>/dev/null)" || status=$?
+        if [[ "$status" != 2 || -n "$out" ]]; then
+            printf 'FAIL entry "resolve %s" -> exit %s stdout %q, expected exit 2 and empty stdout\n' \
+                "$weird" "$status" "$out" >&2
+            failures=$((failures + 1))
+        fi
+    done
+    # A stray mode-looking argument at the top level is a usage error: the
+    # modes are subcommands, not flags read from the same slot as the data.
+    for stray in --self-test --help bogus; do
+        status=0
+        out="$(bash "$0" "$stray" 2>/dev/null)" || status=$?
+        if [[ "$status" != 2 || -n "$out" ]]; then
+            printf 'FAIL entry "%s" -> exit %s stdout %q, expected exit 2 and empty stdout\n' \
+                "$stray" "$status" "$out" >&2
+            failures=$((failures + 1))
+        fi
+    done
+    # Positive control through the same entry point.
+    status=0
+    out="$(bash "$0" resolve 300 2>/dev/null)" || status=$?
+    if [[ "$status" != 0 || "$out" != "300" ]]; then
+        printf 'FAIL entry "resolve 300" -> exit %s stdout %q, expected exit 0 stdout 300\n' \
+            "$status" "$out" >&2
+        failures=$((failures + 1))
+    fi
+
     if (( failures > 0 )); then
         printf 'fuzz-duration self-test FAILED (%d cases)\n' "$failures" >&2
         return 1
     fi
-    printf 'fuzz-duration self-test OK\n'
+    printf 'fuzz-duration self-test OK\n' >&2
 }
 
 case "${1:-}" in
---self-test)
+resolve)
+    shift
+    if (( $# > 1 )); then
+        printf 'usage: %s resolve [<seconds>]\n' "$0" >&2
+        exit 2
+    fi
+    resolve "${1:-}"
+    ;;
+self-test)
     self_test
     ;;
---help | -h)
-    printf 'usage: %s [<seconds>|--self-test]\n' "$(basename "$0")"
-    ;;
 *)
-    resolve "${1:-}"
+    printf 'usage: %s resolve [<seconds>] | %s self-test\n' "$0" "$0" >&2
+    exit 2
     ;;
 esac
