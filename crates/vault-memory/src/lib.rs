@@ -168,6 +168,41 @@ mod tests {
     }
 
     #[test]
+    fn counters_increment_per_distinct_mapping() {
+        let mut vault = MemoryVault::default();
+        let scope = scope("s");
+        let first = stored(&mut vault, &scope, "email", "alice@example.com");
+        let second = stored(&mut vault, &scope, "email", "bob@example.com");
+        // Minted counters must run 1, 2 — an increment that multiplies or
+        // decrements would collide or go backwards across mappings.
+        assert_token(&first.token, "EMAIL", 1);
+        assert_token(&second.token, "EMAIL", 2);
+    }
+
+    #[test]
+    fn expire_purges_elapsed_mappings_and_keeps_fresh_ones() {
+        let mut elapsed = MemoryVault::with_ttl(Duration::ZERO);
+        stored(&mut elapsed, &scope("s"), "email", "alice@example.com");
+        match elapsed.expire() {
+            Ok(()) => {}
+            Err(error) => panic!("unexpected error: {error}"),
+        }
+        assert_eq!(elapsed.mappings.len(), 0, "elapsed mappings must be purged");
+
+        let mut fresh = MemoryVault::with_ttl(Duration::from_secs(3600));
+        stored(&mut fresh, &scope("s"), "email", "alice@example.com");
+        match fresh.expire() {
+            Ok(()) => {}
+            Err(error) => panic!("unexpected error: {error}"),
+        }
+        assert_eq!(
+            fresh.mappings.len(),
+            1,
+            "fresh mappings must survive expire"
+        );
+    }
+
+    #[test]
     fn same_value_under_different_kinds_gets_distinct_tokens() {
         let mut vault = MemoryVault::default();
         let scope = scope("s");

@@ -317,3 +317,150 @@ pub fn validate_judgments(len: usize, judgments: &[Judgment]) -> Result<(), Judg
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{JudgeError, Judgment, SemanticLabel, validate_judgments};
+    use crate::{Mapping, ScopeId, Vault, VaultError};
+
+    /// Vault that implements only the required methods, so the trait defaults
+    /// under test are the ones that run.
+    struct Stub;
+
+    impl Vault for Stub {
+        fn get_or_insert(
+            &mut self,
+            _scope: &ScopeId,
+            kind: &str,
+            original: &str,
+        ) -> Result<Mapping, VaultError> {
+            Ok(Mapping {
+                kind: kind.to_owned(),
+                original: original.to_owned(),
+                token: format!("tok-{original}"),
+            })
+        }
+
+        fn resolve(&self, _scope: &ScopeId, token: &str) -> Result<Option<Mapping>, VaultError> {
+            Ok(token.strip_prefix("tok-").map(|original| Mapping {
+                kind: "email".to_owned(),
+                original: original.to_owned(),
+                token: token.to_owned(),
+            }))
+        }
+    }
+
+    fn scope() -> ScopeId {
+        ScopeId("s".to_owned())
+    }
+
+    #[test]
+    fn default_batch_insert_keeps_length_and_order() {
+        let mut vault = Stub;
+        let items = [("email", "a@example.com"), ("phone", "555")];
+        match vault.get_or_insert_many(&scope(), &items) {
+            Ok(mappings) => {
+                assert_eq!(mappings.len(), 2);
+                assert_eq!(mappings[0].original, "a@example.com");
+                assert_eq!(mappings[1].original, "555");
+                assert_eq!(mappings[1].kind, "phone");
+            }
+            Err(error) => panic!("unexpected error: {error}"),
+        }
+    }
+
+    #[test]
+    fn default_batch_resolve_is_per_token_and_ordered() {
+        let vault = Stub;
+        match vault.resolve_many(&scope(), &["tok-a@example.com", "unknown"]) {
+            Ok(resolved) => {
+                assert_eq!(resolved.len(), 2);
+                assert_eq!(
+                    resolved[0]
+                        .as_ref()
+                        .map(|mapping| mapping.original.as_str()),
+                    Some("a@example.com")
+                );
+                assert!(resolved[1].is_none());
+            }
+            Err(error) => panic!("unexpected error: {error}"),
+        }
+    }
+
+    #[test]
+    fn default_scope_deletion_fails_instead_of_acknowledging() {
+        let mut vault = Stub;
+        assert!(vault.delete_scope(&scope()).is_err());
+    }
+
+    #[test]
+    fn semantic_labels_render_their_protocol_names() {
+        assert_eq!(SemanticLabel::Personal.as_str(), "personal");
+        assert_eq!(SemanticLabel::Business.as_str(), "business");
+        assert_eq!(SemanticLabel::Test.as_str(), "test");
+        assert_eq!(SemanticLabel::Secret.as_str(), "secret");
+    }
+
+    #[test]
+    fn judgment_index_reports_the_candidate_position() {
+        let labeled = Judgment::Labeled {
+            index: 3,
+            label: SemanticLabel::Personal,
+            confidence: 0.5,
+        };
+        assert_eq!(labeled.index(), 3);
+        assert_eq!(Judgment::Abstain { index: 5 }.index(), 5);
+    }
+
+    #[test]
+    fn valid_judgments_pass_including_abstentions() {
+        let judgments = [
+            Judgment::Labeled {
+                index: 0,
+                label: SemanticLabel::Business,
+                confidence: 1.0,
+            },
+            Judgment::Abstain { index: 1 },
+        ];
+        assert!(validate_judgments(2, &judgments).is_ok());
+    }
+
+    #[test]
+    fn index_equal_to_candidate_count_is_out_of_range() {
+        let judgments = [Judgment::Abstain { index: 2 }];
+        assert!(matches!(
+            validate_judgments(2, &judgments),
+            Err(JudgeError::IndexOutOfRange { index: 2, len: 2 })
+        ));
+    }
+
+    #[test]
+    fn duplicate_index_is_rejected() {
+        let judgments = [
+            Judgment::Abstain { index: 0 },
+            Judgment::Abstain { index: 0 },
+        ];
+        assert!(matches!(
+            validate_judgments(2, &judgments),
+            Err(JudgeError::DuplicateIndex { index: 0 })
+        ));
+    }
+
+    #[test]
+    fn confidence_outside_unit_interval_is_rejected() {
+        for confidence in [1.5_f32, -0.1] {
+            let judgments = [Judgment::Labeled {
+                index: 0,
+                label: SemanticLabel::Test,
+                confidence,
+            }];
+            assert!(
+                matches!(
+                    validate_judgments(1, &judgments),
+                    Err(JudgeError::ConfidenceOutOfRange { index: 0, .. })
+                ),
+                "confidence {confidence} must be rejected"
+            );
+        }
+    }
+}

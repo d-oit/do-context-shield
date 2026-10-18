@@ -149,8 +149,9 @@ pub enum VaultError {
 #[cfg(test)]
 mod tests {
     use super::{
-        Action, AuditEvent, AuditOperation, AuditOutcome, ScopeId, is_minted_placeholder_token,
-        is_placeholder_token, is_valid_placeholder_kind, mint_placeholder,
+        Action, AuditEvent, AuditOperation, AuditOutcome, DataCategory, ScopeId, SemanticLabel,
+        is_minted_placeholder_token, is_placeholder_token, is_valid_placeholder_kind,
+        mint_placeholder,
     };
 
     #[test]
@@ -211,6 +212,58 @@ mod tests {
             "audit stamp must be real Unix seconds: {}",
             event.time_unix
         );
+    }
+
+    #[test]
+    fn protocol_names_round_trip_through_parse() {
+        // Wire names are the process-protocol and config surface: every arm
+        // of both parses must resolve, and unknown names must stay rejected.
+        for (name, category) in [
+            ("non_personal", DataCategory::NonPersonal),
+            ("personal", DataCategory::Personal),
+            ("special_category", DataCategory::SpecialCategory),
+        ] {
+            assert_eq!(DataCategory::parse(name), Some(category), "{name}");
+            assert_eq!(category.as_str(), name);
+        }
+        assert_eq!(DataCategory::parse("nope"), None);
+        for (name, label) in [
+            ("personal", SemanticLabel::Personal),
+            ("business", SemanticLabel::Business),
+            ("test", SemanticLabel::Test),
+            ("secret", SemanticLabel::Secret),
+        ] {
+            assert_eq!(SemanticLabel::parse(name), Some(label), "{name}");
+        }
+        assert_eq!(SemanticLabel::parse("nope"), None);
+    }
+
+    #[test]
+    fn minted_token_guards_reject_entropy_kind_and_counter_shapes() {
+        // Each guard is load-bearing: a non-hex entropy, an invalid kind, or an
+        // empty counter must never count as a minted (resolvable) token.
+        assert!(
+            !is_minted_placeholder_token("__DO_PRIVATE_EMAIL_1_zzzzzzzzzzzzzzzz__"),
+            "non-hex entropy"
+        );
+        assert!(
+            !is_minted_placeholder_token("__DO_PRIVATE_EMAIL-X_1_0123456789abcdef__"),
+            "invalid kind"
+        );
+        assert!(
+            !is_minted_placeholder_token("__DO_PRIVATE_EMAIL__0123456789abcdef__"),
+            "empty counter"
+        );
+    }
+
+    #[test]
+    fn minted_check_requires_a_decimal_counter() {
+        assert!(!is_minted_placeholder_token(
+            "__DO_PRIVATE_email_x_0123456789abcdef__"
+        ));
+        assert!(is_minted_placeholder_token(
+            "__DO_PRIVATE_email_1_0123456789abcdef__"
+        ));
     }
 
     #[test]

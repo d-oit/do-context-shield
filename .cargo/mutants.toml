@@ -1,18 +1,34 @@
 # cargo-mutants configuration (read automatically from .cargo/mutants.toml).
-
-# `> with >= in luhn_valid` is an equivalent mutant, not a test gap: the
-# comparison only ever sees the output of `digit *= 2`, every doubled digit is
-# even, and `> 9` and `>= 9` differ exactly at 9 — a value doubling a digit
-# cannot produce. No test can kill it, so it is excluded here with the proof
-# rather than reported as a survivor. The pattern is pinned to the line, so
-# moving or rewriting `luhn_valid` re-surfaces the mutant for a fresh
-# equivalence check instead of hiding a real gap.
-# `| with ^ in vault-json's decode_hex` is likewise an equivalent mutant: the
-# left operand is `nibble << 4` (low nibble always zero) and the right operand
-# is one hex digit (high bits always zero), so the operands never share a set
-# bit and `a | b == a ^ b` holds for every input. Pinned to the line for the
-# same reason as the luhn case.
+#
+# Each exclusion is pinned to a file, line, and mutation so that moving or
+# rewriting the code re-surfaces the mutant for a fresh equivalence check
+# instead of hiding a real gap. Only mutants with a proof of equivalence are
+# listed here; every other survivor is a test gap to fix or a documented
+# limitation in plans/backlog.md.
 exclude_re = [
+    # `> with >= in luhn_valid`: the comparison only ever sees the output of
+    # `digit *= 2`, every doubled digit is even, and `> 9` and `>= 9` differ
+    # exactly at 9, which doubling a digit cannot produce.
     'crates/detector-regex/src/lib\.rs:63:22: replace > with >= in luhn_valid',
+
+    # `| with ^ in decode_hex`: the left operand is `nibble << 4` (low nibble
+    # zero) and the right operand is one hex digit (high bits zero), so the
+    # operands never share a set bit and `a | b == a ^ b` for every input.
     'crates/vault-json/src/encrypted\.rs:233:47: replace \| with \^ in decode_hex',
+
+    # `delete ! in Lock::drop` → `()`: the `File` field closes when `Lock`
+    # drops, and closing the handle releases the flock on Unix and Windows,
+    # so the explicit no-op is observationally identical.
+    'crates/vault-json/src/lib\.rs:94:9: replace <impl Drop for Lock>::drop with \(\)',
+
+    # PrivacyPipeline::restore scan budget `passes_left = input.len() + 1`.
+    # Every pass moves the cursor past one occurrence of the 13-byte prefix,
+    # and occurrences of that prefix cannot overlap, so a scan performs at
+    # most `len - 12` passes. The budget therefore never trips under correct
+    # arithmetic, and each mutant of its initial value (`+`→`-`, `+`→`*`) or
+    # its decrement (`-=`→`+=`, `-=`→`/=`) leaves every reachable behavior
+    # unchanged. The budget is only observable if the cursor stalls, which the
+    # current code cannot do; a test cannot force that without a fault seam.
+    'crates/privacy-core/src/lib\.rs:227:43: replace \+ with [-*] in PrivacyPipeline::restore',
+    'crates/privacy-core/src/lib\.rs:234:25: replace -= with [+/]= in PrivacyPipeline::restore',
 ]

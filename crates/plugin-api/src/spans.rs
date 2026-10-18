@@ -51,6 +51,17 @@ mod tests {
     }
 
     #[test]
+    fn touching_spans_do_not_overlap_in_either_direction() {
+        // A candidate that starts where the kept span ends, and one that ends
+        // where the kept span starts, are adjacent — both must survive the
+        // overlap check (the boundary is exclusive on both sides).
+        let after = resolve_overlaps(vec![entity("email", 0, 6), entity("api_key", 6, 10)]);
+        assert_eq!(kinds(&after), ["email", "api_key"]);
+        let before = resolve_overlaps(vec![entity("api_key", 5, 11), entity("email", 0, 5)]);
+        assert_eq!(kinds(&before), ["email", "api_key"]);
+    }
+
+    #[test]
     fn a_later_span_displaces_a_shorter_one_it_covers() {
         let entities = resolve_overlaps(vec![entity("person", 0, 2), entity("api_key", 1, 12)]);
         assert_eq!(kinds(&entities), ["api_key"]);

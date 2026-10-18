@@ -184,6 +184,25 @@ work lands or the precondition expires.
   `restore_scan_budget_covers_heavy_rescanning_without_dropping_late_tokens`
   pins the budget sizing (200 malformed prefixes before a real token must not
   false-trip it). Expected survivors at re-dispatch drop from 30 to 21.
+- **Local measurement (2026-10-18, package-scoped, NOT CI-comparable)**: a
+  local `cargo mutants -p <crate>` run per package on the windows-gnu host
+  toolchain. Before this batch: plugin-api 24 missed / 73 caught, vault-json
+  8 / 91, vault-memory 1 / 28, transformer-mask 0 / 17, privacy-core 4 / 78.
+  After the kill batch: plugin-api 0 / 97 (all killed), vault-json 6 / 93,
+  vault-memory 1 / 28, transformer-mask 0 / 17, privacy-core 0 / 78 (its 4
+  restore-budget mutants are now excluded with a proof in
+  `.cargo/mutants.toml`). The vault-json permission mutants are `#[cfg(unix)]`
+  and were not verified on this Windows host; CI's Linux run is the authority
+  for them. These runs omitted `--test-workspace true`, so they overcount
+  relative to CI (the scope correction above). Survivors flagged here that the CI sample
+  did not list include `context.rs` `RecipientClass::parse` arms and
+  `is_valid_jurisdiction`, `traits.rs` `Vault` default methods and
+  `validate_judgments`, `vault-json` `next_counter` and `check_key_file_permissions`,
+  and `privacy-core` `restore`'s `+`/`-=` arithmetic (the two lines that
+  previously hung). The `--file` filter matched nothing on Windows paths, so
+  per-package runs are the working route. `vault-memory` `expire`'s `<`→`<=`
+  is a real exact-boundary gap, not an equivalent: it needs an injected clock
+  to test, so it stays a survivor.
 - **Next**: triage the remaining 21 by area — `SemanticLabel::parse`'s
   `secret` arm, `DataCategory::parse`'s arms, `placeholder.rs`'s minted-token
   guards, `spans.rs`'s `resolve_overlaps` bounds, then the vault-json
