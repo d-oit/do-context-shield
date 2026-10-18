@@ -8,6 +8,38 @@ work lands or the precondition expires.
 
 ## Landed
 
+### deps sensor broken by a CVSS 4.0 advisory: repaired
+
+- **Status**: landed 2026-10-18 (harness task, `workflow-improvement`). The
+  `deps` sensor failed at advisory-database load: the rustsec parser in
+  cargo-deny 0.18.5 rejects the `CVSS:4.0/...` string in the newly published
+  `RUSTSEC-2026-0146` advisory (upstream: EmbarkStudios/cargo-deny#804,
+  fixed by #805 bumping rustsec to 0.31; the CVSS-4.0-capable line starts at
+  0.18.9 and current is 0.20.2).
+- **Correction**: the original entry's claim that CI would fail on the next
+  pull request was wrong — `ci.yml` pins
+  `EmbarkStudios/cargo-deny-action@v2.1.1`, whose Dockerfile bundles
+  `deny_version="0.20.2"`, so only local tools were affected.
+- **Resolution**: local cargo-deny upgraded to the official 0.20.2 release
+  binary (sha256-verified against the published asset);
+  `bash scripts/check-deps.sh` is green again ("advisories ok, bans ok,
+  licenses ok, sources ok").
+
+### GitHub Actions pinned to immutable commits across all workflows
+
+- **Status**: landed 2026-10-18 (harness task, `workflow-improvement`). The
+  six floating `uses:` refs now pin the commit SHA their tag resolves to,
+  versions kept as comments: `commitlint.yml`
+  (`amannn/action-semantic-pull-request@48f25628… # v6.1.1`), `labeler.yml`
+  (`actions/labeler@bf12e9b0… # v7.0.0`), `release-drafter.yml`
+  (`release-drafter/release-drafter@978bb0b3… # v7.10.0`, twice),
+  `secret-scan.yml` (`actions/checkout@fbc6f399… # v5.1.0`, matching the
+  existing `ci.yml` pin, and `gitleaks/gitleaks-action@e0c47f4f… # v3.0.0`).
+- **Enforcement**: `scripts/validate-structure.py` now rejects any `uses:`
+  ref that is not `owner/repo@<40-hex sha>` (local `./` and `docker://` refs
+  exempt) — verified both ways, a planted `@v7` tag fails it — and the rule
+  is recorded in `plans/invariants.json`.
+
 ### Credential word-boundary miss: fail closed instead of leaking a surviving copy
 
 - **Status**: landed. Found by the `fuzz_sanitize_pipeline` target (two crashing inputs in PR #126), fixed by enforcing the plan's postcondition centrally rather than reworking detector boundaries.
@@ -92,19 +124,88 @@ work lands or the precondition expires.
 
 ## Open
 
+### Glued-only secret detection gap: approach verdict before any slice
+
+- **Status**: open (promoted to a harness task, `decision`). This is the
+  documented residual of the redaction-postcondition item under **Landed**: a
+  secret that never appears at a detectable boundary anywhere in the input is
+  still missed, and with no detected value the postcondition has nothing to
+  check.
+- **Next**: record the verdict on closing it — a lookaround-capable regex
+  engine (the `regex` crate has none) versus broader credential patterns —
+  with the false-positive review each option implies, then slice only the
+  winning option.
+
 ### Mutation-run findings: 31 survivors, 2 restore timeouts
 
 - **Measured** (manual dispatch 39012269650, 2026-10-17; workspace test scope, 8 shards): 511 mutants in ~16 minutes wall clock (8–16 minutes per shard) on two cores — 417 caught, 31 missed, 61 unviable, 2 timeouts. The earlier package-scoped dispatch (39009589543) reported 62 missed; **31 of those 62 are caught under the workspace scope and no mutant became newly missed**, so the drop is a measurement correction, not new tests. Reports: `gh run download --pattern 'mutants-report-shard-*'`.
 - **Scope correction (why the old list was inflated)**: cargo-mutants' default (`TestPackages::Mutated`) runs only the mutated package's own tests, so behavior a consumer crate asserts was invisible. `plugin-api` contracts dominated the old list (17 `traits.rs` + 15 `context.rs` survivors) because `privacy-core`, the CLI, and the MCP server hold that coverage — the five `validate_judgments` mutants were the clearest case (`traits.rs` now shows 1 survivor, `context.rs` 2). The workflow passes `--test-workspace true`.
 - **Timeouts**: two `+`-operator mutants in `PrivacyPipeline::restore` (`crates/privacy-core/src/lib.rs:221` and `:240`) still hang the suite — no test bounds the placeholder scan. The third (`:221` `+`→`-`) is now caught.
-- **Survivor classification (31)** — one proven equivalent, the other 30 pending semantic triage (equivalence / defensive-only / real gap) before any of them becomes a test worklist. The equivalent: `detector-regex`'s `luhn_valid` `>`→`>=` cannot be killed — the comparison only sees `digit *= 2` output, every doubled digit is even, and `> 9` and `>= 9` differ exactly at 9 (unreachable) — so `.cargo/mutants.toml` excludes it with that proof. The rest, by area: `plugin-api` (12) `Action::as_str` (2), `SemanticLabel::parse`'s `secret` arm, `placeholder.rs`'s minted-token guards (3), `spans.rs`'s `resolve_overlaps` bounds (2), `DataCategory::parse` arms (2), `audit.rs` `unix_now` (2); `vault-json` (6) `Lock::acquire`/`Drop`, `is_envelope`, `decode_hex`, `persist_locked`, `restrict_permissions`; `vault-memory` (6) the counter arithmetic and `expire`'s bounds and result; `privacy-core` (4) `expire_vault`, `canary::decode_hex`, and the two `validate_plan` disjunctions; `detector-regex` (1) `iban_valid`'s `%`; `transformer-mask` (1) one bound. **This list is neither "all gaps" nor plumbing**: the `validate_plan` pair guards the kind/span/end equality that makes the redaction postcondition trustworthy (`crates/privacy-core/src/lib.rs:397-399`), and `canary`/`vault-json` `decode_hex` and `is_envelope` validate marker and envelope input, so a survivor there is a real gap until shown equivalent; `Action::as_str` and `audit.rs` `unix_now` are the candidates for defensive-only/no-observable-difference. The per-shard `missed.txt` files carry the exact diffs.
-- **Next**: triage the 30 by area, safety-relevant validators first (`validate_plan`'s mismatched-kind / matching-kind-different-span cases, then the `decode_hex`/`is_envelope` bounds), the plumbing after; bound `PrivacyPipeline::restore`'s placeholder scan (the two hanging `+`→`*` mutants); then re-dispatch and expect both counts to fall. A raw mutation score is not proof of security.
+- **Survivor classification (31)** — two proven equivalents and 25 pending semantic triage after the safety-batch triage below (equivalence / defensive-only / real gap) before any of them becomes a test worklist. The equivalent: `detector-regex`'s `luhn_valid` `>`→`>=` cannot be killed — the comparison only sees `digit *= 2` output, every doubled digit is even, and `> 9` and `>= 9` differ exactly at 9 (unreachable) — so `.cargo/mutants.toml` excludes it with that proof. The rest, by area: `plugin-api` (12) `Action::as_str` (2), `SemanticLabel::parse`'s `secret` arm, `placeholder.rs`'s minted-token guards (3), `spans.rs`'s `resolve_overlaps` bounds (2), `DataCategory::parse` arms (2), `audit.rs` `unix_now` (2); `vault-json` (6) `Lock::acquire`/`Drop`, `is_envelope`, `decode_hex`, `persist_locked`, `restrict_permissions`; `vault-memory` (6) the counter arithmetic and `expire`'s bounds and result; `privacy-core` (4) `expire_vault`, `canary::decode_hex`, and the two `validate_plan` disjunctions; `detector-regex` (1) `iban_valid`'s `%`; `transformer-mask` (1) one bound. **This list is neither "all gaps" nor plumbing**: the `validate_plan` pair guards the kind/span/end equality that makes the redaction postcondition trustworthy (`crates/privacy-core/src/lib.rs:397-399`), and `canary`/`vault-json` `decode_hex` and `is_envelope` validate marker and envelope input, so a survivor there is a real gap until shown equivalent; `Action::as_str` and `audit.rs` `unix_now` were guessed to be defensive-only/no-observable-difference — the triage below disproved that. The per-shard `missed.txt` files carry the exact diffs.
+- **Progress (2026-10-18)**: the workflow fixes are landed (#136 treats
+  mutant test timeouts as a signal, #137 tests every mutant against the whole
+  workspace, #138 excludes the proven-equivalent `luhn_valid` mutant and
+  reclassifies the survivors) and are already folded into the numbers above;
+  the scheduled Fuzz run of 2026-10-18 is green, so the fuzz runtime fixes
+  hold. The next steps below are promoted to harness tasks and snapshotted in
+  `plans/tasks.json` (the state database was reset, so task ids restart; the
+  titles are the stable handle).
+- **Triage progress (2026-10-18, safety batch)**: five of the 30 resolved,
+  each with a kill proof (mutation applied by hand, test observed failing for
+  the right reason, mutation reverted). `validate_plan`'s two `||`→`&&`
+  mutants were **real gaps**: nothing asserted that a mismatched kind
+  (`substituted_kind_fails_closed`) or a mismatched span
+  (`substituted_span_fails_closed`) fails closed. `canary::decode_hex`'s
+  `||`→`&&` was a **real gap**: the width guard was untested, so a wrong-width
+  payload sliced out of bounds instead of failing closed
+  (`decode_hex_requires_the_exact_tag_width`,
+  `wrong_width_marker_payload_fails_closed`). `is_envelope`'s `&&`→`||` was a
+  **test gap**: both load paths already fail closed on a half-envelope, but
+  the input class was untested and the error text diverges
+  (`envelope_detection_requires_both_markers`). Vault-json `decode_hex`'s
+  `|`→`^` is the **second proven equivalent** (`nibble << 4` and a hex digit
+  never share a set bit), excluded in `.cargo/mutants.toml` with that proof.
+  Expected survivors at re-dispatch drop from 30 to 25.
+- **Triage progress (2026-10-18, second batch)**: the "defensive-only"
+  candidates turned out to be plain test gaps — all four die to new contract
+  tests, each kill-proven by hand like the first batch. `Action::as_str`'s
+  two body-replacement mutants (`""`, `"xyzzy"`) are killed by
+  `action_names_match_the_documented_wire_contract` (the lowercase names are
+  the process-protocol and audit-log wire surface that `plugin-process`'s
+  `parse_action` accepts), and `unix_now`'s two constant mutants (`0`, `1`)
+  are killed by `audit_events_are_stamped_with_the_wall_clock` (a fixed past
+  bound is not flaky because the clock only moves forward).
+- **Placeholder scan bound (landed)**: `PrivacyPipeline::restore`'s scan now
+  carries an explicit pass budget (`input.len() + 1`, one byte of progress
+  per pass) and fails closed with a typed error when the cursor stops
+  advancing. The two hanging `+`→`*` mutants (`lib.rs:221`, `:240`) go from
+  hanging the suite to dying fast on the existing restore tests
+  (`placeholder scan stopped making progress`), and
+  `restore_scan_budget_covers_heavy_rescanning_without_dropping_late_tokens`
+  pins the budget sizing (200 malformed prefixes before a real token must not
+  false-trip it). Expected survivors at re-dispatch drop from 30 to 21.
+- **Next**: triage the remaining 21 by area — `SemanticLabel::parse`'s
+  `secret` arm, `DataCategory::parse`'s arms, `placeholder.rs`'s minted-token
+  guards, `spans.rs`'s `resolve_overlaps` bounds, then the vault-json
+  `Lock`/`persist_locked`/`restrict_permissions`, vault-memory counter and
+  `expire` arithmetic, `expire_vault`, `iban_valid`'s `%`, and
+  `transformer-mask`'s bound — then re-dispatch and expect ~21 survivors
+  instead of 31. A raw mutation score is not proof of security.
 
 ## Blocked — approval-gated
 
 ### Client end-to-end checks are manual and require explicit human approval
 
 - **Progress review (2026-10-13)**: `plans/tasks.json` reports 40 done, 0 pending, 0 in progress, and 0 failed. No implementation task remains open in the harness plan. These client checks are still outstanding: Codex is account usage-limited (`try again at Oct 15th, 2026 10:04 PM`), Claude Code `-p` produced no output and died on timeout (exit 124), and its 1.0.44 attempt returned `401 Invalid Authentication`.
+- **Progress review (2026-10-18)**: the 40-task plan is complete and its
+  history lives in the **Landed** sections above; the harness state database
+  has been reset since, and the re-exported `plans/tasks.json` now carries the
+  five promoted follow-up tasks (mutation survivor triage, restore-scan
+  bound, mutation re-dispatch, action pinning, glued-only approach verdict)
+  plus the deps-sensor repair tracked under **Open**.
+  The Codex usage-limit window (`until Oct 15th, 2026 10:04 PM`) has elapsed,
+  so the Codex probe can be re-run — still only with explicit human approval.
+  Claude Code is unchanged (no output / `401 Invalid Authentication`).
 - **Rule**: never invoke `claude` or `codex` in an agent session without explicit human approval. Registration mechanics are verified and documented (`docs/client-integration.md` → "Other clients"); everything beyond that is human-driven.
 - **Remaining work (human-run only)**: Codex — one non-interactive turn calling `context.inspect` + `context.sanitize` (session `codex-probe-1`) and a placeholder-only reply. Claude Code — approve the project server once, then the same turn with session `cc-probe-1`.
 - **Exit criteria**: a transcript proving the tool invocation and the sanitized reply, recorded here and in `docs/client-integration.md`.

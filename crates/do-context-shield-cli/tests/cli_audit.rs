@@ -3,7 +3,9 @@
 mod common;
 
 use common::{cmd, temp_dir};
+#[cfg(unix)]
 use serde_json::Value;
+#[cfg(unix)]
 use std::fs;
 use std::path::Path;
 
@@ -14,6 +16,7 @@ fn path_text(path: &Path) -> String {
     }
 }
 
+#[cfg(unix)]
 fn operation_args(
     operation: &str,
     session: &str,
@@ -38,6 +41,7 @@ fn operation_args(
     args
 }
 
+#[cfg(unix)]
 fn invoke(dir: &Path, args: &[String], input: &str) -> assert_cmd::assert::Assert {
     cmd(dir).args(args).write_stdin(input).assert()
 }
@@ -46,6 +50,7 @@ fn stdout(assertion: &assert_cmd::assert::Assert) -> String {
     String::from_utf8_lossy(&assertion.get_output().stdout).into_owned()
 }
 
+#[cfg(unix)]
 fn events(path: &Path) -> Vec<Value> {
     let bytes = match fs::read(path) {
         Ok(bytes) => bytes,
@@ -61,6 +66,7 @@ fn events(path: &Path) -> Vec<Value> {
         .collect()
 }
 
+#[cfg(unix)]
 fn action_count(event: &Value, kind: &str, action: &str) -> Option<u64> {
     event
         .get("actions")?

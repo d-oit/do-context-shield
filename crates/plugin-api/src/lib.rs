@@ -149,8 +149,8 @@ pub enum VaultError {
 #[cfg(test)]
 mod tests {
     use super::{
-        is_minted_placeholder_token, is_placeholder_token, is_valid_placeholder_kind,
-        mint_placeholder,
+        Action, AuditEvent, AuditOperation, AuditOutcome, ScopeId, is_minted_placeholder_token,
+        is_placeholder_token, is_valid_placeholder_kind, mint_placeholder,
     };
 
     #[test]
@@ -180,6 +180,37 @@ mod tests {
         assert!(!is_placeholder_token("__DO_PRIVATE_EMAIL__X__"));
         assert!(is_placeholder_token("__DO_PRIVATE_REDACTED__"));
         assert!(!is_minted_placeholder_token("__DO_PRIVATE_EMAIL_1__"));
+    }
+
+    #[test]
+    fn action_names_match_the_documented_wire_contract() {
+        // The lowercase names are the process-protocol and audit-log surface,
+        // so `as_str` must return exactly what `plugin-process`'s `parse_action`
+        // accepts and the docs show.
+        for (action, name) in [
+            (Action::Keep, "keep"),
+            (Action::Pseudonymize, "pseudonymize"),
+            (Action::Redact, "redact"),
+            (Action::Block, "block"),
+        ] {
+            assert_eq!(action.as_str(), name);
+        }
+    }
+
+    #[test]
+    fn audit_events_are_stamped_with_the_wall_clock() {
+        // A fixed past bound cannot be flaky (the clock only moves forward),
+        // and a constant 0/1 stamp can never reach it.
+        let event = AuditEvent::new(
+            AuditOperation::Forget,
+            &ScopeId("test".to_owned()),
+            AuditOutcome::Ok,
+        );
+        assert!(
+            event.time_unix > 1_735_689_600,
+            "audit stamp must be real Unix seconds: {}",
+            event.time_unix
+        );
     }
 
     #[test]

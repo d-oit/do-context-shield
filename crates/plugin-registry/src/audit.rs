@@ -24,7 +24,7 @@ pub fn file_audit_sink(
     #[cfg(not(unix))]
     {
         let _ = (vault_file, vault_key_file);
-        return Ok(Box::new(FileAuditSink::open(path)?));
+        Ok(Box::new(FileAuditSink::open(path)?))
     }
 
     #[cfg(unix)]

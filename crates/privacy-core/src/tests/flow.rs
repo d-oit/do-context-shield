@@ -56,6 +56,26 @@ fn restore_skips_malformed_placeholders_and_keeps_scanning() {
 }
 
 #[test]
+fn restore_scan_budget_covers_heavy_rescanning_without_dropping_late_tokens() {
+    // A malformed occurrence forces a one-byte-advance rescan, so many of them
+    // in front of a real token are the worst case for the scan's fail-closed
+    // budget: the legitimate pass count must fit under it, and the late token
+    // must still be restored.
+    let mut pipeline = pipeline();
+    let scope = ScopeId("test".to_owned());
+    let result = match pipeline.sanitize(&scope, "alice@example.com", &context()) {
+        Ok(value) => value,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    let noisy = format!("{}{}", "__DO_PRIVATE_ junk ".repeat(200), result.text);
+    let restored = match pipeline.restore(&scope, &noisy) {
+        Ok(value) => value,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    assert!(restored.contains("alice@example.com"));
+}
+
+#[test]
 fn restore_leaves_redacted_and_truncated_tokens_untouched() {
     let pipeline = pipeline();
     let scope = ScopeId("test".to_owned());

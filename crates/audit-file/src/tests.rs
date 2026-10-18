@@ -1,7 +1,13 @@
 use super::*;
+// The fixture helpers below serve the Unix suite only; on non-Unix the sole
+// test never builds events or reads files, so the helpers and their imports
+// are compiled out there instead of going dead.
+#[cfg(unix)]
 use do_context_shield_plugin_api::{AuditOperation, AuditOutcome, ScopeId};
+#[cfg(unix)]
 use std::fs;
 
+#[cfg(unix)]
 fn event(session: &str) -> AuditEvent {
     AuditEvent::new(
         AuditOperation::Forget,
@@ -10,6 +16,7 @@ fn event(session: &str) -> AuditEvent {
     )
 }
 
+#[cfg(unix)]
 fn read_events(path: &Path) -> Vec<AuditEvent> {
     let contents = match fs::read(path) {
         Ok(contents) => contents,

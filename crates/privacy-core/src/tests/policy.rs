@@ -97,6 +97,32 @@ fn reversible_action_on_secret_fails_closed() {
 }
 
 #[test]
+fn substituted_kind_fails_closed() {
+    // A decision that relabels the entity is not a decision for it: accepting
+    // one would let a policy answer for a secret under a non-secret kind.
+    let mut pipeline = with_policy(FixedPlanPolicy(vec![PlannedEntity {
+        entity: entity("name", 0, 17, "alice@example.com"),
+        action: Action::Pseudonymize,
+    }]));
+    let error = sanitize_err(&mut pipeline, "alice@example.com");
+    assert!(matches!(error, PipelineError::Policy(_)), "{error:?}");
+    assert!(error.to_string().contains("does not match"), "{error}");
+}
+
+#[test]
+fn substituted_span_fails_closed() {
+    // Same kind and value but different bounds: the transform would replace
+    // the wrong bytes and leave part of the raw value in the output.
+    let mut pipeline = with_policy(FixedPlanPolicy(vec![PlannedEntity {
+        entity: entity("email", 0, 16, "alice@example.com"),
+        action: Action::Pseudonymize,
+    }]));
+    let error = sanitize_err(&mut pipeline, "alice@example.com");
+    assert!(matches!(error, PipelineError::Policy(_)), "{error:?}");
+    assert!(error.to_string().contains("does not match"), "{error}");
+}
+
+#[test]
 fn substituted_value_fails_closed() {
     // The post-transformation guard reads the plan's entity value, so a policy
     // must not be able to answer with a decoy value for the bytes it was asked

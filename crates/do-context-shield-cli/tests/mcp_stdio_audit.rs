@@ -1,4 +1,7 @@
 //! Black-box MCP stdio acceptance tests for explicit local audit logging.
+// Every test here exercises the Unix-only file audit sink, so the target
+// compiles empty on non-Unix instead of leaving dead helpers behind.
+#![cfg(unix)]
 
 mod common;
 

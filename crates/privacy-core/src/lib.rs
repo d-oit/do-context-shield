@@ -211,13 +211,27 @@ impl PrivacyPipeline {
     ///
     /// # Errors
     ///
-    /// Returns [`PipelineError`] when vault resolution fails.
+    /// Returns [`PipelineError`] when vault resolution fails, or when the
+    /// placeholder scan stops making progress and trips its fail-closed bound
+    /// (a cursor that cannot advance would otherwise spin forever).
     pub fn restore(&self, scope: &ScopeId, input: &str) -> Result<String, PipelineError> {
         const PREFIX: &str = "__DO_PRIVATE_";
         let mut output = input.to_owned();
         let mut positions = Vec::new();
         let mut index = 0usize;
+        // Every pass must move the cursor at least one byte past the current
+        // occurrence, so `input.len() + 1` passes is the absolute ceiling for
+        // a scan over `input`. The explicit budget fails the call closed
+        // instead of spinning forever when the cursor arithmetic stops
+        // advancing.
+        let mut passes_left = input.len() + 1;
         while let Some(relative) = output[index..].find(PREFIX) {
+            if passes_left == 0 {
+                return Err(PipelineError::Vault(VaultError::Message(
+                    "placeholder scan stopped making progress".to_owned(),
+                )));
+            }
+            passes_left -= 1;
             let start = index + relative;
             let after_prefix = start + PREFIX.len();
             let Some(rest) = output.get(after_prefix..) else {
