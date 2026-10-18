@@ -54,6 +54,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mutant applied by hand and observed dying), and vault-json `decode_hex`'s
   `|`→`^` mutant is recorded as proven equivalent in `.cargo/mutants.toml`.
 
+- `PrivacyPipeline::restore`'s placeholder scan is bounded fail-closed: an
+  explicit pass budget (`input.len() + 1`, one byte of progress per pass)
+  turns a non-advancing cursor into a typed error instead of an infinite
+  loop, and a budget-sizing test proves heavy legitimate rescanning (200
+  malformed prefixes before a real token) never trips it. The two hanging
+  `+`→`*` mutants now die on the existing restore tests. The action wire
+  names (`keep`/`pseudonymize`/`redact`/`block`, the process-protocol and
+  audit-log surface) and the audit wall-clock stamp are also pinned by
+  contract tests that kill their constant-replacement mutants.
+
 - Windows local-gate fixes: `.githooks/*` are now checked out LF
   (`.gitattributes`), so the shellcheck sensor no longer fails on CRLF
   artifacts; `scripts/check-publish-order.sh` normalizes `cargo metadata` path
