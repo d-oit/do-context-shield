@@ -141,7 +141,7 @@ work lands or the precondition expires.
 - **Measured** (manual dispatch 39012269650, 2026-10-17; workspace test scope, 8 shards): 511 mutants in ~16 minutes wall clock (8–16 minutes per shard) on two cores — 417 caught, 31 missed, 61 unviable, 2 timeouts. The earlier package-scoped dispatch (39009589543) reported 62 missed; **31 of those 62 are caught under the workspace scope and no mutant became newly missed**, so the drop is a measurement correction, not new tests. Reports: `gh run download --pattern 'mutants-report-shard-*'`.
 - **Scope correction (why the old list was inflated)**: cargo-mutants' default (`TestPackages::Mutated`) runs only the mutated package's own tests, so behavior a consumer crate asserts was invisible. `plugin-api` contracts dominated the old list (17 `traits.rs` + 15 `context.rs` survivors) because `privacy-core`, the CLI, and the MCP server hold that coverage — the five `validate_judgments` mutants were the clearest case (`traits.rs` now shows 1 survivor, `context.rs` 2). The workflow passes `--test-workspace true`.
 - **Timeouts**: two `+`-operator mutants in `PrivacyPipeline::restore` (`crates/privacy-core/src/lib.rs:221` and `:240`) still hang the suite — no test bounds the placeholder scan. The third (`:221` `+`→`-`) is now caught.
-- **Survivor classification (31)** — two proven equivalents and 25 pending semantic triage after the safety-batch triage below (equivalence / defensive-only / real gap) before any of them becomes a test worklist. The equivalent: `detector-regex`'s `luhn_valid` `>`→`>=` cannot be killed — the comparison only sees `digit *= 2` output, every doubled digit is even, and `> 9` and `>= 9` differ exactly at 9 (unreachable) — so `.cargo/mutants.toml` excludes it with that proof. The rest, by area: `plugin-api` (12) `Action::as_str` (2), `SemanticLabel::parse`'s `secret` arm, `placeholder.rs`'s minted-token guards (3), `spans.rs`'s `resolve_overlaps` bounds (2), `DataCategory::parse` arms (2), `audit.rs` `unix_now` (2); `vault-json` (6) `Lock::acquire`/`Drop`, `is_envelope`, `decode_hex`, `persist_locked`, `restrict_permissions`; `vault-memory` (6) the counter arithmetic and `expire`'s bounds and result; `privacy-core` (4) `expire_vault`, `canary::decode_hex`, and the two `validate_plan` disjunctions; `detector-regex` (1) `iban_valid`'s `%`; `transformer-mask` (1) one bound. **This list is neither "all gaps" nor plumbing**: the `validate_plan` pair guards the kind/span/end equality that makes the redaction postcondition trustworthy (`crates/privacy-core/src/lib.rs:397-399`), and `canary`/`vault-json` `decode_hex` and `is_envelope` validate marker and envelope input, so a survivor there is a real gap until shown equivalent; `Action::as_str` and `audit.rs` `unix_now` are the candidates for defensive-only/no-observable-difference. The per-shard `missed.txt` files carry the exact diffs.
+- **Survivor classification (31)** — two proven equivalents and 25 pending semantic triage after the safety-batch triage below (equivalence / defensive-only / real gap) before any of them becomes a test worklist. The equivalent: `detector-regex`'s `luhn_valid` `>`→`>=` cannot be killed — the comparison only sees `digit *= 2` output, every doubled digit is even, and `> 9` and `>= 9` differ exactly at 9 (unreachable) — so `.cargo/mutants.toml` excludes it with that proof. The rest, by area: `plugin-api` (12) `Action::as_str` (2), `SemanticLabel::parse`'s `secret` arm, `placeholder.rs`'s minted-token guards (3), `spans.rs`'s `resolve_overlaps` bounds (2), `DataCategory::parse` arms (2), `audit.rs` `unix_now` (2); `vault-json` (6) `Lock::acquire`/`Drop`, `is_envelope`, `decode_hex`, `persist_locked`, `restrict_permissions`; `vault-memory` (6) the counter arithmetic and `expire`'s bounds and result; `privacy-core` (4) `expire_vault`, `canary::decode_hex`, and the two `validate_plan` disjunctions; `detector-regex` (1) `iban_valid`'s `%`; `transformer-mask` (1) one bound. **This list is neither "all gaps" nor plumbing**: the `validate_plan` pair guards the kind/span/end equality that makes the redaction postcondition trustworthy (`crates/privacy-core/src/lib.rs:397-399`), and `canary`/`vault-json` `decode_hex` and `is_envelope` validate marker and envelope input, so a survivor there is a real gap until shown equivalent; `Action::as_str` and `audit.rs` `unix_now` were guessed to be defensive-only/no-observable-difference — the triage below disproved that. The per-shard `missed.txt` files carry the exact diffs.
 - **Progress (2026-10-18)**: the workflow fixes are landed (#136 treats
   mutant test timeouts as a signal, #137 tests every mutant against the whole
   workspace, #138 excludes the proven-equivalent `luhn_valid` mutant and
@@ -166,12 +166,31 @@ work lands or the precondition expires.
   `|`→`^` is the **second proven equivalent** (`nibble << 4` and a hex digit
   never share a set bit), excluded in `.cargo/mutants.toml` with that proof.
   Expected survivors at re-dispatch drop from 30 to 25.
-- **Next**: triage the remaining 25 by area — the safety-relevant validators
-  are done (see above), the plumbing after (`Action::as_str`, `audit.rs`'s
-  `unix_now` are the defensive-only candidates); bound
-  `PrivacyPipeline::restore`'s placeholder scan (the two hanging `+`→`*`
-  mutants); then re-dispatch and expect ~25 survivors instead of 31. A raw
-  mutation score is not proof of security.
+- **Triage progress (2026-10-18, second batch)**: the "defensive-only"
+  candidates turned out to be plain test gaps — all four die to new contract
+  tests, each kill-proven by hand like the first batch. `Action::as_str`'s
+  two body-replacement mutants (`""`, `"xyzzy"`) are killed by
+  `action_names_match_the_documented_wire_contract` (the lowercase names are
+  the process-protocol and audit-log wire surface that `plugin-process`'s
+  `parse_action` accepts), and `unix_now`'s two constant mutants (`0`, `1`)
+  are killed by `audit_events_are_stamped_with_the_wall_clock` (a fixed past
+  bound is not flaky because the clock only moves forward).
+- **Placeholder scan bound (landed)**: `PrivacyPipeline::restore`'s scan now
+  carries an explicit pass budget (`input.len() + 1`, one byte of progress
+  per pass) and fails closed with a typed error when the cursor stops
+  advancing. The two hanging `+`→`*` mutants (`lib.rs:221`, `:240`) go from
+  hanging the suite to dying fast on the existing restore tests
+  (`placeholder scan stopped making progress`), and
+  `restore_scan_budget_covers_heavy_rescanning_without_dropping_late_tokens`
+  pins the budget sizing (200 malformed prefixes before a real token must not
+  false-trip it). Expected survivors at re-dispatch drop from 30 to 21.
+- **Next**: triage the remaining 21 by area — `SemanticLabel::parse`'s
+  `secret` arm, `DataCategory::parse`'s arms, `placeholder.rs`'s minted-token
+  guards, `spans.rs`'s `resolve_overlaps` bounds, then the vault-json
+  `Lock`/`persist_locked`/`restrict_permissions`, vault-memory counter and
+  `expire` arithmetic, `expire_vault`, `iban_valid`'s `%`, and
+  `transformer-mask`'s bound — then re-dispatch and expect ~21 survivors
+  instead of 31. A raw mutation score is not proof of security.
 
 ## Blocked — approval-gated
 
