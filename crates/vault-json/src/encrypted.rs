@@ -402,4 +402,18 @@ mod tests {
         assert!(decode_hex("0").is_err());
         assert!(decode_hex("gg").is_err());
     }
+
+    #[test]
+    fn envelope_detection_requires_both_markers() {
+        // A half-envelope is not an envelope: `is_envelope` must demand both
+        // marker fields, so each load path reports its own format error for
+        // the file it actually holds instead of guessing at the other format.
+        for text in [r#"{"version":1}"#, r#"{"cipher":"x"}"#] {
+            let value: serde_json::Value = match serde_json::from_str(text) {
+                Ok(value) => value,
+                Err(error) => panic!("unexpected error: {error}"),
+            };
+            assert!(!is_envelope(&value), "{text}");
+        }
+    }
 }

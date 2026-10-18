@@ -20,3 +20,6 @@ LICENSE  text eol=lf
 *.yml    text eol=lf
 *.json   text eol=lf
 .gitignore text eol=lf
+.gitattributes text eol=lf
+# Git hooks (executed by git and scanned by shellcheck; must stay LF)
+.githooks/* text eol=lf

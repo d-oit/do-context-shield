@@ -377,6 +377,10 @@ fn restricted_file(path: &std::path::Path) -> Result<File, VaultError> {
 }
 
 /// Tighten an existing vault file to owner-only permissions (Unix no-op elsewhere).
+// On non-Unix there is no fallible operation to run — the documented behavior
+// is a no-op — while the signature must stay `Result` on every platform, so
+// the lint is scoped off for the no-op compilation only.
+#[cfg_attr(not(unix), allow(clippy::unnecessary_wraps))]
 fn restrict_permissions(path: &std::path::Path) -> Result<(), VaultError> {
     #[cfg(unix)]
     {

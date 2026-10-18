@@ -43,6 +43,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Supply-chain pinning for every GitHub Actions workflow: the six floating
+  `uses:` tags (`commitlint.yml`, `labeler.yml`, `release-drafter.yml`,
+  `secret-scan.yml`) now pin the immutable commit SHA their tag resolves to,
+  with the release version kept as a comment, and
+  `scripts/validate-structure.py` rejects any `uses:` ref that is not
+  `owner/repo@<40-hex sha>` (local `./` and `docker://` refs exempt), so the
+  rule cannot silently regress. The plan-validation, canary-tag-width, and
+  vault-envelope-marker guards also gained mutation-verified tests (each
+  mutant applied by hand and observed dying), and vault-json `decode_hex`'s
+  `|`→`^` mutant is recorded as proven equivalent in `.cargo/mutants.toml`.
+
+- Windows local-gate fixes: `.githooks/*` are now checked out LF
+  (`.gitattributes`), so the shellcheck sensor no longer fails on CRLF
+  artifacts; `scripts/check-publish-order.sh` normalizes `cargo metadata` path
+  separators, so it finds the workspace crates on Windows instead of
+  reporting "no workspace crates under crates/"; and the Unix-only audit
+  tests and branches (`audit-file` helpers, `cli_audit`/`mcp_stdio_audit`
+  helpers, `plugin-registry`'s non-Unix branch, `vault-json`'s
+  `restrict_permissions` no-op) compile clean under clippy on non-Unix
+  targets instead of tripping `dead_code`, `unused_imports`,
+  `needless_return`, or `unnecessary_wraps` in cfg'd-out code.
+
 - The scheduled fuzz workflow now actually runs (`.github/workflows/fuzz.yml`):
   its first dispatch failed on every target because `rust-toolchain.toml` pins
   1.88.0 and overrides the toolchain the setup action installs, so cargo-fuzz

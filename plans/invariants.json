@@ -254,7 +254,7 @@
   {
     "invariant": "The pipeline validates the policy plan before transforming: exactly one decision per detected entity, on the same kind and span, and a secret-kind entity is `Redact` (or `Block`, which fails the call)",
     "rationale": "A plan that drops an entity leaves its raw value in the sanitized output, and a reversible action on a credential stores it in the vault instead of redacting it, so both defeat the boundary no matter how correct the policy was for the entities it did decide",
-    "sensor": "cargo test -p do-context-shield-core (tests::policy::short_plan_fails_closed, tests::policy::substituted_decision_fails_closed, tests::policy::reversible_action_on_secret_fails_closed)",
+    "sensor": "cargo test -p do-context-shield-core (tests::policy::short_plan_fails_closed, tests::policy::substituted_kind_fails_closed, tests::policy::substituted_span_fails_closed, tests::policy::substituted_decision_fails_closed, tests::policy::substituted_value_fails_closed, tests::policy::reversible_action_on_secret_fails_closed)",
     "category": "security"
   },
   {
@@ -405,6 +405,18 @@
     "invariant": "A persisted JSON vault file that cannot be parsed is refused with a typed error and left byte-for-byte unchanged — never rewritten into an empty vault — and every token the vault mints round-trips: it resolves in the minting instance, from a fresh instance over the same file, and stops resolving after `delete_scope`",
     "rationale": "Silently starting over on an unreadable file would both invent data and destroy whatever the operator had persisted, and a token that fails to resolve (or keeps resolving after deletion) breaks restore and erasure; the fuzz target discarded every operation result, so none of these properties were asserted",
     "sensor": "cargo test --manifest-path fuzz/Cargo.toml --locked --test seed_corpus (vault_seeds_pin_parse_errors_and_round_trips) + the fuzz_vault_json target in the scheduled fuzz.yml matrix",
+    "category": "security"
+  },
+  {
+    "invariant": "RustSec advisories gate the committed lockfile: the audit sensor runs cargo-audit against the tracked `Cargo.lock` without re-resolving it (CI runs `cargo audit --file Cargo.lock` for the same reason), so the dependency graph that is audited is the graph that ships; a missing Cargo.lock fails, and a missing cargo-audit WARN-skips locally but fails closed when CI=true or DO_HARNESS_REQUIRE_TOOLS=1",
+    "rationale": "An audit that re-resolved dependencies could report on a different graph than the committed lockfile ships; the lockfile is the shipping artifact, so its advisories must be the ones that block a merge, and a silently skipped scan must not be able to pass CI",
+    "sensor": "bash scripts/check-audit.sh (audit sensor, in the verification, release, and ci sets) + CI `cargo audit --file Cargo.lock`",
+    "category": "verification"
+  },
+  {
+    "invariant": "Every `uses:` reference in every GitHub Actions workflow is pinned to an immutable 40-hex commit SHA with the release version kept as a trailing comment, never a mutable tag (local `./` composite actions and `docker://` refs are exempt)",
+    "rationale": "A mutable tag can be moved to a revision this repository never reviewed, which is a supply-chain path to the write tokens the labeler and release-drafter jobs hold and to the pull-request input the commitlint and secret-scan jobs process; PR #123 pinned the CI-critical workflows (ci, fuzz, mutants) and the remaining four (commitlint, labeler, release-drafter, secret-scan) followed, so the rule now covers every workflow",
+    "sensor": "python3 scripts/validate-structure.py (structure sensor: rejects any `uses:` ref that is not `owner/repo@<40-hex sha>`; the version comment is review-checked) + CI `Structure` job",
     "category": "security"
   }
 ]

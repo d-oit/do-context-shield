@@ -57,7 +57,10 @@ if result.returncode != 0:
     sys.exit(1)
 meta = json.loads(result.stdout)
 
-crates = {p['name']: p for p in meta['packages'] if '/crates/' in p['manifest_path']}
+# cargo metadata reports host-native paths; normalize separators so the
+# Windows backslash form (`...\crates\...`) passes the same filter as POSIX.
+crates = {p['name']: p for p in meta['packages']
+          if '/crates/' in p['manifest_path'].replace('\\', '/')}
 if not crates:
     print('FAIL: cargo metadata reports no workspace crates under crates/.')
     sys.exit(1)

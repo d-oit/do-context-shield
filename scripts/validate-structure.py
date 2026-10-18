@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,13 +36,33 @@ missing = [p for p in required if not (ROOT / p).exists()]
 if missing:
     raise SystemExit(f"missing required files: {missing}")
 
-source = "\n".join(p.read_text() for p in ROOT.rglob("*.rs"))
+source = "\n".join(p.read_text(encoding="utf-8") for p in ROOT.rglob("*.rs"))
 for bad in (".unwrap()", ".expect("):
     if bad in source:
         raise SystemExit(f"forbidden pattern found: {bad}")
 
 for p in ROOT.rglob("*.rs"):
-    if len(p.read_text().splitlines()) > 500:
+    if len(p.read_text(encoding="utf-8").splitlines()) > 500:
         raise SystemExit(f"file exceeds 500 LOC: {p}")
+
+# Supply chain: every GitHub Actions `uses:` must pin an immutable commit SHA
+# (40 hex) with the release version kept as a trailing comment. Mutable tags
+# can be moved to a revision this repository never reviewed. Local composite
+# actions (`./...`) and `docker://` refs are not tags and are exempt.
+uses_re = re.compile(r"uses:\s*([^\s#]+)")
+pin_re = re.compile(r"^[\w.-]+/[\w.-]+@[0-9a-f]{40}$")
+workflows = sorted((ROOT / ".github" / "workflows").glob("*.yml")) + sorted(
+    (ROOT / ".github" / "workflows").glob("*.yaml")
+)
+for wf in workflows:
+    for lineno, line in enumerate(wf.read_text(encoding="utf-8").splitlines(), 1):
+        m = uses_re.search(line)
+        if not m:
+            continue
+        ref = m.group(1)
+        if ref.startswith("./") or ref.startswith("docker://"):
+            continue
+        if not pin_re.match(ref):
+            raise SystemExit(f"unpinned action in {wf.name}:{lineno}: {ref}")
 
 print("structure validation: OK")

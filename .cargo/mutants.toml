@@ -7,4 +7,12 @@
 # rather than reported as a survivor. The pattern is pinned to the line, so
 # moving or rewriting `luhn_valid` re-surfaces the mutant for a fresh
 # equivalence check instead of hiding a real gap.
-exclude_re = ['crates/detector-regex/src/lib\.rs:63:22: replace > with >= in luhn_valid']
+# `| with ^ in vault-json's decode_hex` is likewise an equivalent mutant: the
+# left operand is `nibble << 4` (low nibble always zero) and the right operand
+# is one hex digit (high bits always zero), so the operands never share a set
+# bit and `a | b == a ^ b` holds for every input. Pinned to the line for the
+# same reason as the luhn case.
+exclude_re = [
+    'crates/detector-regex/src/lib\.rs:63:22: replace > with >= in luhn_valid',
+    'crates/vault-json/src/encrypted\.rs:233:47: replace \| with \^ in decode_hex',
+]

@@ -186,4 +186,29 @@ mod tests {
         let truncated = format!("{MARKER_PREFIX}abcd");
         assert_eq!(verify_canary(&key, &scope("s1"), &truncated), Ok(false));
     }
+
+    #[test]
+    fn decode_hex_requires_the_exact_tag_width() {
+        // The width guard must reject every length but 64 before any slicing:
+        // a wrong-width tag is a malformed marker, never a partial match.
+        for text in [
+            String::new(),
+            "abcd".to_owned(),
+            "ab".repeat(31),
+            "ab".repeat(33),
+        ] {
+            assert_eq!(decode_hex(&text), None, "{text}");
+        }
+    }
+
+    #[test]
+    fn wrong_width_marker_payload_fails_closed() {
+        // A marker whose payload is not the exact tag width must be rejected
+        // cleanly, not sliced into a different tag.
+        let key = key();
+        for width in [31usize, 33] {
+            let marker = format!("{MARKER_PREFIX}{}{MARKER_SUFFIX}", "ab".repeat(width));
+            assert_eq!(verify_canary(&key, &scope("s1"), &marker), Ok(false));
+        }
+    }
 }
