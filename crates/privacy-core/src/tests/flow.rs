@@ -91,6 +91,61 @@ fn restore_leaves_redacted_and_truncated_tokens_untouched() {
     }
 }
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Probe recording that `expire_vault` delegated to [`Vault::expire`].
+struct ExpiryProbe {
+    inner: MemoryVault,
+    expired: Arc<AtomicBool>,
+}
+
+impl Vault for ExpiryProbe {
+    fn get_or_insert(
+        &mut self,
+        scope: &ScopeId,
+        kind: &str,
+        original: &str,
+    ) -> Result<Mapping, VaultError> {
+        self.inner.get_or_insert(scope, kind, original)
+    }
+
+    fn resolve(&self, scope: &ScopeId, token: &str) -> Result<Option<Mapping>, VaultError> {
+        self.inner.resolve(scope, token)
+    }
+
+    fn delete_scope(&mut self, scope: &ScopeId) -> Result<(), VaultError> {
+        self.inner.delete_scope(scope)
+    }
+
+    fn expire(&mut self) -> Result<(), VaultError> {
+        self.expired.store(true, Ordering::SeqCst);
+        self.inner.expire()
+    }
+}
+
+#[test]
+fn expire_vault_delegates_to_the_vault() {
+    let expired = Arc::new(AtomicBool::new(false));
+    let mut pipeline = PrivacyPipeline::new(
+        Box::new(RegexDetector),
+        Box::new(DefaultPolicy),
+        Box::new(PseudonymizingTransformer),
+        Box::new(ExpiryProbe {
+            inner: MemoryVault::default(),
+            expired: Arc::clone(&expired),
+        }),
+    );
+    match pipeline.expire_vault() {
+        Ok(()) => {}
+        Err(error) => panic!("unexpected error: {error}"),
+    }
+    assert!(
+        expired.load(Ordering::SeqCst),
+        "expire_vault must call Vault::expire"
+    );
+}
+
 #[test]
 fn forget_removes_session_mappings() {
     let mut pipeline = pipeline();

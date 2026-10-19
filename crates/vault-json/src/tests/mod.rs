@@ -36,6 +36,45 @@ fn open(path: &PathBuf) -> JsonVault {
         Err(error) => panic!("unexpected error: {error}"),
     }
 }
+#[test]
+fn a_missing_parent_directory_is_created_for_the_vault_and_its_lock() {
+    let path = temp_path().join("nested").join("vault.json");
+    let mut vault = open(&path);
+    let mapping = stored(&mut vault, &scope("s1"), "email", "alice@example.com");
+    drop(vault);
+    let fresh = open(&path);
+    assert_eq!(
+        resolved(&fresh, &scope("s1"), &mapping.token).map(|mapping| mapping.original),
+        Some("alice@example.com".to_owned())
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn opening_an_existing_vault_tightens_it_to_owner_private() {
+    use std::os::unix::fs::PermissionsExt;
+    let path = temp_path();
+    // A file created outside this process with lax permissions: opening it
+    // must tighten it to owner-only, not leave it readable by others.
+    match std::fs::write(&path, b"{\"mappings\":[],\"counters\":[]}") {
+        Ok(()) => {}
+        Err(error) => panic!("unexpected error: {error}"),
+    }
+    match std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)) {
+        Ok(()) => {}
+        Err(error) => panic!("unexpected error: {error}"),
+    }
+    drop(open(&path));
+    let mode = match std::fs::metadata(&path) {
+        Ok(metadata) => metadata.permissions().mode(),
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    assert_eq!(
+        mode & 0o777,
+        0o600,
+        "vault must be owner-private after open"
+    );
+}
 
 fn scope(name: &str) -> ScopeId {
     ScopeId(name.to_owned())
@@ -75,6 +114,21 @@ fn mappings_survive_reopen_and_share_counters() {
     let second = stored(&mut reopened, &scope, "email", "bob@example.com");
     assert_ne!(first.token, second.token);
     assert_token(&second.token, "EMAIL", 2);
+    cleanup(&path);
+}
+
+#[test]
+fn counters_are_independent_per_scope_and_kind() {
+    let path = temp_path();
+    let mut vault = open(&path);
+    let first_scope = scope("counter-a");
+    let second_scope = scope("counter-b");
+    let first = stored(&mut vault, &first_scope, "email", "one@example.com");
+    assert_token(&first.token, "EMAIL", 1);
+    let other_scope = stored(&mut vault, &second_scope, "email", "two@example.com");
+    assert_token(&other_scope.token, "EMAIL", 1);
+    let other_kind = stored(&mut vault, &first_scope, "phone", "+15550000");
+    assert_token(&other_kind.token, "PHONE", 1);
     cleanup(&path);
 }
 

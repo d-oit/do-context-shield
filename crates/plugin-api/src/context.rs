@@ -153,4 +153,32 @@ mod tests {
             assert_eq!(decoded::<DataCategory>(&format!("\"{name}\"")), variant);
         }
     }
+
+    #[test]
+    fn recipient_class_parses_each_protocol_name() {
+        assert_eq!(RecipientClass::parse("local"), Some(RecipientClass::Local));
+        assert_eq!(
+            RecipientClass::parse("trusted"),
+            Some(RecipientClass::Trusted)
+        );
+        assert_eq!(
+            RecipientClass::parse("external"),
+            Some(RecipientClass::External)
+        );
+        assert_eq!(
+            RecipientClass::parse("unknown"),
+            Some(RecipientClass::Unknown)
+        );
+        assert_eq!(RecipientClass::parse("bogus"), None);
+    }
+
+    #[test]
+    fn jurisdiction_shape_is_two_ascii_letters() {
+        use super::is_valid_jurisdiction;
+        assert!(is_valid_jurisdiction("US"));
+        assert!(is_valid_jurisdiction("de"));
+        for value in ["", "U", "USA", "U1", "1U", "ü1"] {
+            assert!(!is_valid_jurisdiction(value), "{value}");
+        }
+    }
 }

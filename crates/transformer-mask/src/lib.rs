@@ -111,6 +111,20 @@ mod tests {
     }
 
     #[test]
+    fn an_entity_range_past_the_input_fails_closed() {
+        // The guard must reject a range the input cannot hold instead of
+        // slicing past its end.
+        let error = match transform("mail", &[planned("mails", "email", 0, 5, Action::Redact)]) {
+            Ok(_) => panic!("expected an invalid-range error"),
+            Err(error) => error,
+        };
+        assert!(
+            error.to_string().contains("invalid entity range"),
+            "{error}"
+        );
+    }
+
+    #[test]
     fn masks_all_but_the_last_four_characters() {
         let result = match transform(
             "mail alice@example.com",
