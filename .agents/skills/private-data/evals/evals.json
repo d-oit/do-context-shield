@@ -56,7 +56,7 @@
       "expected_output": "Fabricated placeholders not minted by the vault fail to resolve and remain unchanged. Restore resolves only exact tokens minted by the vault for the active session.",
       "files": [],
       "dim": "effectiveness",
-      "kind": "adversarial",
+      "kind": "implicit",
       "assertions": [
         "contains:.agents/skills/private-data/SKILL.md|fabricated placeholders (tokens not minted by the vault for the session) fail to resolve and stay unchanged",
         "contains:README.md|fabricated"
@@ -68,7 +68,7 @@
       "expected_output": "Tokens from another session do not resolve because vault mappings are strictly session-scoped. Isolation prevents cross-session resolution.",
       "files": [],
       "dim": "effectiveness",
-      "kind": "adversarial",
+      "kind": "implicit",
       "assertions": [
         "contains:.agents/skills/private-data/SKILL.md|Keep one stable session id per agent task so repeated entities get stable pseudonyms",
         "contains:docs/client-integration.md|session"
@@ -80,7 +80,7 @@
       "expected_output": "Valid tokens minted in the same session resolve to original sensitive values if restored. Restoring inside the model loop risks handing raw private values back to untrusted models or context, so restore harness-side or handle output strictly.",
       "files": [],
       "dim": "effectiveness",
-      "kind": "adversarial",
+      "kind": "contextual",
       "assertions": [
         "contains:.agents/skills/private-data/SKILL.md|valid tokens minted in the same session",
         "contains:.agents/skills/private-data/SKILL.md|Restore harness-side outside the model loop"
@@ -92,7 +92,7 @@
       "expected_output": "No, default MCP tool exposure excludes restore. The server exposes only context.sanitize and context.inspect by default to maintain least privilege.",
       "files": [],
       "dim": "discoverability",
-      "kind": "adversarial",
+      "kind": "contextual",
       "assertions": [
         "contains:.agents/skills/private-data/SKILL.md|MCP default tool exposure excludes",
         "contains:docs/client-integration.md|mcp-stdio"
@@ -104,7 +104,7 @@
       "expected_output": "Explicitly enabling context.restore in MCP tool exposure requires human-reviewed need because tool results return directly to the calling model.",
       "files": [],
       "dim": "discoverability",
-      "kind": "adversarial",
+      "kind": "explicit",
       "assertions": [
         "contains:.agents/skills/private-data/SKILL.md|explicitly exposing `context.restore` to the model loop via `--tools` requires human-reviewed need",
         "contains:docs/client-integration.md|exposing `restore` requires human-reviewed need"
