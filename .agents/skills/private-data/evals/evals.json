@@ -56,7 +56,7 @@
       "expected_output": "Fabricated tokens not stored in the session vault do not resolve and remain untouched by restore because only exact tokens minted by the vault are resolved.",
       "files": [],
       "dim": "effectiveness",
-      "kind": "adversarial",
+      "kind": "contextual",
       "assertions": [
         "contains:.agents/skills/private-data/SKILL.md|restore resolves only exact tokens minted by the vault",
         "contains:.agents/skills/private-data/SKILL.md|fabricated tokens not in the vault do not resolve"
@@ -68,7 +68,7 @@
       "expected_output": "No, restore is strictly session-scoped and resolves only tokens stored in the vault under the exact same session.",
       "files": [],
       "dim": "effectiveness",
-      "kind": "adversarial",
+      "kind": "contextual",
       "assertions": [
         "contains:.agents/skills/private-data/SKILL.md|same-session-id",
         "contains:.agents/skills/private-data/SKILL.md|Keep one stable session id per agent task"
@@ -80,7 +80,7 @@
       "expected_output": "If restore is called on text containing a valid same-session token, the vault will resolve it to the original value. Restoration must happen harness-side with strict output handling to avoid exposing raw values to the model loop.",
       "files": [],
       "dim": "effectiveness",
-      "kind": "adversarial",
+      "kind": "implicit",
       "assertions": [
         "contains:.agents/skills/private-data/SKILL.md|if model output echoes or inserts a valid same-session token",
         "contains:.agents/skills/private-data/SKILL.md|avoid exposing raw values to the model context"
@@ -92,7 +92,7 @@
       "expected_output": "MCP tool results return to the calling model, so exposing restore would allow a model to view raw original values. MCP default tool exposure excludes restore for least privilege, and enabling restore via --tools requires explicit, human-reviewed need.",
       "files": [],
       "dim": "effectiveness",
-      "kind": "adversarial",
+      "kind": "explicit",
       "assertions": [
         "contains:.agents/skills/private-data/SKILL.md|context.restore is not exposed by default",
         "contains:.agents/skills/private-data/SKILL.md|--tools opts in"
