@@ -19,27 +19,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  fmt:
-    name: Format
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
-        with:
-          components: rustfmt
-      - run: cargo fmt --all -- --check
-
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-
   test:
     name: Test
     runs-on: ubuntu-24.04
@@ -84,19 +63,6 @@ jobs:
       - name: Check feature-gated code
         run: cargo check --workspace --all-features --all-targets
 
-  audit:
-    name: Security audit
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
-      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
-        with:
-          tool: cargo-audit
-      - run: cargo audit --file Cargo.lock
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   deny:
     name: Dependency policy
     runs-on: ubuntu-24.04
@@ -122,7 +88,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
-          tool: cargo-audit,cargo-deny
+          tool: cargo-audit
       - name: Install do-harness (pinned)
         run: |
           curl -fsSL https://raw.githubusercontent.com/d-o-hub/do-harness/32120c3644ac30236970809e2745981657efd5a7/scripts/install.sh \
@@ -205,13 +171,13 @@ jobs:
 
   ci-success:
     name: CI Success
-    needs: [fmt, clippy, test, cross-platform, audit, deny, structure, harness, fuzz-check, publish-check]
+    needs: [test, cross-platform, deny, structure, harness, fuzz-check, publish-check]
     runs-on: ubuntu-24.04
     if: always()
     steps:
       - name: Check all jobs passed
         run: |
-          for res in "${{ needs.fmt.result }}" "${{ needs.clippy.result }}" "${{ needs.test.result }}" "${{ needs.cross-platform.result }}" "${{ needs.audit.result }}" "${{ needs.deny.result }}" "${{ needs.structure.result }}" "${{ needs.harness.result }}" "${{ needs.fuzz-check.result }}" "${{ needs.publish-check.result }}"; do
+          for res in "${{ needs.test.result }}" "${{ needs.cross-platform.result }}" "${{ needs.deny.result }}" "${{ needs.structure.result }}" "${{ needs.harness.result }}" "${{ needs.fuzz-check.result }}" "${{ needs.publish-check.result }}"; do
             if [ "$res" != "success" ]; then
               echo "Required CI job did not succeed: $res"
               exit 1

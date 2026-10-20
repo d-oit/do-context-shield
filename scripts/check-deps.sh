@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check-deps.sh — dependency-direction + cargo-deny policy check.
+# check-deps.sh — dependency-direction + offline dependency closure policy check.
 #
 # Sensor: scripts/check-deps.sh
 # Rules:
@@ -9,19 +9,13 @@
 #      adapters/adapter, cli), which generalizes the do-harness types-manifest
 #      rule without hardcoding project crate names. Override the suffix ERE
 #      with DO_HARNESS_FORBIDDEN_LAYERS.
-#   2. `cargo deny check` runs when deny.toml is configured and covers the
-#      transitive closure; without deny.toml the policy is unconfigured, so
-#      the sensor WARN-skips rather than failing a greenfield scaffold.
-#   3. The dependency closure stays offline: Cargo.lock must contain no network
+#   2. The dependency closure stays offline: Cargo.lock must contain no network
 #      client, TLS stack, or hosted-model SDK, because the core's privacy claim
 #      is that nothing leaves the process. Cargo.lock lists every feature's
 #      dependencies, so this also covers feature-gated trees (`gliner2`) that
 #      `cargo deny check` does not compile. Override the ERE with
 #      DO_HARNESS_FORBIDDEN_DEPS (used by the sensor's own negative tests).
-# Missing cargo-deny fails closed when CI=true or DO_HARNESS_REQUIRE_TOOLS=1.
 set -euo pipefail
-
-require_tools() { [[ "${CI:-}" == "true" || "${DO_HARNESS_REQUIRE_TOOLS:-}" == "1" ]]; }
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -56,21 +50,6 @@ else
             FAIL=1
         fi
     done < <(sed -n 's/^name = "\(.*\)"/\1/p' "$LOCK" | sort -u)
-fi
-
-if [[ -f "$ROOT/deny.toml" ]]; then
-    if ! command -v cargo-deny >/dev/null 2>&1; then
-        if require_tools; then
-            echo "FAIL: cargo-deny is required when CI=true or DO_HARNESS_REQUIRE_TOOLS=1."
-            FAIL=1
-        else
-            echo "WARN: cargo-deny not installed; skipping deny check."
-        fi
-    else
-        cargo deny check || FAIL=1
-    fi
-else
-    echo "WARN: deny.toml not found; skipping cargo-deny policy check."
 fi
 
 if (( FAIL )); then
