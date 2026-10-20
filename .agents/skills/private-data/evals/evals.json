@@ -58,7 +58,7 @@
       "dim": "effectiveness",
       "kind": "contextual",
       "assertions": [
-        "contains:.agents/skills/private-data/SKILL.md|restore resolves only exact tokens minted by the vault",
+        "contains:.agents/skills/private-data/SKILL.md|`restore` resolves only exact tokens minted by the vault for the same session",
         "contains:.agents/skills/private-data/SKILL.md|fabricated tokens not in the vault do not resolve"
       ]
     },
@@ -94,8 +94,8 @@
       "dim": "effectiveness",
       "kind": "explicit",
       "assertions": [
-        "contains:.agents/skills/private-data/SKILL.md|context.restore is not exposed by default",
-        "contains:.agents/skills/private-data/SKILL.md|--tools opts in"
+        "contains:.agents/skills/private-data/SKILL.md|`context.restore` is not exposed by default",
+        "contains:.agents/skills/private-data/SKILL.md|`--tools` opts in"
       ]
     }
   ]
