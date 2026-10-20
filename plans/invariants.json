@@ -315,7 +315,7 @@
     "invariant": "File audit logging (`FileAuditSink`) requires strict Unix filesystem safety: pre-existing parent directory, safe descriptor open with `O_RDWR | O_APPEND | O_CREAT | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC` and mode `0600`, exclusive advisory file locking during validation and append, refusal of non-regular files, multiple links, foreign ownership, symlinks, hardlinks, FIFOs, and paths aliasing vault files; non-Unix platforms fail explicitly without fallback",
     "rationale": "Audit trails are sensitive system metadata and must not be hijacked by symlink attacks, concurrent corruption, or file-descriptor replacement; failing closed before input processing prevents silent loss or disclosure of audit records",
     "sensor": "cargo test -p do-context-shield-audit-file + cargo test -p do-context-shield-plugin-registry",
-"category": "security"
+    "category": "security"
   },
   {
     "invariant": "The opt-in `matrix` policy (`crates/policy-matrix`) never loosens the boundary: secret-kind and judge-`Secret` entities always redact under every purpose rule; unknown recipients block every non-secret entity except `non_personal` data; special-category data to external/unknown recipients blocks; and adequacy is a pair decision — an unset origin or a destination that is neither the origin itself nor a member of `adequate_jurisdictions` blocks special-category data to a trusted recipient, so an unconfigured matrix is never looser than the default policy; country codes are case-normalized",
@@ -417,6 +417,12 @@
     "invariant": "Every `uses:` reference in every GitHub Actions workflow is pinned to an immutable 40-hex commit SHA with the release version kept as a trailing comment, never a mutable tag (local `./` composite actions and `docker://` refs are exempt)",
     "rationale": "A mutable tag can be moved to a revision this repository never reviewed, which is a supply-chain path to the write tokens the labeler and release-drafter jobs hold and to the pull-request input the commitlint and secret-scan jobs process; PR #123 pinned the CI-critical workflows (ci, fuzz, mutants) and the remaining four (commitlint, labeler, release-drafter, secret-scan) followed, so the rule now covers every workflow",
     "sensor": "python3 scripts/validate-structure.py (structure sensor: rejects any `uses:` ref that is not `owner/repo@<40-hex sha>`; the version comment is review-checked) + CI `Structure` job",
+    "category": "security"
+  },
+  {
+    "invariant": "Credential detection stays on the linear-time regex engine with word-boundary anchors; lookaround/backtracking engines and anchor-stripped weak-prefix patterns are rejected, and the glued-only residual (a secret with no detectable boundary anywhere) is accepted with the central redaction postcondition covering glued duplicates of detected values",
+    "rationale": "Backtracking on untrusted input is a ReDoS vector at the privacy boundary and a new dependency against the local/CPU-minimal rule; dropping \b for weak prefixes (sk-, hf_, xox) redacts ordinary text such as disk-usage-of-the-container with no lookaround to separate glued-real from in-word, so neither option passes review and no slice follows the verdict",
+    "sensor": "cargo test -p do-context-shield-detector-regex --test quality + review of new pattern entries",
     "category": "security"
   }
 ]

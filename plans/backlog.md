@@ -124,17 +124,31 @@ work lands or the precondition expires.
 
 ## Open
 
-### Glued-only secret detection gap: approach verdict before any slice
+### Glued-only secret detection gap: verdict is hold, no slice
 
-- **Status**: open (promoted to a harness task, `decision`). This is the
+- **Status**: decided 2026-10-20 (harness task, `decision`). This is the
   documented residual of the redaction-postcondition item under **Landed**: a
   secret that never appears at a detectable boundary anywhere in the input is
   still missed, and with no detected value the postcondition has nothing to
   check.
-- **Next**: record the verdict on closing it — a lookaround-capable regex
-  engine (the `regex` crate has none) versus broader credential patterns —
-  with the false-positive review each option implies, then slice only the
-  winning option.
+- **Verdict (recorded, hold — no slice)**: both options are rejected. A
+  lookaround/backtracking engine (e.g. `fancy-regex`) would trade a
+  linear-time guarantee for backtracking on untrusted input — a ReDoS vector
+  at the privacy boundary — plus a new dependency against the
+  local/CPU-minimal rule. Broader patterns (dropping the `\b` anchors for
+  weak prefixes such as `sk-`, `hf_`, `xox`) fail the false-positive review:
+  they redact ordinary text such as `disk-usage-of-the-container`, and the
+  `regex` crate has no lookaround to separate a "real but glued" token from
+  one inside a longer word. The accepted mitigation stays the central
+  redaction postcondition: any glued duplicate of a *detected* value fails
+  closed (regressions in `crates/privacy-core/src/tests/redaction.rs` plus
+  the `glued_duplicate.txt` fuzz seed). A *glued-only* occurrence — a secret
+  with no detectable boundary anywhere — remains a documented residual, not a
+  silent pass: detectors report what they can, the pipeline never downgrades
+  on uncertainty, and the quality corpus (`--test quality`) guards the
+  boundary rules that do exist.
+- **Exit criteria**: met — verdict plus rationale recorded here and as an
+  invariant in `plans/invariants.json`; no pattern or dependency change.
 
 ### Mutation-run findings: 31 survivors, 2 restore timeouts
 
@@ -203,13 +217,30 @@ work lands or the precondition expires.
   per-package runs are the working route. `vault-memory` `expire`'s `<`→`<=`
   is a real exact-boundary gap, not an equivalent: it needs an injected clock
   to test, so it stays a survivor.
-- **Next**: triage the remaining 21 by area — `SemanticLabel::parse`'s
-  `secret` arm, `DataCategory::parse`'s arms, `placeholder.rs`'s minted-token
-  guards, `spans.rs`'s `resolve_overlaps` bounds, then the vault-json
-  `Lock`/`persist_locked`/`restrict_permissions`, vault-memory counter and
-  `expire` arithmetic, `expire_vault`, `iban_valid`'s `%`, and
-  `transformer-mask`'s bound — then re-dispatch and expect ~21 survivors
-  instead of 31. A raw mutation score is not proof of security.
+- **Triage progress (2026-10-20, third batch, package-scoped, NOT
+  CI-comparable)**: three more resolved on the windows-gnu host toolchain,
+  each kill-proven by hand (mutation applied, test observed failing, mutation
+  reverted). `vault-memory` `expire`'s `<`→`<=` was a **real exact-boundary
+  gap**: wall-clock tests can never hit `elapsed == ttl`, so the predicate
+  is now the pure `MemoryVault::live(ttl, elapsed)` shared by `expired` and
+  `expire`, with `ttl_boundary_is_already_expired` pinning the tie directly
+  (vault-memory goes 1 missed → 0; 34 mutants, 31 caught, 3 unviable).
+  `vault-json` `persist_locked`'s `delete !` was a **test gap masked by the
+  lock**: every public caller holds the exclusive lock, which already creates
+  the parents, so `persist_locked_creates_missing_parents_without_a_lock`
+  calls it directly on a nested path (mutant observed failing).
+  `detector-regex` `iban_valid`'s `%`→`+` (letter branch) is the **third
+  proven equivalent**: adding 97 (≡ 0 mod 97) before later `% 97` steps that
+  multiply the carry by 10/100 leaves the final `== 1` unchanged — verified
+  by hand plus brute force over DE/GB/FR/ES/IT/NL valid IBANs — excluded in
+  `.cargo/mutants.toml` with that proof. Remaining local survivors are the
+  Unix-only permission checks (`restrict_permissions`,
+  `check_key_file_permissions` ×3) plus `Lock`/`persist_locked` overlap that
+  CI's Linux run arbitrates; `privacy-core` is 0 missed locally (97 mutants,
+  78 caught, 19 unviable) and `transformer-mask` stays 0.
+- **Next**: re-dispatch the workspace-scoped run and expect the count to fall
+  against the 31/2 baseline of dispatch 39012269650. A raw mutation score is
+  not proof of security.
 
 ## Blocked — approval-gated
 
