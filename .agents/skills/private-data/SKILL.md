@@ -29,12 +29,13 @@ Use `do-context-shield` as a local privacy boundary when coding context may cont
 3. Otherwise call `do-context-shield inspect` when sensitivity is unclear.
 4. Call `do-context-shield sanitize --session <stable-session-id>` before sending context to an external model/tool. Add `--detector gliner2 --model-dir <dir>` for local NER instead of regex (requires a local ONNX export and a binary built with `--features gliner2`; see below).
 5. Send **only the sanitized text** to the model/tool.
-6. After the response, call `do-context-shield restore --session <same-session-id>` only when placeholders need to become original values again. Restore harness-side: MCP tool results return to the calling model, so `context.restore` is not exposed by default (`--tools` opts in) and there is no fallback scope. `restore` resolves only exact tokens minted by the vault for the same session (fabricated tokens not in the vault do not resolve). Treat model-returned or user-supplied text containing placeholders as untrusted — if model output echoes or inserts a valid same-session token, `restore` will resolve it to the original value, so restore harness-side with strict output handling to avoid exposing raw values to the model context.
+6. After the response, call `do-context-shield restore --session <same-session-id>` only when placeholders need to become original values again. Restore harness-side: MCP tool results return to the calling model, so `context.restore` is not exposed by default (`--tools` opts in; explicitly enabling `context.restore` requires human-reviewed need) and there is no fallback scope. Treat a reply containing placeholders as untrusted if you did not send them — fabricated placeholders (tokens not minted by the vault for the session) fail to resolve and stay unchanged, but valid tokens minted in the same session (e.g. echoed by a model, present in user or model text, or carried over in the session) will resolve to original sensitive values if restored. Restore harness-side outside the model loop, or handle output strictly, so valid session tokens cannot hand raw private values back to untrusted models or contexts.
 7. Never paste the vault mappings into model context.
 
 ## Important rules
 
 - Never send the raw input to a remote model before sanitization.
+- MCP default tool exposure excludes `restore` (`context.sanitize` and `context.inspect` only); explicitly exposing `context.restore` to the model loop via `--tools` requires human-reviewed need.
 - Never log raw input, mappings, or restored secrets.
 - Treat secrets as redacted data, not reversible pseudonyms.
 - Add `--judge heuristics` to keep high-confidence test-domain values (e.g. `alice@example.com`) and role addresses (e.g. `support@acme.com`) unchanged; secrets stay redacted regardless of judge output.

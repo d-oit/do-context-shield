@@ -52,50 +52,62 @@
     },
     {
       "id": 5,
-      "prompt": "An attacker sends a prompt containing a fabricated placeholder string __DO_PRIVATE_EMAIL_1_1234567890ABCDEF__ expecting restore to resolve it.",
-      "expected_output": "Fabricated tokens not stored in the session vault do not resolve and remain untouched by restore because only exact tokens minted by the vault are resolved.",
+      "prompt": "A model generated a reply with a fabricated token __DO_PRIVATE_EMAIL_1_0000000000000000__ that was never minted by the vault. What happens when restore is called?",
+      "expected_output": "Fabricated placeholders not minted by the vault fail to resolve and remain unchanged. Restore resolves only exact tokens minted by the vault for the active session.",
       "files": [],
       "dim": "effectiveness",
-      "kind": "contextual",
+      "kind": "adversarial",
       "assertions": [
-        "contains:.agents/skills/private-data/SKILL.md|`restore` resolves only exact tokens minted by the vault for the same session",
-        "contains:.agents/skills/private-data/SKILL.md|fabricated tokens not in the vault do not resolve"
+        "contains:.agents/skills/private-data/SKILL.md|fabricated placeholders (tokens not minted by the vault for the session) fail to resolve and stay unchanged",
+        "contains:README.md|fabricated"
       ]
     },
     {
       "id": 6,
-      "prompt": "Will a token minted in session-A resolve if passed to restore under session-B?",
-      "expected_output": "No, restore is strictly session-scoped and resolves only tokens stored in the vault under the exact same session.",
+      "prompt": "Can a token minted in session issue-100 be restored when running restore with --session issue-200?",
+      "expected_output": "Tokens from another session do not resolve because vault mappings are strictly session-scoped. Isolation prevents cross-session resolution.",
       "files": [],
       "dim": "effectiveness",
-      "kind": "contextual",
+      "kind": "adversarial",
       "assertions": [
-        "contains:.agents/skills/private-data/SKILL.md|same-session-id",
-        "contains:.agents/skills/private-data/SKILL.md|Keep one stable session id per agent task"
+        "contains:.agents/skills/private-data/SKILL.md|Keep one stable session id per agent task so repeated entities get stable pseudonyms",
+        "contains:docs/client-integration.md|session"
       ]
     },
     {
       "id": 7,
-      "prompt": "What happens if a model response echoes or inserts a valid same-session token in its output?",
-      "expected_output": "If restore is called on text containing a valid same-session token, the vault will resolve it to the original value. Restoration must happen harness-side with strict output handling to avoid exposing raw values to the model loop.",
+      "prompt": "The model output echoed a valid same-session token __DO_PRIVATE_EMAIL_1_9F3A2C7B5D1E4F08__. What is the security risk if restore is called on model output?",
+      "expected_output": "Valid tokens minted in the same session resolve to original sensitive values if restored. Restoring inside the model loop risks handing raw private values back to untrusted models or context, so restore harness-side or handle output strictly.",
       "files": [],
       "dim": "effectiveness",
-      "kind": "implicit",
+      "kind": "adversarial",
       "assertions": [
-        "contains:.agents/skills/private-data/SKILL.md|if model output echoes or inserts a valid same-session token",
-        "contains:.agents/skills/private-data/SKILL.md|avoid exposing raw values to the model context"
+        "contains:.agents/skills/private-data/SKILL.md|valid tokens minted in the same session",
+        "contains:.agents/skills/private-data/SKILL.md|Restore harness-side outside the model loop"
       ]
     },
     {
       "id": 8,
-      "prompt": "Why is MCP context.restore disabled by default and when should it be enabled?",
-      "expected_output": "MCP tool results return to the calling model, so exposing restore would allow a model to view raw original values. MCP default tool exposure excludes restore for least privilege, and enabling restore via --tools requires explicit, human-reviewed need.",
+      "prompt": "An attacker attempts to invoke context.restore on a default do-context-shield mcp-stdio server. Will the tool be available?",
+      "expected_output": "No, default MCP tool exposure excludes restore. The server exposes only context.sanitize and context.inspect by default to maintain least privilege.",
       "files": [],
-      "dim": "effectiveness",
-      "kind": "explicit",
+      "dim": "discoverability",
+      "kind": "adversarial",
       "assertions": [
-        "contains:.agents/skills/private-data/SKILL.md|`context.restore` is not exposed by default",
-        "contains:.agents/skills/private-data/SKILL.md|`--tools` opts in"
+        "contains:.agents/skills/private-data/SKILL.md|MCP default tool exposure excludes",
+        "contains:docs/client-integration.md|mcp-stdio"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "A user wants to pass --tools restore to expose context.restore to the model loop. What is required before enabling this?",
+      "expected_output": "Explicitly enabling context.restore in MCP tool exposure requires human-reviewed need because tool results return directly to the calling model.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "adversarial",
+      "assertions": [
+        "contains:.agents/skills/private-data/SKILL.md|explicitly exposing `context.restore` to the model loop via `--tools` requires human-reviewed need",
+        "contains:docs/client-integration.md|exposing `restore` requires human-reviewed need"
       ]
     }
   ]
