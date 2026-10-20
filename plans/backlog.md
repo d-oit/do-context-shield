@@ -238,9 +238,11 @@ work lands or the precondition expires.
   `check_key_file_permissions` ×3) plus `Lock`/`persist_locked` overlap that
   CI's Linux run arbitrates; `privacy-core` is 0 missed locally (97 mutants,
   78 caught, 19 unviable) and `transformer-mask` stays 0.
-- **Next**: re-dispatch the workspace-scoped run and expect the count to fall
-  against the 31/2 baseline of dispatch 39012269650. A raw mutation score is
-  not proof of security.
+- **Re-dispatch (2026-10-20, run 39475097084 on the triage branch): 0 missed,
+  0 timeouts across all 8 shards** (449 caught, 61 unviable) against the
+  31/2 baseline of dispatch 39012269650. The Unix-only permission mutants
+  are covered by the existing Linux tests once the workspace scope is used.
+  A raw mutation score is not proof of security.
 
 ## Blocked — approval-gated
 
