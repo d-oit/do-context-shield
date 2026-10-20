@@ -204,6 +204,19 @@ for entry in invariants:
                 f"invariants.json: entry missing {field}: {entry.get('invariant', '<no invariant>')}"
             )
 
+# Verify do-harness.toml compiler inputs and manifest coverage for Rust sensors
+rust_sensors = {"fmt", "check", "clippy", "test"}
+for sensor_def in re.findall(r'\[\[sensors\]\]\s*name\s*=\s*"([^"]+)"\s*argv\s*=\s*\[(.*?)\]\s*when-changed\s*=\s*\[(.*?)\]', config, re.S):
+    s_name = sensor_def[0]
+    if s_name in rust_sensors:
+        patterns = [p.strip().strip('"') for p in sensor_def[2].split(",")]
+        if "**/Cargo.toml" not in patterns:
+            failures.append(f"do-harness.toml: sensor `{s_name}` when-changed must include `**/Cargo.toml` to cover member manifests")
+        if "rust-toolchain.toml" not in patterns:
+            failures.append(f"do-harness.toml: sensor `{s_name}` when-changed must include `rust-toolchain.toml`")
+        if s_name in {"check", "clippy", "test"} and ".cargo/config.toml" not in patterns:
+            failures.append(f"do-harness.toml: sensor `{s_name}` when-changed must include `.cargo/config.toml`")
+
 # Repo paths a skill names (scripts/..., docs/..., .github/...) must exist: the
 # eval sandbox cannot mirror them in harness 0.1.1, so this is the only place
 # the sensor map's file claims are enforced.
