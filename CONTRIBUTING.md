@@ -128,26 +128,24 @@ docs: update client-integration guide
 
 ## Release Process
 
-Release notes are drafted automatically from merged PRs (see `.github/release-drafter.yml`).
+For complete release details and contracts, see [docs/releasing.md](docs/releasing.md).
 
-### Publishing to crates.io
+Release notes are drafted automatically from merged PRs (see `.github/release-drafter.yml`). Tagged release triggers (`v*.*.*`) execute release preflight verification, build cross-platform binaries, run release smoke tests, upload release assets with `SHA256SUMS`, and publish crates bottom-up.
 
-Every publishable crate defines an `include` whitelist in its `Cargo.toml`
-so internal files never end up in the published package. Verify the surface with:
+### Preflight and Publishing
+
+Verify release preflight locally:
 
 ```bash
-cargo package --list -p <crate-name>
+bash scripts/check-release-preflight.sh v0.1.0
+bash scripts/smoke-test-release.sh
 ```
 
-(Requires a clean tree; pass `--allow-dirty` for local iteration.)
-
-Workspace crates depend on each other via versioned path dependencies, so they
-must be published **bottom-up in dependency order** — `cargo publish` resolves
-siblings through the crates.io index:
+Workspace crates depend on each other via versioned path dependencies, so they are published **bottom-up in dependency order**. The publishing script is idempotent and checks crates.io status before publishing:
 
 ```bash
-scripts/publish-crates.sh --dry-run  # rehearse the package surface
-CARGO_REGISTRY_TOKEN=... scripts/publish-crates.sh  # publish in order
+scripts/publish-crates.sh --dry-run  # rehearse package surface and status
+CARGO_REGISTRY_TOKEN=... scripts/publish-crates.sh  # publish idempotently in order
 ```
 
 ## Reporting Issues

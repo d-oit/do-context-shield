@@ -3,6 +3,7 @@
 
 name-template: 'v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
+filter-by-commitish: true
 
 # Required by release-drafter v6+; without it the workflow fails with
 # `"template" is required`.
@@ -16,6 +17,8 @@ template: |
   $CONTRIBUTORS
 
   **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+
+no-changes-template: "* Initial release baseline or no user-facing changes in this release cycle *"
 
 categories:
   - title: 'Features'
