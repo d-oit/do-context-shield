@@ -58,8 +58,8 @@
       "dim": "effectiveness",
       "kind": "implicit",
       "assertions": [
-        "contains:.agents/skills/private-data/SKILL.md|fabricated placeholders (tokens not minted by the vault for the session) fail to resolve and stay unchanged",
-        "contains:README.md|fabricated"
+        "contains:.agents/skills/private-data/SKILL.md|fabricated placeholders",
+        "contains:.agents/skills/private-data/SKILL.md|fail to resolve and stay unchanged"
       ]
     },
     {
@@ -70,8 +70,8 @@
       "dim": "effectiveness",
       "kind": "implicit",
       "assertions": [
-        "contains:.agents/skills/private-data/SKILL.md|Keep one stable session id per agent task so repeated entities get stable pseudonyms",
-        "contains:docs/client-integration.md|session"
+        "contains:.agents/skills/private-data/SKILL.md|Keep one stable session id",
+        "contains:.agents/skills/private-data/SKILL.md|sanitize --session"
       ]
     },
     {
@@ -95,7 +95,7 @@
       "kind": "contextual",
       "assertions": [
         "contains:.agents/skills/private-data/SKILL.md|MCP default tool exposure excludes",
-        "contains:docs/client-integration.md|mcp-stdio"
+        "contains:.agents/skills/private-data/SKILL.md|not exposed by default"
       ]
     },
     {
@@ -106,8 +106,8 @@
       "dim": "discoverability",
       "kind": "explicit",
       "assertions": [
-        "contains:.agents/skills/private-data/SKILL.md|explicitly exposing `context.restore` to the model loop via `--tools` requires human-reviewed need",
-        "contains:docs/client-integration.md|exposing `restore` requires human-reviewed need"
+        "contains:.agents/skills/private-data/SKILL.md|requires human-reviewed need",
+        "contains:.agents/skills/private-data/SKILL.md|explicitly enabling"
       ]
     }
   ]
