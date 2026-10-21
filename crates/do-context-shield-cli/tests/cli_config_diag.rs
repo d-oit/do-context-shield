@@ -128,6 +128,8 @@ fn sensitive_material_never_appears_in_the_report() {
     };
     let assert = cmd(dir.path())
         .args([
+            "--config",
+            "do-context-shield.toml",
             "config",
             "--vault-file",
             "/tmp/CLI-SECRET-VAULT.json",

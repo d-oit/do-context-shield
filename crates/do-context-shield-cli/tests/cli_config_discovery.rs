@@ -10,8 +10,8 @@ mod common;
 use common::{cmd, temp_dir};
 use std::path::{Path, PathBuf};
 
-const LOCAL_CONFIG: &str = "[context]\nrecipient = \"local\"\n";
-const EXTERNAL_CONFIG: &str = "[context]\nrecipient = \"external\"\n";
+const LOCAL_CONFIG: &str = "[plugins]\njudge = \"heuristics\"\n";
+const EXTERNAL_CONFIG: &str = "[plugins]\ndetector = \"regex\"\n";
 
 /// Captured stdout as text.
 fn stdout_of(assert: &assert_cmd::assert::Assert) -> String {
@@ -48,26 +48,73 @@ fn home_config(home: &Path) -> PathBuf {
 #[test]
 fn cwd_config_is_discovered() {
     let dir = temp_dir();
+    let vault = dir.path().join("v.json");
     write_config(
         &dir.path().join("do-context-shield.toml"),
-        LOCAL_CONFIG.as_bytes(),
+        format!("[plugins]\njudge = \"heuristics\"\n\n[vault]\nvault_file = \"{}\"\n", vault.display()).as_bytes(),
     );
-    // `recipient = "local"` keeps the address verbatim; the default `external`
-    // would pseudonymize it, so the output proves the file was read.
+    // `example.com` with `judge = "heuristics"` keeps the reserved domain address;
+    // without the judge it would pseudonymize, so the output proves the file was read.
+    let assert = cmd(dir.path())
+        .env("HOME", dir.path())
+        .args(["sanitize", "--session", "a"])
+        .write_stdin("test@example.com")
+        .assert()
+        .success();
     assert_eq!(
-        sanitize_in(dir.path(), dir.path(), "a"),
-        "alice@example.com"
+        stdout_of(&assert),
+        "test@example.com"
     );
+}
+
+#[test]
+fn autodiscovered_context_overrides_are_ignored() {
+    let dir = temp_dir();
+    write_config(
+        &dir.path().join("do-context-shield.toml"),
+        b"[context]\nrecipient = \"local\"\ndata_category = \"non_personal\"\n",
+    );
+    // Auto-discovered `[context]` overrides are ignored for one-shot sanitization
+    // to preserve conservative defaults unless explicitly selected via `--config`.
+    let output = sanitize_in(dir.path(), dir.path(), "ambient");
+    assert!(
+        output.starts_with("__DO_PRIVATE_EMAIL_"),
+        "ambient context must be ignored and conservative defaults applied, got: {output}"
+    );
+
+    // Explicit `--config` honors `[context]` settings.
+    let explicit_cfg = dir.path().join("explicit.toml");
+    write_config(
+        &explicit_cfg,
+        b"[context]\nrecipient = \"local\"\ndata_category = \"non_personal\"\n",
+    );
+    let assert = cmd(dir.path())
+        .args(["sanitize", "--session", "explicit", "--config"])
+        .arg(&explicit_cfg)
+        .write_stdin("alice@example.com")
+        .assert()
+        .success();
+    assert_eq!(stdout_of(&assert), "alice@example.com");
 }
 
 #[test]
 fn home_config_is_discovered() {
     let dir = temp_dir();
     let home = temp_dir();
-    write_config(&home_config(home.path()), LOCAL_CONFIG.as_bytes());
+    let vault = dir.path().join("v.json");
+    write_config(
+        &home_config(home.path()),
+        format!("[plugins]\njudge = \"heuristics\"\n\n[vault]\nvault_file = \"{}\"\n", vault.display()).as_bytes(),
+    );
+    let assert = cmd(dir.path())
+        .env("HOME", home.path())
+        .args(["sanitize", "--session", "b"])
+        .write_stdin("test@example.com")
+        .assert()
+        .success();
     assert_eq!(
-        sanitize_in(dir.path(), home.path(), "b"),
-        "alice@example.com"
+        stdout_of(&assert),
+        "test@example.com"
     );
 }
 
@@ -75,13 +122,20 @@ fn home_config_is_discovered() {
 fn cwd_config_shadows_the_home_config() {
     let dir = temp_dir();
     let home = temp_dir();
+    let vault = dir.path().join("v.json");
     write_config(
         &dir.path().join("do-context-shield.toml"),
-        LOCAL_CONFIG.as_bytes(),
+        format!("[plugins]\njudge = \"heuristics\"\n\n[vault]\nvault_file = \"{}\"\n", vault.display()).as_bytes(),
     );
-    write_config(&home_config(home.path()), EXTERNAL_CONFIG.as_bytes());
-    let kept = sanitize_in(dir.path(), home.path(), "c");
-    assert_eq!(kept, "alice@example.com", "the cwd file must win");
+    write_config(&home_config(home.path()), b"[plugins]\njudge = \"bogus\"\n");
+    let assert = cmd(dir.path())
+        .env("HOME", home.path())
+        .args(["sanitize", "--session", "c"])
+        .write_stdin("test@example.com")
+        .assert()
+        .success();
+    let kept = stdout_of(&assert);
+    assert_eq!(kept, "test@example.com", "the cwd file must win");
 }
 
 #[test]
@@ -159,22 +213,24 @@ fn non_utf8_config_is_an_error() {
 #[test]
 fn jurisdiction_must_be_an_iso_alpha2_code() {
     let dir = temp_dir();
-    for (value, expected) in [("DE", Some("alice@example.com")), ("Germany", None)] {
+    let cfg = dir.path().join("custom.toml");
+    for (value, is_valid) in [("DE", true), ("Germany", false)] {
         write_config(
-            &dir.path().join("do-context-shield.toml"),
+            &cfg,
             format!("[context]\nrecipient = \"local\"\njurisdiction = \"{value}\"\n").as_bytes(),
         );
         let assert = cmd(dir.path())
+            .arg("--config")
+            .arg(&cfg)
             .args(["sanitize", "--session", "i"])
             .write_stdin("alice@example.com")
             .assert();
-        match expected {
-            Some(text) => assert_eq!(stdout_of(&assert.success()), text),
-            None => {
-                assert
-                    .code(1)
-                    .stderr(predicates::str::contains("jurisdiction"));
-            }
+        if is_valid {
+            assert_eq!(stdout_of(&assert.success()), "alice@example.com");
+        } else {
+            assert
+                .code(1)
+                .stderr(predicates::str::contains("jurisdiction"));
         }
     }
 }

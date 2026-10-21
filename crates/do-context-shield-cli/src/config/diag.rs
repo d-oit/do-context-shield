@@ -207,29 +207,30 @@ pub(crate) fn explain(
 /// The reported enforcement context.
 fn context(cli: &CliSelection, config: &Config, resolved: &super::Resolved) -> Context {
     let env = &config.env;
+    let file_active = config.is_explicit;
     Context {
         recipient: named(
             &resolved.recipient,
             cli.context.recipient.is_some(),
             env.recipient,
-            config.context.recipient.is_some(),
+            file_active && config.context.recipient.is_some(),
         ),
         data_category: named(
             &resolved.data_category,
             cli.context.data_category.is_some(),
             env.data_category,
-            config.context.data_category.is_some(),
+            file_active && config.context.data_category.is_some(),
         ),
         jurisdiction: maybe_named(
             resolved.jurisdiction.as_deref(),
             cli.context.jurisdiction.is_some(),
             env.jurisdiction,
-            config.context.jurisdiction.is_some(),
+            file_active && config.context.jurisdiction.is_some(),
         ),
         purpose: presence(
             cli.context.purpose.is_some(),
             env.purpose,
-            config.context.purpose.is_some(),
+            file_active && config.context.purpose.is_some(),
         ),
     }
 }

@@ -107,53 +107,52 @@ fn cli_flag_overrides_config() {
 #[test]
 fn cwd_config_is_discovered_without_a_flag() {
     let dir = temp_dir();
+    let vault = dir.path().join("v.json");
     write_config(
         &dir.path().join("do-context-shield.toml"),
-        "[context]\nrecipient = \"local\"\n",
+        &format!("[plugins]\njudge = \"heuristics\"\n\n[vault]\nvault_file = {}\n", toml_literal(&vault)),
     );
 
-    // `--recipient local` keeps a personal value; observing the keep without
-    // any flag proves the working-directory file was found and applied.
-    let kept = sanitize(dir.path(), &[], "alice@example.com");
-    assert_eq!(kept, "alice@example.com");
+    let kept = sanitize(dir.path(), &[], "test@example.com");
+    assert_eq!(kept, "test@example.com");
 }
 
 #[test]
 fn home_config_is_discovered_when_the_working_directory_has_none() {
     let dir = temp_dir();
     let home = dir.path().join(".config/do-context-shield");
+    let vault = dir.path().join("v.json");
     if let Err(error) = std::fs::create_dir_all(&home) {
         panic!("cannot create {}: {error}", home.display());
     }
     write_config(
         &home.join("config.toml"),
-        "[context]\nrecipient = \"local\"\n",
+        &format!("[plugins]\njudge = \"heuristics\"\n\n[vault]\nvault_file = {}\n", toml_literal(&vault)),
     );
 
-    let kept = sanitize(dir.path(), &[], "alice@example.com");
-    assert_eq!(kept, "alice@example.com");
+    let kept = sanitize(dir.path(), &[], "test@example.com");
+    assert_eq!(kept, "test@example.com");
 }
 
 #[test]
 fn cwd_config_wins_over_the_home_config() {
     let dir = temp_dir();
     let home = dir.path().join(".config/do-context-shield");
+    let vault = dir.path().join("v.json");
     if let Err(error) = std::fs::create_dir_all(&home) {
         panic!("cannot create {}: {error}", home.display());
     }
-    // The home file would block the call, so the keep below is the
-    // working-directory file's value.
     write_config(
         &home.join("config.toml"),
-        "[context]\nrecipient = \"unknown\"\n",
+        "[plugins]\npolicy = \"bogus\"\n",
     );
     write_config(
         &dir.path().join("do-context-shield.toml"),
-        "[context]\nrecipient = \"local\"\n",
+        &format!("[plugins]\njudge = \"heuristics\"\n\n[vault]\nvault_file = {}\n", toml_literal(&vault)),
     );
 
-    let kept = sanitize(dir.path(), &[], "alice@example.com");
-    assert_eq!(kept, "alice@example.com");
+    let kept = sanitize(dir.path(), &[], "test@example.com");
+    assert_eq!(kept, "test@example.com");
 }
 
 #[test]
