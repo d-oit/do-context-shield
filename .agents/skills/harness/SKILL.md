@@ -48,6 +48,7 @@ Agent = Model + Harness. Feedforward guides (this skill, `AGENTS.md`, `CONTRIBUT
 | hooks | `bash scripts/check-hooks.sh` | pre-push, CI | mirror the new sensor in the hand-written hook, make `.githooks/*` executable, or unpick the double hook mode (`core.hooksPath` vs `.git/hooks`) |
 | skills | `bash scripts/check-skills.sh` | `verification` set, CI | fix frontmatter/evals; see skill-creator |
 | skill-evals | `bash scripts/check-skill-evals.sh` | verification, CI | Fix the failing graded assertion or fixture; do not bless a failure |
+| shared-skills | `bash scripts/check-shared-skills.sh` | verification, CI | fix export contract manifest or adopter pin drift; see check-shared-skills.sh |
 | deps | `bash scripts/check-deps.sh` | pre-push, CI | license allow-list, crates.io only, no wildcards, and the offline ban list (`Cargo.lock` must contain no network client, TLS stack, or hosted-model SDK); check feature-gated trees explicitly |
 | audit | `bash scripts/check-audit.sh` | CI | resolve or document the advisory in `deny.toml` / `.cargo/audit.toml` |
 | publish-order | `bash scripts/check-publish-order.sh` | pre-push, CI | add the missing crate to `ORDER` in `scripts/publish-crates.sh`, after its dependencies |

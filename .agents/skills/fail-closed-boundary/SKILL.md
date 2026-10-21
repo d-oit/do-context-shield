@@ -15,6 +15,7 @@ metadata:
 ## Guides
 
 See [references/heuristics.md](references/heuristics.md) for distilled repository heuristics.
+See [references/portable.md](references/portable.md) for the language-neutral portable safety checklist.
 
 # Fail-Closed Boundary Skill
 

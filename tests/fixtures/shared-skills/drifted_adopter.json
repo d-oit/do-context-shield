@@ -1,0 +1,16 @@
+{
+  "$schema_version": "1.0",
+  "adopter_repository": "d-o-hub/do-harness",
+  "shared_skills": [
+    {
+      "id": "private-data-handling",
+      "source_repo": "d-oit/do-context-shield",
+      "canonical_path": ".agents/skills/private-data/references/portable.md",
+      "pinned_commit": "eb35f8de2605694e53da72499e31d7c15a37cac7",
+      "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "adaptations": [
+        "Injected do-harness sensor check."
+      ]
+    }
+  ]
+}

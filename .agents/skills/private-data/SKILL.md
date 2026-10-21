@@ -14,6 +14,10 @@ metadata:
   tags: privacy sanitization pii secrets mcp local-first
 ---
 
+## Guides
+
+See [references/portable.md](references/portable.md) for the language-neutral portable safety checklist.
+
 # Private Data Skill
 
 Use `do-context-shield` as a local privacy boundary when coding context may contain personal data, credentials, secrets, customer data, private URLs, or other sensitive information.
