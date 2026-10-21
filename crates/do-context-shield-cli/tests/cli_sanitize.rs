@@ -88,6 +88,19 @@ fn restore_across_sessions_is_isolated() {
 }
 
 #[test]
+fn restore_fabricated_token_remains_untouched() {
+    let dir = temp_dir();
+    let vault = vault_path(dir.path());
+    let _sanitized = sanitize(dir.path(), &vault, "s1", "alice@example.com");
+    let fabricated = "__DO_PRIVATE_EMAIL_1_0000000000000000__";
+    let untouched = restore(dir.path(), &vault, "s1", fabricated);
+    assert_eq!(
+        untouched, fabricated,
+        "a fabricated token not minted by the vault must not resolve"
+    );
+}
+
+#[test]
 fn sanitize_no_entities_passes_through() {
     let dir = temp_dir();
     let sanitized = sanitize(dir.path(), &vault_path(dir.path()), "plain", "hello world");
