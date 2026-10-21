@@ -218,14 +218,21 @@ fn config_file_timeout_bounds_each_call() {
     // Same direct `sleep` child as the flag test, but the bound comes from
     // `[process] timeout_ms` alone: without the merge the built-in 30 000 ms
     // default would let the child run to completion and this finishes only
-    // because the file value was applied.
+    // because the file value was applied. Process commands require an explicit
+    // `--config` flag to be used from a configuration file.
     common::write_config(
         &dir.path().join("do-context-shield.toml"),
         "[plugins]\npolicy = \"process\"\npolicy_command = \"sleep 30\"\n\n[process]\ntimeout_ms = 200\n",
     );
     let started = Instant::now();
     cmd(dir.path())
-        .args(["sanitize", "--session", "proc"])
+        .args([
+            "sanitize",
+            "--session",
+            "proc",
+            "--config",
+            "do-context-shield.toml",
+        ])
         .write_stdin("alice@example.com")
         .assert()
         .code(1)
@@ -237,4 +244,39 @@ fn config_file_timeout_bounds_each_call() {
         "took {:?}",
         started.elapsed()
     );
+}
+
+#[test]
+fn autodiscovered_config_process_command_is_ignored() {
+    let dir = temp_dir();
+    let command = process_command("detect-two").replace('\\', "\\\\");
+
+    common::write_config(
+        &dir.path().join("do-context-shield.toml"),
+        &format!("[plugins]\ndetector = \"process\"\ndetector_command = \"{command}\"\n"),
+    );
+
+    // Auto-discovery without `--config` ignores process commands in `do-context-shield.toml`,
+    // causing the command to fail closed without running the process detector.
+    cmd(dir.path())
+        .args(["sanitize", "--session", "amb", "--vault", "memory"])
+        .write_stdin("alice@example.com")
+        .assert()
+        .code(1)
+        .stderr(predicates::str::contains(
+            "process detector unavailable (no command configured)",
+        ));
+
+    // Explicit `--config` uses the configured process command.
+    let sanitized = sanitize(
+        dir.path(),
+        "amb",
+        &["--config", "do-context-shield.toml", "--vault", "memory"],
+        "alice@example.com",
+    );
+    let Some((local_part, domain_part)) = sanitized.split_once('@') else {
+        panic!("no `@` separator in `{sanitized}`");
+    };
+    common::assert_placeholder(local_part, "EMAIL", 1);
+    common::assert_placeholder(domain_part, "PHONE", 1);
 }

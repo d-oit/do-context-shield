@@ -10,7 +10,7 @@ Status: implemented (`crates/do-context-shield-cli/src/config.rs`). Every option
 
 The first existing candidate wins. Without any file, every option keeps its built-in default. A candidate that exists but cannot be read or parsed is an error — the tool never falls back to defaults silently, and a candidate of that name that is not a regular file (a directory, a dangling symlink) is such an error rather than an absent one. A missing `--config` path is an error too: the explicit path is an instruction, while an absent auto-discovery candidate is simply not selected.
 
-The one-shot commands use this search. `mcp-stdio` reads a file only when `--config <path>` names it: MCP clients spawn the server with the project as its working directory, so a repository shipping `do-context-shield.toml` could otherwise select `process` plugins, loosen `[context]`, or expose `context.restore` merely by being the server's cwd. Without `--config` the MCP server starts from the built-in defaults (trusted `DO_CONTEXT_SHIELD_*` environment overrides still apply); register it as `do-context-shield mcp-stdio --config /absolute/trusted/config.toml`.
+The one-shot commands use this search for built-in plugin selections, context, limits, and vault paths. However, process plugin commands (`detector_command`, `policy_command`, `transformer_command`, `judge_command`, `vault_command`) in an auto-discovered file are ignored: a repository shipping `do-context-shield.toml` cannot choose which local executables the CLI runs. Process plugin commands must come from an explicit `--config <path>` named by the operator or from explicit CLI flags. `mcp-stdio` reads a file only when `--config <path>` names it: MCP clients spawn the server with the project as its working directory, so an ambient file there could otherwise select process plugins, loosen `[context]`, or expose `context.restore` merely by being the server's cwd. Without `--config` the MCP server starts from the built-in defaults (trusted `DO_CONTEXT_SHIELD_*` environment overrides still apply); register it as `do-context-shield mcp-stdio --config /absolute/trusted/config.toml`.
 
 Paths in the file are literal: environment variables and `~` are not expanded.
 
@@ -51,10 +51,10 @@ Every variable is optional; an unset or empty variable keeps the file value. Val
 | `judge` | `heuristics`, `process` | unset | judging is optional and off by default |
 | `tools` | `sanitize`, `restore`, `inspect`, `forget`, `all` (comma-separated) | `sanitize,inspect` | `mcp-stdio` only; pins the exposed MCP tool surface in the file (equivalent to `--tools`) |
 | `model_dir` | path | unset | `gliner2`/`hybrid` ONNX export directory |
-| `detector_command` | command line | unset | required with `detector = "process"` |
-| `policy_command` | command line | unset | required with `policy = "process"` |
-| `transformer_command` | command line | unset | required with `transformer = "process"` |
-| `judge_command` | command line | unset | required with `judge = "process"` |
+| `detector_command` | command line | unset | required with `detector = "process"` (requires explicit `--config <path>` or CLI flag) |
+| `policy_command` | command line | unset | required with `policy = "process"` (requires explicit `--config <path>` or CLI flag) |
+| `transformer_command` | command line | unset | required with `transformer = "process"` (requires explicit `--config <path>` or CLI flag) |
+| `judge_command` | command line | unset | required with `judge = "process"` (requires explicit `--config <path>` or CLI flag) |
 
 Command lines are split on whitespace; quoting and shell expansion are not supported (`docs/process-plugin.md`).
 
@@ -125,7 +125,7 @@ section. `purpose` text is never reported by the `config` diagnostic.
 | --- | --- | --- | --- |
 | `vault` | `memory`, `json`, `process` | `memory` | `json` when `vault_file` is set and `vault` is omitted |
 | `vault_file` | path | unset | required by `vault = "json"`; selects the JSON vault on its own |
-| `vault_command` | command line | unset | required with `vault = "process"` |
+| `vault_command` | command line | unset | required with `vault = "process"` (requires explicit `--config <path>` or CLI flag) |
 | `vault_ttl_seconds` | seconds | unset | memory or JSON vault; a one-shot process exits before a memory-vault lifetime matters, while a persisted JSON mapping is bounded across processes |
 | `vault_key_file` | path | unset | 64-hex-character key that encrypts the JSON vault at rest; requires `vault_file`, and on Unix the key file must be owner-only |
 
