@@ -97,6 +97,21 @@ fn rejects_non_char_boundary_span() {
 }
 
 #[test]
+fn errors_when_zero_entities_returned_without_text_signal() {
+    let message = error_message(&detector("detect-zero"), "hello world");
+    assert!(
+        message.contains("zero entities without completion text signal"),
+        "got: {message}"
+    );
+}
+
+#[test]
+fn succeeds_when_zero_entities_returned_with_explicit_text_signal() {
+    let entities = detect(&detector("detect-clean"), "hello world");
+    assert!(entities.is_empty());
+}
+
+#[test]
 fn errors_without_command() {
     let message = error_message(&ProcessDetector::default(), "x");
     assert!(message.contains("no command configured"), "got: {message}");
