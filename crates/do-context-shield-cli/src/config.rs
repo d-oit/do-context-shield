@@ -61,8 +61,8 @@ pub(crate) struct Config {
     #[serde(skip)]
     pub(crate) env: env::EnvSet,
     /// Whether this configuration was loaded from an explicit `--config <path>`.
-    /// Process plugin commands (`*_command`) and context overrides (`[context]`)
-    /// in an auto-discovered file are ignored unless `is_explicit` is `true`.
+    /// Process plugin commands (`*_command`) in an auto-discovered file are
+    /// ignored unless `is_explicit` is `true`.
     #[serde(skip)]
     pub(crate) is_explicit: bool,
 }
@@ -271,22 +271,6 @@ impl Resolved {
     }
 }
 
-fn context_str(val: Option<&str>, is_explicit: bool, env_set: bool) -> Option<&str> {
-    if is_explicit || env_set {
-        val
-    } else {
-        None
-    }
-}
-
-fn context_opt(val: Option<String>, is_explicit: bool, env_set: bool) -> Option<String> {
-    if is_explicit || env_set {
-        val
-    } else {
-        None
-    }
-}
-
 /// Merge one command's CLI options over the configuration file.
 pub(crate) fn resolve(cli: &CliSelection, config: &Config) -> Resolved {
     let cli = cli.clone();
@@ -338,30 +322,19 @@ pub(crate) fn resolve(cli: &CliSelection, config: &Config) -> Resolved {
         vault_ttl_seconds: cli.vault_ttl_seconds.or(vault.vault_ttl_seconds),
         recipient: pick(
             cli.context.recipient,
-            context_str(
-                context.recipient.as_deref(),
-                config.is_explicit,
-                config.env.recipient,
-            ),
+            context.recipient.as_deref(),
             "external",
         ),
         data_category: pick(
             cli.context.data_category,
-            context_str(
-                context.data_category.as_deref(),
-                config.is_explicit,
-                config.env.data_category,
-            ),
+            context.data_category.as_deref(),
             "personal",
         ),
-        purpose: cli
-            .context
-            .purpose
-            .or_else(|| context_opt(context.purpose.clone(), config.is_explicit, config.env.purpose)),
+        purpose: cli.context.purpose.or_else(|| context.purpose.clone()),
         jurisdiction: cli
             .context
             .jurisdiction
-            .or_else(|| context_opt(context.jurisdiction.clone(), config.is_explicit, config.env.jurisdiction)),
+            .or_else(|| context.jurisdiction.clone()),
         process_timeout_ms: cli
             .process
             .process_timeout_ms

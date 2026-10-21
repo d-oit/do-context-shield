@@ -115,9 +115,8 @@ fn vault_combinations_checked() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn cli_overrides_config_and_defaults_fill_gaps() -> Result<(), Box<dyn std::error::Error>> {
-    let mut config: Config =
+    let config: Config =
         toml::from_str("[plugins]\npolicy = \"process\"\n\n[context]\nrecipient = \"local\"\n")?;
-    config.is_explicit = true;
     let cli = CliSelection {
         detector: DetectorSelection {
             detector: Some("gliner2".to_owned()),
