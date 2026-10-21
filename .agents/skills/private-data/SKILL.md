@@ -44,6 +44,7 @@ Use `do-context-shield` as a local privacy boundary when coding context may cont
 - Set the destination explicitly on `sanitize`: `--recipient local` (or the MCP `recipient` argument) keeps non-secret values for a same-device step, and `--data-category special_category` blocks health/biometric-class data addressed to external recipients; omitting both keeps the conservative `external`/`personal` defaults.
 - When a task is done, delete its mappings: call `do-context-shield forget --session <same-session-id>` (or `context.forget` when the server is started with `--tools all`) so the local vault stops holding original values. Long-running MCP servers can also bound mapping lifetime with `--vault-ttl-seconds`.
 - Do not assume regex detection is complete. For names, addresses, source-code secrets, or domain-specific entities, install a stronger detector plugin (see `plugin-development` skill).
+- Direct one-shot CLI commands (`sanitize`, `restore`, `inspect`, `forget`) auto-discover `./do-context-shield.toml` in the working directory (and `$HOME/.config/do-context-shield/config.toml`) unless `--config <path>` pins an explicit file, so a configuration file in the working directory changes the tool's behavior. Conversely, `mcp-stdio` disables working-directory auto-discovery and reads a file only when `--config` is explicitly passed.
 - The skill does not choose an LLM provider. The coding client remains responsible for model selection.
 
 ## GLiNER2 detector (optional, Rust-only)

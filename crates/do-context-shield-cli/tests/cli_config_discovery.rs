@@ -178,3 +178,40 @@ fn jurisdiction_must_be_an_iso_alpha2_code() {
         }
     }
 }
+
+#[test]
+fn sanitize_help_documents_autodiscovery_and_config() {
+    let dir = temp_dir();
+    let assert = cmd(dir.path())
+        .args(["sanitize", "--help"])
+        .assert()
+        .success();
+    let stdout = stdout_of(&assert);
+    assert!(
+        stdout.contains("Auto-discovers") || stdout.contains("auto-discovers"),
+        "sanitize help text must mention auto-discovery: {stdout}"
+    );
+    assert!(
+        stdout.contains("--config"),
+        "sanitize help text must mention --config: {stdout}"
+    );
+}
+
+#[test]
+fn mcp_stdio_help_documents_explicit_config_only() {
+    let dir = temp_dir();
+    let assert = cmd(dir.path())
+        .args(["mcp-stdio", "--help"])
+        .assert()
+        .success();
+    let stdout = stdout_of(&assert);
+    assert!(
+        stdout.contains("auto-discovery from working directory is disabled")
+            || stdout.contains("auto-discovery"),
+        "mcp-stdio help text must mention auto-discovery behavior: {stdout}"
+    );
+    assert!(
+        stdout.contains("--config"),
+        "mcp-stdio help text must mention --config: {stdout}"
+    );
+}
