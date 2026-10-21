@@ -271,6 +271,22 @@ impl Resolved {
     }
 }
 
+fn context_str(val: Option<&str>, is_explicit: bool, env_set: bool) -> Option<&str> {
+    if is_explicit || env_set {
+        val
+    } else {
+        None
+    }
+}
+
+fn context_opt(val: Option<String>, is_explicit: bool, env_set: bool) -> Option<String> {
+    if is_explicit || env_set {
+        val
+    } else {
+        None
+    }
+}
+
 /// Merge one command's CLI options over the configuration file.
 pub(crate) fn resolve(cli: &CliSelection, config: &Config) -> Resolved {
     let cli = cli.clone();
@@ -280,20 +296,6 @@ pub(crate) fn resolve(cli: &CliSelection, config: &Config) -> Resolved {
     let process_cmd = |cmd: &Option<String>| {
         if config.is_explicit {
             cmd.clone()
-        } else {
-            None
-        }
-    };
-    fn context_str<'a>(val: Option<&'a str>, is_explicit: bool, env_set: bool) -> Option<&'a str> {
-        if is_explicit || env_set {
-            val
-        } else {
-            None
-        }
-    }
-    let context_opt = |val: Option<String>, env_set: bool| {
-        if config.is_explicit || env_set {
-            val
         } else {
             None
         }
@@ -355,11 +357,11 @@ pub(crate) fn resolve(cli: &CliSelection, config: &Config) -> Resolved {
         purpose: cli
             .context
             .purpose
-            .or_else(|| context_opt(context.purpose.clone(), config.env.purpose)),
+            .or_else(|| context_opt(context.purpose.clone(), config.is_explicit, config.env.purpose)),
         jurisdiction: cli
             .context
             .jurisdiction
-            .or_else(|| context_opt(context.jurisdiction.clone(), config.env.jurisdiction)),
+            .or_else(|| context_opt(context.jurisdiction.clone(), config.is_explicit, config.env.jurisdiction)),
         process_timeout_ms: cli
             .process
             .process_timeout_ms
