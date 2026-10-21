@@ -60,6 +60,11 @@ pub(crate) struct Config {
     /// schema has no `env` key, so this is never read from or written to disk.
     #[serde(skip)]
     pub(crate) env: env::EnvSet,
+    /// Whether this configuration was loaded from an explicit `--config <path>`.
+    /// Process plugin commands (`*_command`) in an auto-discovered file are
+    /// ignored unless `is_explicit` is `true`.
+    #[serde(skip)]
+    pub(crate) is_explicit: bool,
 }
 
 /// Plugin selection; a value here overrides the built-in default and is
@@ -130,7 +135,7 @@ pub(crate) struct ProcessConfig {
 /// candidate that does not exist is simply not selected.
 pub(crate) fn load(explicit: Option<&Path>) -> Result<Config, Box<dyn std::error::Error>> {
     let config = match explicit {
-        Some(path) => read(path)?,
+        Some(path) => read(path, true)?,
         None => read_discovered()?,
     };
     apply_env(config)
@@ -153,7 +158,7 @@ pub(crate) fn load(explicit: Option<&Path>) -> Result<Config, Box<dyn std::error
 /// error, never a silent fallback to defaults.
 pub(crate) fn load_explicit(explicit: Option<&Path>) -> Result<Config, Box<dyn std::error::Error>> {
     let config = match explicit {
-        Some(path) => read(path)?,
+        Some(path) => read(path, true)?,
         None => Config::default(),
     };
     apply_env(config)
@@ -182,7 +187,7 @@ fn read_discovered() -> Result<Config, Box<dyn std::error::Error>> {
         // broken setup, not an absent one, and must fail instead of falling
         // through to the next candidate.
         if candidate.symlink_metadata().is_ok() {
-            return read(&candidate);
+            return read(&candidate, false);
         }
     }
     Ok(Config::default())
@@ -194,11 +199,12 @@ fn read_discovered() -> Result<Config, Box<dyn std::error::Error>> {
 ///
 /// Returns an error when the file cannot be read or is not valid TOML for
 /// [`Config`].
-fn read(path: &Path) -> Result<Config, Box<dyn std::error::Error>> {
+fn read(path: &Path, explicit: bool) -> Result<Config, Box<dyn std::error::Error>> {
     let text = std::fs::read_to_string(path)
         .map_err(|e| format!("cannot read config {}: {e}", path.display()))?;
-    let config = toml::from_str(&text)
+    let mut config: Config = toml::from_str(&text)
         .map_err(|e| format!("cannot parse config {}: {e}", path.display()))?;
+    config.is_explicit = explicit;
     Ok(config)
 }
 
@@ -271,18 +277,25 @@ pub(crate) fn resolve(cli: &CliSelection, config: &Config) -> Resolved {
     let plugins = &config.plugins;
     let vault = &config.vault;
     let context = &config.context;
+    let process_cmd = |cmd: &Option<String>| {
+        if config.is_explicit {
+            cmd.clone()
+        } else {
+            None
+        }
+    };
     Resolved {
         detector: pick(cli.detector.detector, plugins.detector.as_deref(), "regex"),
         model_dir: cli.detector.model_dir.or_else(|| plugins.model_dir.clone()),
         detector_command: cli
             .detector
             .detector_command
-            .or_else(|| plugins.detector_command.clone()),
+            .or_else(|| process_cmd(&plugins.detector_command)),
         policy: pick(cli.pipeline.policy, plugins.policy.as_deref(), "default"),
         policy_command: cli
             .pipeline
             .policy_command
-            .or_else(|| plugins.policy_command.clone()),
+            .or_else(|| process_cmd(&plugins.policy_command)),
         transformer: pick(
             cli.pipeline.transformer,
             plugins.transformer.as_deref(),
@@ -291,13 +304,13 @@ pub(crate) fn resolve(cli: &CliSelection, config: &Config) -> Resolved {
         transformer_command: cli
             .pipeline
             .transformer_command
-            .or_else(|| plugins.transformer_command.clone()),
+            .or_else(|| process_cmd(&plugins.transformer_command)),
         policy_matrix: config.policy_matrix.clone(),
         judge: cli.pipeline.judge.or_else(|| plugins.judge.clone()),
         judge_command: cli
             .pipeline
             .judge_command
-            .or_else(|| plugins.judge_command.clone()),
+            .or_else(|| process_cmd(&plugins.judge_command)),
         vault: cli.vault.vault.or_else(|| vault.vault.clone()),
         vault_file: cli.vault_file.or_else(|| vault.vault_file.clone()),
         vault_key_file: cli.vault_key_file.or_else(|| vault.vault_key_file.clone()),
@@ -305,7 +318,7 @@ pub(crate) fn resolve(cli: &CliSelection, config: &Config) -> Resolved {
         vault_command: cli
             .vault
             .vault_command
-            .or_else(|| vault.vault_command.clone()),
+            .or_else(|| process_cmd(&vault.vault_command)),
         vault_ttl_seconds: cli.vault_ttl_seconds.or(vault.vault_ttl_seconds),
         recipient: pick(
             cli.context.recipient,
