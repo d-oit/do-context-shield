@@ -76,6 +76,11 @@ impl Detector for ProcessDetector {
             .map_err(DetectorError::Message)?;
         let response: Response =
             protocol::decode("detector", &line).map_err(DetectorError::Message)?;
+        if response.entities.is_empty() && response.text.is_none() {
+            return Err(DetectorError::Message(
+                "process detector returned zero entities without completion text signal".to_owned(),
+            ));
+        }
         Ok(resolve_overlaps(validate_entities(
             input,
             &response.entities,
@@ -94,6 +99,8 @@ struct Request<'a> {
 #[derive(Deserialize)]
 struct Response {
     entities: Vec<WireEntity>,
+    #[serde(default)]
+    text: Option<String>,
 }
 
 /// One entity as reported by the child, before validation.

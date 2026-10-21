@@ -48,6 +48,46 @@ fn detector_process_selection_drives_detection() {
 }
 
 #[test]
+fn detector_process_zero_entities_without_text_signal_fails_closed() {
+    let dir = temp_dir();
+    let command = process_command("detect-zero");
+    cmd(dir.path())
+        .args([
+            "sanitize",
+            "--session",
+            "proc",
+            "--detector",
+            "process",
+            "--detector-command",
+        ])
+        .arg(&command)
+        .write_stdin("secret@example.com\nAWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+        .assert()
+        .code(1)
+        .stderr(predicates::str::contains(
+            "process detector returned zero entities without completion text signal",
+        ));
+}
+
+#[test]
+fn detector_process_zero_entities_with_text_signal_succeeds() {
+    let dir = temp_dir();
+    let command = process_command("detect-clean");
+    let sanitized = sanitize(
+        dir.path(),
+        "proc",
+        &[
+            "--detector",
+            "process",
+            "--detector-command",
+            command.as_str(),
+        ],
+        "hello world\n",
+    );
+    assert_eq!(sanitized, "hello world\n");
+}
+
+#[test]
 fn detector_process_failure_fails_closed() {
     let dir = temp_dir();
     let command = process_command("junk");
