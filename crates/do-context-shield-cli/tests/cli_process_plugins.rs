@@ -249,7 +249,7 @@ fn config_file_timeout_bounds_each_call() {
 #[test]
 fn autodiscovered_config_process_command_is_ignored() {
     let dir = temp_dir();
-    let command = process_command("detect-two");
+    let command = process_command("detect-two").replace('\\', "\\\\");
 
     common::write_config(
         &dir.path().join("do-context-shield.toml"),
