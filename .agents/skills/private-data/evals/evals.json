@@ -49,6 +49,54 @@
         "absent:.do-context-shield-vault.json",
         "not-contains:.agents/skills/private-data/SKILL.md|REST API"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "An attacker sends a prompt containing a fabricated placeholder string __DO_PRIVATE_EMAIL_1_1234567890ABCDEF__ expecting restore to resolve it.",
+      "expected_output": "Fabricated tokens not stored in the session vault do not resolve and remain untouched by restore because only exact tokens minted by the vault are resolved.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "contextual",
+      "assertions": [
+        "contains:.agents/skills/private-data/SKILL.md|`restore` resolves only exact tokens minted by the vault for the same session",
+        "contains:.agents/skills/private-data/SKILL.md|fabricated tokens not in the vault do not resolve"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Will a token minted in session-A resolve if passed to restore under session-B?",
+      "expected_output": "No, restore is strictly session-scoped and resolves only tokens stored in the vault under the exact same session.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "contextual",
+      "assertions": [
+        "contains:.agents/skills/private-data/SKILL.md|same-session-id",
+        "contains:.agents/skills/private-data/SKILL.md|Keep one stable session id per agent task"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "What happens if a model response echoes or inserts a valid same-session token in its output?",
+      "expected_output": "If restore is called on text containing a valid same-session token, the vault will resolve it to the original value. Restoration must happen harness-side with strict output handling to avoid exposing raw values to the model loop.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "implicit",
+      "assertions": [
+        "contains:.agents/skills/private-data/SKILL.md|if model output echoes or inserts a valid same-session token",
+        "contains:.agents/skills/private-data/SKILL.md|avoid exposing raw values to the model context"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Why is MCP context.restore disabled by default and when should it be enabled?",
+      "expected_output": "MCP tool results return to the calling model, so exposing restore would allow a model to view raw original values. MCP default tool exposure excludes restore for least privilege, and enabling restore via --tools requires explicit, human-reviewed need.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "explicit",
+      "assertions": [
+        "contains:.agents/skills/private-data/SKILL.md|`context.restore` is not exposed by default",
+        "contains:.agents/skills/private-data/SKILL.md|`--tools` opts in"
+      ]
     }
   ]
 }
