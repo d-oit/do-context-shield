@@ -245,6 +245,16 @@ then
     FAIL=1
 fi
 
+if ! bash "$ROOT/scripts/check-shared-skills.sh"; then
+    echo "FAIL: check-shared-skills failed"
+    FAIL=1
+fi
+
+if ! python3 "$ROOT/tests/test_shared_skills.py"; then
+    echo "FAIL: shared skills integration test suite failed"
+    FAIL=1
+fi
+
 if (( FAIL )); then
     echo "check-skills FAILED."
     exit 1

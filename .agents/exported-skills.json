@@ -1,0 +1,34 @@
+{
+  "$schema_version": "1.0",
+  "repository": "d-oit/do-context-shield",
+  "exported_skills": [
+    {
+      "id": "private-data-handling",
+      "canonical_path": ".agents/skills/private-data/references/portable.md",
+      "full_skill_path": ".agents/skills/private-data/SKILL.md",
+      "pinned_commit": "eb35f8de2605694e53da72499e31d7c15a37cac7",
+      "digest": "sha256:bde648a37e611a3618ffb343a5a5f856e4461fb34fd87983cd49c278c5579afe",
+      "scope_trigger": "Sanitize sensitive coding context locally before sending to an external model/tool; restore placeholders harness-side post-response.",
+      "required_adaptations": [
+        "Map invocation syntax to adopter's local tool execution, stdio MCP calls, or native language bindings.",
+        "Maintain strict local-first pre-flight sanitization before any external model transmission.",
+        "Restrict placeholder restoration to harness scope and enforce session isolation."
+      ],
+      "disclaimer": "Generic checklist coverage guides agent behavior but does not mechanically prove client integrations sanitize context without runtime integration tests."
+    },
+    {
+      "id": "fail-closed-boundary-review",
+      "canonical_path": ".agents/skills/fail-closed-boundary/references/portable.md",
+      "full_skill_path": ".agents/skills/fail-closed-boundary/SKILL.md",
+      "pinned_commit": "eb35f8de2605694e53da72499e31d7c15a37cac7",
+      "digest": "sha256:b25512b2653866a280bf1b6a15e950e4d0c54d94d8dfeaac4a776c7b19d367b4",
+      "scope_trigger": "Review or implement fail-closed privacy boundaries, detectors, judges, policies, transformers, or vaults in context sanitization pipelines.",
+      "required_adaptations": [
+        "Adapt stage contracts and error reporting to adopter's native language runtime paradigm.",
+        "Ensure pipeline fails closed on any stage error, invalid span, or unresolvable placeholder.",
+        "Enforce deterministic decision order: secrets always redact first."
+      ],
+      "disclaimer": "Generic checklist coverage guides boundary design but does not mechanically prove client code fails closed without automated boundary tests."
+    }
+  ]
+}

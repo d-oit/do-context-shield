@@ -17,6 +17,26 @@ following the Agent Skills specification (frontmatter with `name`, `description`
 | `skill-distiller` | [skills/skill-distiller/SKILL.md](skills/skill-distiller/SKILL.md) | Compress verified traces into guides and anti-patterns. |
 | `skill-creator` | [skills/skill-creator/SKILL.md](skills/skill-creator/SKILL.md) | Author skills: layout, structure gate, eval fixtures. |
 
+## Cross-Repo Skill Export Contract
+
+This repository exports portable, language-neutral safety workflows defined in `.agents/exported-skills.json` (schema `$schema_version: "1.0"`). External repositories (such as templates, harnesses, or application runners) consume these workflows by pinned reference rather than duplicating the full skill tree.
+
+### Exported Items
+
+| Export ID | Canonical Path | Description |
+|-----------|----------------|-------------|
+| `private-data-handling` | [.agents/skills/private-data/references/portable.md](skills/private-data/references/portable.md) | Language-neutral local-first sanitization, harness-side restoration, and vault lifecycle checklist. |
+| `fail-closed-boundary-review` | [.agents/skills/fail-closed-boundary/references/portable.md](skills/fail-closed-boundary/references/portable.md) | Stage ownership, deterministic policy priority, and fail-closed validation review checklist. |
+
+### Manifest Schema & Consumption Rules
+
+1. **Deterministic Pinning**: Adopters pin exported items by canonical path, 40-character git commit SHA (`pinned_commit`), and SHA-256 content digest (`digest`). Unpinned moving refs (e.g. `main`, `latest`) fail closed.
+2. **Explicit Adaptations**: Adopters must declare local adaptations (`adaptations`) mapping abstract workflows to native language or runtime mechanics (e.g., Replacing CLI flags with stdio RPC or native SDK calls).
+3. **Drift Verification**: `bash scripts/check-shared-skills.sh` (sensor `shared-skills`) computes SHA-256 digests against pinned content. Upstream changes trigger explicit drift warnings rather than silent updates.
+4. **Fail-Closed Gate**: Missing paths, digest mismatches, unpinned moving refs, or unknown schema versions fail verification.
+
+*Disclaimer*: Generic checklist coverage guides local agent behavior but does not mechanically prove client integrations sanitize context without runtime integration tests.
+
 ## Notes
 
 - `private-data` is the product's agent interface: it is also the file coding clients install into their own skills directory (see `README.md`).
