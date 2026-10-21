@@ -31,4 +31,13 @@ exclude_re = [
     # current code cannot do; a test cannot force that without a fault seam.
     'crates/privacy-core/src/lib\.rs:227:43: replace \+ with [-*] in PrivacyPipeline::restore',
     'crates/privacy-core/src/lib\.rs:234:25: replace -= with [+/]= in PrivacyPipeline::restore',
+
+    # `% with + in iban_valid` (letter branch `* 100 + expanded`): adding 97
+    # is adding 0 mod 97, and every later step re-mods (`% 97` in both digit
+    # and letter branches) after multiplying the carry by 10 or 100, so the
+    # extra multiple of 97 is absorbed before the final `== 1` check. Verified
+    # by hand (mutant applied: valid DE89 IBAN still detected, bad checksum
+    # still rejected) and by brute force over DE/GB/FR/ES/IT/NL valid IBANs,
+    # which all validate identically under `%` and `+`.
+    'crates/detector-regex/src/lib\.rs:124:58: replace % with \+ in iban_valid',
 ]

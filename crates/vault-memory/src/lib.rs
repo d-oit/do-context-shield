@@ -33,10 +33,20 @@ impl MemoryVault {
         }
     }
 
+    /// Whether a mapping of age `elapsed` is still live under `ttl`.
+    ///
+    /// The single predicate behind both `expired` (per-lookup) and `expire`
+    /// (bulk purge): an entry survives exactly while its age is strictly
+    /// below the TTL, so the boundary `elapsed == ttl` is already expired.
+    /// Testing this function directly pins the boundary without sleeping
+    /// for an exact `Instant` tie, which no wall-clock test can hit.
+    fn live(ttl: Option<Duration>, elapsed: Duration) -> bool {
+        ttl.is_none_or(|ttl| elapsed < ttl)
+    }
+
     /// Whether `entry` has outlived the configured TTL.
     fn expired(&self, entry: &Entry) -> bool {
-        self.ttl
-            .is_some_and(|ttl| entry.created_at.elapsed() >= ttl)
+        !Self::live(self.ttl, entry.created_at.elapsed())
     }
 }
 
@@ -131,7 +141,7 @@ impl Vault for MemoryVault {
     fn expire(&mut self) -> Result<(), VaultError> {
         let ttl = self.ttl;
         self.mappings
-            .retain(|_, entry| ttl.is_none_or(|ttl| entry.created_at.elapsed() < ttl));
+            .retain(|_, entry| Self::live(ttl, entry.created_at.elapsed()));
         Ok(())
     }
 }
@@ -200,6 +210,17 @@ mod tests {
             1,
             "fresh mappings must survive expire"
         );
+    }
+
+    #[test]
+    fn ttl_boundary_is_already_expired() {
+        // The exact tie `elapsed == ttl` must not survive: `expired` uses
+        // `>=` and `expire` must agree with it. A `<=` mutant in either
+        // predicate would keep the tied entry alive here.
+        let ttl = Duration::from_secs(60);
+        assert!(!MemoryVault::live(Some(ttl), ttl));
+        assert!(MemoryVault::live(Some(ttl), ttl - Duration::from_nanos(1)));
+        assert!(MemoryVault::live(None, ttl));
     }
 
     #[test]

@@ -49,6 +49,26 @@ fn a_missing_parent_directory_is_created_for_the_vault_and_its_lock() {
     );
 }
 
+#[test]
+fn persist_locked_creates_missing_parents_without_a_lock() {
+    // `persist_locked` must create its own parents: every public caller
+    // happens to hold the exclusive lock (which also creates them), so a
+    // test through `get_or_insert` cannot tell whether this copy runs. A
+    // mutant deleting the `!` here would only surface on the direct path.
+    let path = temp_path().join("direct").join("vault.json");
+    let vault = JsonVault {
+        path: path.clone(),
+        state: State::default(),
+        format: Format::Plaintext,
+        ttl: None,
+    };
+    match vault.persist_locked() {
+        Ok(()) => {}
+        Err(error) => panic!("unexpected error: {error}"),
+    }
+    assert!(path.exists(), "persist must create {}", path.display());
+}
+
 #[cfg(unix)]
 #[test]
 fn opening_an_existing_vault_tightens_it_to_owner_private() {
