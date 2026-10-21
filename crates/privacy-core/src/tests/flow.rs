@@ -91,6 +91,35 @@ fn restore_leaves_redacted_and_truncated_tokens_untouched() {
     }
 }
 
+#[test]
+fn restore_leaves_unminted_fabricated_tokens_untouched() {
+    let pipeline = pipeline();
+    let scope = ScopeId("test".to_owned());
+    let fabricated = "__DO_PRIVATE_EMAIL_1_9F3A2C7B5D1E4F08__";
+    match pipeline.restore(&scope, fabricated) {
+        Ok(output) => assert_eq!(output, fabricated),
+        Err(error) => panic!("unexpected error: {error}"),
+    }
+}
+
+#[test]
+fn restore_resolves_model_echoed_or_inserted_valid_same_session_tokens() {
+    let mut pipeline = pipeline();
+    let scope = ScopeId("test".to_owned());
+    let sanitized = match pipeline.sanitize(&scope, "alice@example.com", &context()) {
+        Ok(value) => value,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    let token = first_placeholder(&sanitized.text);
+    // Model output echoing or inserting the valid same-session token:
+    let model_output = format!("User email is {token}");
+    let restored = match pipeline.restore(&scope, &model_output) {
+        Ok(value) => value,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    assert_eq!(restored, "User email is alice@example.com");
+}
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
