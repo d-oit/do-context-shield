@@ -27,18 +27,34 @@ pub(crate) struct Cli {
 
 #[derive(Subcommand)]
 pub(crate) enum Command {
-    #[command(about = "Sanitize sensitive text from stdin")]
+    #[command(
+        about = "Sanitize sensitive text from stdin",
+        long_about = "Sanitize sensitive text from stdin.\n\nAuto-discovers `./do-context-shield.toml` or `$HOME/.config/do-context-shield/config.toml` unless `--config` pins an explicit file."
+    )]
     Sanitize(SanitizeArgs),
-    #[command(about = "Restore placeholders from stdin within an explicit session")]
+    #[command(
+        about = "Restore placeholders from stdin within an explicit session",
+        long_about = "Restore placeholders from stdin within an explicit session.\n\nAuto-discovers `./do-context-shield.toml` or `$HOME/.config/do-context-shield/config.toml` unless `--config` pins an explicit file."
+    )]
     Restore(RestoreArgs),
-    #[command(about = "Inspect sensitive entities from stdin without exposing their values")]
+    #[command(
+        about = "Inspect sensitive entities from stdin without exposing their values",
+        long_about = "Inspect sensitive entities from stdin without exposing their values.\n\nAuto-discovers `./do-context-shield.toml` or `$HOME/.config/do-context-shield/config.toml` unless `--config` pins an explicit file."
+    )]
     Inspect(InspectArgs),
-    #[command(about = "Delete every mapping stored for a session scope")]
+    #[command(
+        about = "Delete every mapping stored for a session scope",
+        long_about = "Delete every mapping stored for a session scope.\n\nAuto-discovers `./do-context-shield.toml` or `$HOME/.config/do-context-shield/config.toml` unless `--config` pins an explicit file."
+    )]
     Forget(ForgetArgs),
-    #[command(about = "Serve the privacy tools over MCP JSON-RPC stdio")]
+    #[command(
+        about = "Serve the privacy tools over MCP JSON-RPC stdio",
+        long_about = "Serve the privacy tools over MCP JSON-RPC stdio.\n\nReads a configuration file only when `--config <path>` explicitly names one (auto-discovery from working directory is disabled)."
+    )]
     McpStdio(McpArgs),
     #[command(
-        about = "Show the effective plugin selection and enforcement context with their source layer"
+        about = "Show the effective plugin selection and enforcement context with their source layer",
+        long_about = "Show the effective plugin selection and enforcement context with their source layer.\n\nAuto-discovers `./do-context-shield.toml` or `$HOME/.config/do-context-shield/config.toml` unless `--config` pins an explicit file."
     )]
     Config(ConfigArgs),
     #[command(about = "Rewrite an existing plaintext JSON vault in the encrypted format")]

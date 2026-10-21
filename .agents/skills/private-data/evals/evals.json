@@ -109,6 +109,18 @@
         "contains:.agents/skills/private-data/SKILL.md|requires human-reviewed need",
         "contains:.agents/skills/private-data/SKILL.md|explicitly enabling"
       ]
+    },
+    {
+      "id": 9,
+      "prompt": "Does a configuration file in the working directory change the tool's behavior when invoked as a one-shot CLI command versus mcp-stdio?",
+      "expected_output": "Direct one-shot commands auto-discover ./do-context-shield.toml in the working directory unless --config pins an explicit file, so the working directory is not inert. mcp-stdio disables auto-discovery and reads a file only when --config is explicitly passed.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "contextual",
+      "assertions": [
+        "contains:.agents/skills/private-data/SKILL.md|auto-discover `./do-context-shield.toml` in the working directory",
+        "contains:.agents/skills/private-data/SKILL.md|`mcp-stdio` disables working-directory auto-discovery"
+      ]
     }
   ]
 }
