@@ -31,6 +31,80 @@ grep -qx probe "$root/harness_sensors.txt"
 "$bin" --root "$root" verify --set verification > "$root/harness_verify.txt"
 grep -q 'All sensors passed' "$root/harness_verify.txt"
 
+# Member manifest selection and invalid manifest failure fixture
+git_fixture="$root/fixture"
+mkdir -p "$git_fixture/crates/member-crate"
+(
+  cd "$git_fixture"
+  git init -q
+  git config user.email "test@example.com"
+  git config user.name "Test"
+  cat > do-harness.toml << 'EOF'
+language = "rust"
+
+[signal-sets]
+verification = ["fmt", "check", "clippy", "test"]
+
+[[sensors]]
+name = "fmt"
+argv = ["cargo", "fmt", "--all", "--", "--check"]
+when-changed = ["**/*.rs", "**/Cargo.toml", "Cargo.lock", "rust-toolchain.toml"]
+
+[[sensors]]
+name = "check"
+argv = ["cargo", "check", "--workspace"]
+when-changed = ["**/*.rs", "**/Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".cargo/config.toml"]
+
+[[sensors]]
+name = "clippy"
+argv = ["cargo", "clippy", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"]
+when-changed = ["**/*.rs", "**/Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".cargo/config.toml"]
+
+[[sensors]]
+name = "test"
+argv = ["cargo", "test", "--workspace"]
+when-changed = ["**/*.rs", "**/Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".cargo/config.toml"]
+EOF
+  cat > Cargo.toml << 'EOF'
+[workspace]
+members = ["crates/member-crate"]
+resolver = "2"
+EOF
+  cat > crates/member-crate/Cargo.toml << 'EOF'
+[package]
+name = "member-crate"
+version = "0.1.0"
+edition = "2024"
+EOF
+  mkdir -p crates/member-crate/src
+  cat > crates/member-crate/src/lib.rs << 'EOF'
+pub fn hello() {}
+EOF
+  git add .
+  git commit -m "initial" -q
+
+  # 1. Selection test on member manifest edit
+  echo "# edit" >> crates/member-crate/Cargo.toml
+  "$bin" --root . explain --set verification --changed --format json > explain_out.json
+  grep -q '"name": "check"' explain_out.json
+  grep -q '"name": "clippy"' explain_out.json
+  grep -q '"name": "test"' explain_out.json
+
+  # 2. Non-zero exit on broken member manifest
+  cat > crates/member-crate/Cargo.toml << 'EOF'
+[package
+invalid = toml
+EOF
+  set +e
+  "$bin" --root . verify --changed --set verification > verify_out.txt 2>&1
+  verify_rc=$?
+  set -e
+  if (( verify_rc == 0 )); then
+    echo "Expected verify on broken member manifest to fail, but exited 0"
+    exit 1
+  fi
+)
+
 printf 'sensor contract: gate passes and CLI config->list->verify works\n' > "$receipt"
 
 cat > "$root/harness_negative.txt" << 'TXT'
