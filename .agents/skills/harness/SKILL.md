@@ -51,6 +51,7 @@ Agent = Model + Harness. Feedforward guides (this skill, `AGENTS.md`, `CONTRIBUT
 | deps | `bash scripts/check-deps.sh` | pre-push, CI | license allow-list, crates.io only, no wildcards, and the offline ban list (`Cargo.lock` must contain no network client, TLS stack, or hosted-model SDK); check feature-gated trees explicitly |
 | audit | `bash scripts/check-audit.sh` | CI | resolve or document the advisory in `deny.toml` / `.cargo/audit.toml` |
 | publish-order | `bash scripts/check-publish-order.sh` | pre-push, CI | add the missing crate to `ORDER` in `scripts/publish-crates.sh`, after its dependencies |
+| release-preflight | `bash scripts/check-release-preflight.sh` | verification, CI | verify tag version agreement, workspace member crate versions, metadata, package surface whitelist, and publish order |
 | commitlint | `bash scripts/check-commitlint.sh` | commit-msg hook, `verification` set | conventional commit with a type prefix; PR titles are enforced separately by `commitlint.yml` |
 | structure | `python3 scripts/validate-structure.py` | CI | restore required files; remove unwrap/expect; shrink files |
 | deny | `cargo deny check` | CI | dependency policy (`deny.toml`) |

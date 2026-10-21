@@ -40,6 +40,7 @@ Shared notes for every client:
 
 - Keep one stable `session` argument per task. The vault lives in the server process, so a later client run cannot restore an earlier run's placeholders; add `--vault-file <path>` to the server command (JSON vault) when restoration must survive a restart.
 - Point the command at the absolute binary path when `do-context-shield` is not on `PATH`.
+- **Version Pinning**: To pin a specific release version in harness or template setups, install via `cargo install do-context-shield --version <VERSION>` or download pre-compiled release artifacts attached to the matching tag at `https://github.com/d-oit/do-context-shield/releases/tag/v<VERSION>`.
 
 #### OpenCode
 
