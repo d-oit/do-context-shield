@@ -8,9 +8,20 @@ fn key(seed: u8) -> VaultKey {
 }
 
 fn open_encrypted(path: &PathBuf, seed: u8) -> JsonVault {
-    match JsonVault::open_encrypted(path, key(seed)) {
-        Ok(vault) => vault,
-        Err(error) => panic!("unexpected error: {error}"),
+    // Same transient-denial retry as `super::open`: fresh temp-dir files can
+    // be briefly denied on Windows while a scanner holds them. Expected
+    // errors (wrong key, corrupt file) are asserted at their call sites and
+    // must keep failing fast, so they do not go through this helper.
+    let mut attempts = 0;
+    loop {
+        match JsonVault::open_encrypted(path, key(seed)) {
+            Ok(vault) => return vault,
+            Err(error) => {
+                assert!(attempts < 50, "unexpected error: {error}");
+                attempts += 1;
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        }
     }
 }
 

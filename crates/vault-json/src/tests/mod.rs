@@ -31,9 +31,21 @@ fn resolved(vault: &JsonVault, scope: &ScopeId, token: &str) -> Option<Mapping> 
 }
 
 fn open(path: &PathBuf) -> JsonVault {
-    match JsonVault::open(path) {
-        Ok(vault) => vault,
-        Err(error) => panic!("unexpected error: {error}"),
+    // Windows virus scanners briefly deny access to brand-new files in the
+    // temp dir (os error 5), which flaked parallel suite runs about one run
+    // in four. Retry a transient open failure with backoff; a persistent
+    // failure still panics below, and production `JsonVault::open` keeps
+    // failing closed on the first error. Linux CI never hits this path.
+    let mut attempts = 0;
+    loop {
+        match JsonVault::open(path) {
+            Ok(vault) => return vault,
+            Err(error) => {
+                assert!(attempts < 50, "unexpected error: {error}");
+                attempts += 1;
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        }
     }
 }
 #[test]
@@ -119,14 +131,9 @@ fn assert_token(token: &str, kind: &str, counter: u64) {
 fn mappings_survive_reopen_and_share_counters() {
     let path = temp_path();
     let scope = scope("s");
-    let first = match JsonVault::open(&path) {
-        Ok(mut vault) => stored(&mut vault, &scope, "email", "alice@example.com"),
-        Err(error) => panic!("unexpected error: {error}"),
-    };
-    let mut reopened = match JsonVault::open(&path) {
-        Ok(vault) => vault,
-        Err(error) => panic!("unexpected error: {error}"),
-    };
+    let mut vault = open(&path);
+    let first = stored(&mut vault, &scope, "email", "alice@example.com");
+    let mut reopened = open(&path);
     match reopened.resolve(&scope, &first.token) {
         Ok(resolved) => assert_eq!(resolved, Some(first.clone())),
         Err(error) => panic!("unexpected error: {error}"),
@@ -155,10 +162,7 @@ fn counters_are_independent_per_scope_and_kind() {
 #[test]
 fn same_value_under_different_kinds_gets_distinct_tokens() {
     let path = temp_path();
-    let mut vault = match JsonVault::open(&path) {
-        Ok(vault) => vault,
-        Err(error) => panic!("unexpected error: {error}"),
-    };
+    let mut vault = open(&path);
     let scope = scope("s");
     let email = stored(&mut vault, &scope, "email", "alice@example.com");
     let person = stored(&mut vault, &scope, "person", "alice@example.com");
