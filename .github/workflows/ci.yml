@@ -136,38 +136,14 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # NOTE: `cargo publish --dry-run` cannot validate workspace crates that
       # depend on unpublished siblings (crates.io index lookup fails), so CI
-      # checks the package surface and required metadata instead. Real
-      # publishing follows the bottom-up order in scripts/publish-crates.sh.
-      - name: Verify publish metadata
-        run: |
-          python3 - <<'EOF'
-          import json, subprocess, sys
-          meta = json.loads(subprocess.run(
-              ['cargo', 'metadata', '--format-version', '1', '--no-deps'],
-              capture_output=True, text=True, check=True).stdout)
-          bad = []
-          for pkg in meta['packages']:
-              if '/crates/' not in pkg['manifest_path']:
-                  continue
-              for field in ('description', 'license', 'repository'):
-                  if not pkg.get(field):
-                      bad.append(f"{pkg['name']}: missing {field}")
-          if bad:
-              print('\n'.join(bad))
-              sys.exit(1)
-          print('publish metadata ok')
-          EOF
-      - name: Verify include whitelists
-        run: |
-          for crate in $(cargo metadata --format-version 1 --no-deps \
-            | python3 -c "import json,sys; print(' '.join(sorted(p['name'] for p in json.load(sys.stdin)['packages'] if '/crates/' in p['manifest_path'])))"); do
-            echo "--- $crate ---"
-            cargo package --list -p "$crate"
-          done
-      - name: Verify publish order
-        run: bash scripts/check-publish-order.sh
+      # checks the package surface, release preflight, and smoke tests instead.
+      - name: Run release preflight
+        run: bash scripts/check-release-preflight.sh
+      - name: Run release smoke test
+        run: bash scripts/smoke-test-release.sh
 
   ci-success:
     name: CI Success

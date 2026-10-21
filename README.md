@@ -22,6 +22,35 @@ Claude Code / OpenCode / Codex / Gemini CLI / custom agent
                   original LLM client
 ```
 
+## Installation and Release Contract
+
+`do-context-shield` supports the following release distribution paths:
+
+1. **crates.io (Recommended for Rust users)**:
+   ```bash
+   cargo install do-context-shield
+   ```
+   Or pin a specific release version:
+   ```bash
+   cargo install do-context-shield --version 0.1.0
+   ```
+
+2. **GitHub Releases (Pre-compiled platform binaries)**:
+   Pre-built binary archives and `SHA256SUMS` checksums are published on the [GitHub Releases](https://github.com/d-oit/do-context-shield/releases) page for supported targets:
+   - `x86_64-unknown-linux-gnu` (Linux x86_64)
+   - `x86_64-apple-darwin` (macOS Intel)
+   - `aarch64-apple-darwin` (macOS Apple Silicon)
+   - `x86_64-pc-windows-msvc` (Windows x86_64)
+
+3. **Source Build**:
+   ```bash
+   git clone https://github.com/d-oit/do-context-shield.git
+   cd do-context-shield
+   cargo install --path crates/do-context-shield-cli
+   ```
+
+Note: Operating system package managers (e.g. Homebrew formula, apt repositories) are planned distribution channels and not yet active. See `docs/releasing.md` for the full release contract.
+
 ## First vertical slice
 
 - Regex detector for email, phone, IBAN, IPv4/IPv6, SSN, credit-card and US bank-routing numbers, dates of birth, passports, driver's licenses, database connection URIs (`db_credential`: postgres, mysql, mongodb, redis, etc. with credentials), private-key blocks (PEM/OpenPGP/PKCS#8), AWS/Google/Slack/GitHub tokens (classic and fine-grained `github_pat_`), Stripe keys and webhook secrets, Hugging Face/PyPI/GitLab tokens, JWTs, `password=`/`Bearer` style secrets, and common API-key shapes. Structural candidates are validated before reporting: Luhn for cards, ABA for routing numbers, byte-bounded octets for IPv4, ISO 13616 mod-97 for IBAN.
