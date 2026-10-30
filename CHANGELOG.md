@@ -43,6 +43,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Security advisory `RUSTSEC-2026-0385` (non-constant-time mask generation and
+  `u128` comparisons) is cleared by updating `ctutils` 0.4.3 → 0.4.7 in
+  `Cargo.lock`. It reaches the workspace only through `digest`/`hmac`/`sha2`,
+  which back the keyed egress canary, and the update stays inside `digest`'s
+  `0.4` semver requirement, so no manifest change is needed; `cargo audit`
+  and `cargo deny check advisories` are clean on the updated lockfile.
+
 - Supply-chain pinning for every GitHub Actions workflow: the six floating
   `uses:` tags (`commitlint.yml`, `labeler.yml`, `release-drafter.yml`,
   `secret-scan.yml`) now pin the immutable commit SHA their tag resolves to,
