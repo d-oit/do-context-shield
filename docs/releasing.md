@@ -58,4 +58,8 @@ Releases are boundary-gated and maintainer-reviewed:
    - Compiles release binaries across supported platforms.
    - Executes `smoke-test-release.sh` against compiled binaries.
    - Uploads binary archives and `SHA256SUMS` to GitHub Release.
-   - Runs `scripts/publish-crates.sh` to publish to crates.io idempotently (if `CARGO_REGISTRY_TOKEN` secret is configured).
+   - Publishes the crates bottom-up with `scripts/publish-crates.sh` using **crates.io trusted publishing**: the job requests `id-token: write`, exchanges the GitHub OIDC token with `rust-lang/crates-io-auth-action`, and passes the short-lived token to the script. No long-lived `CARGO_REGISTRY_TOKEN` secret is stored in the repository.
+
+### Trusted publishing setup
+
+crates.io trusted publishing is configured per crate for this repository and the `release.yml` workflow. It needs no repository secret; the publish job's `id-token: write` permission and the `rust-lang/crates-io-auth-action` step provide a short-lived token, and the script skips crate versions already on the registry. For a local publish, `cargo login` once and run `scripts/publish-crates.sh`; `CARGO_REGISTRY_TOKEN` still overrides the stored credentials.
