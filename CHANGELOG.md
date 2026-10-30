@@ -14,9 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`secrets` is not an allowed context there), so every release run failed at
   startup with no jobs. Publishing now uses crates.io trusted publishing
   (GitHub OIDC via `rust-lang/crates-io-auth-action`, `id-token: write`), so no
-  long-lived registry secret is required. `scripts/publish-crates.sh` accepts
-  the credentials stored by `cargo login` when `CARGO_REGISTRY_TOKEN` is unset,
-  and still skips crate versions already published.
+  long-lived registry secret is required; the job first checks the registry and
+  skips the exchange when every version is already published, so re-running a
+  release is green. The first publish of a new crate still needs a token
+  (`cargo login` locally, then `scripts/publish-crates.sh`, which now accepts
+  those credentials when `CARGO_REGISTRY_TOKEN` is unset). The release build
+  installs each cross target for the pinned 1.88.0 toolchain, fixing the
+  macOS x86_64 `E0463` failure, and the checksum step uses `sha256sum -- *` so
+  `actionlint` is clean.
 
 ## [0.1.0] - 2026-10-30
 
