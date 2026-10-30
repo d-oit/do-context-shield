@@ -21,7 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   those credentials when `CARGO_REGISTRY_TOKEN` is unset). The release build
   installs each cross target for the pinned 1.88.0 toolchain, fixing the
   macOS x86_64 `E0463` failure, and the checksum step uses `sha256sum -- *` so
-  `actionlint` is clean.
+  `actionlint` is clean. A manual dispatch can set `publish_crates=false` when
+  the first publish of a new crate was done locally; tag pushes always publish.
 
 ## [0.1.0] - 2026-10-30
 

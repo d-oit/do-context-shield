@@ -65,3 +65,11 @@ Releases are boundary-gated and maintainer-reviewed:
 Trusted publishing is configured per crate on crates.io for this repository and the `release.yml` workflow; it needs no repository secret. The publish job's `id-token: write` permission and the `rust-lang/crates-io-auth-action` step provide a short-lived token. **The first publish of a new crate must use a registry token** (`cargo login` locally, then `scripts/publish-crates.sh`), because crates.io can only accept a trusted-publisher configuration once the crate exists. Configure the trusted publisher for each new crate after that first publish.
 
 The publish job checks the registry first and skips the OIDC exchange when every workspace version is already published, so re-running a release whose crates are live is green. `CARGO_REGISTRY_TOKEN` still overrides the credentials stored by `cargo login` when publishing locally.
+
+A manual dispatch can opt out of publishing explicitly when the first publish of a new crate was done locally:
+
+```bash
+gh workflow run release.yml --ref main -f tag_name=v0.1.0 -f publish_crates=false
+```
+
+Tag pushes always publish; `publish_crates` only applies to `workflow_dispatch`.
