@@ -51,6 +51,46 @@ fn defaults_name_the_builtin_layer() {
     assert_eq!(source(&doc, "/process_timeout_ms"), "default");
 }
 
+/// Issue #161: a working-directory `[context]` is ignored, so the report must
+/// name the conservative default instead of pretending the file supplied it.
+#[test]
+fn ambient_context_is_reported_as_default() {
+    let dir = temp_dir();
+    let config = dir.path().join("do-context-shield.toml");
+    common::write_config(
+        &config,
+        "[context]\nrecipient = \"local\"\ndata_category = \"non_personal\"\n\
+         purpose = \"SECRET-PURPOSE-TEXT\"\n",
+    );
+
+    let doc = explain(dir.path(), &[]);
+    assert_eq!(doc["context"]["recipient"]["value"], "external");
+    assert_eq!(source(&doc, "/context/recipient"), "default");
+    assert_eq!(doc["context"]["data_category"]["value"], "personal");
+    assert_eq!(source(&doc, "/context/data_category"), "default");
+    assert_eq!(doc["context"]["purpose"]["configured"], false);
+    assert_eq!(source(&doc, "/context/purpose"), "none");
+
+    // The environment layer is still trusted.
+    let doc = report(
+        &cmd(dir.path())
+            .env("DO_CONTEXT_SHIELD_RECIPIENT", "local")
+            .args(["config"])
+            .assert()
+            .success(),
+    );
+    assert_eq!(doc["context"]["recipient"]["value"], "local");
+    assert_eq!(source(&doc, "/context/recipient"), "environment");
+
+    // An explicit selection makes the same file's context effective.
+    let Some(config_text) = config.to_str() else {
+        panic!("config fixture path is not valid UTF-8");
+    };
+    let doc = explain(dir.path(), &["--config", config_text]);
+    assert_eq!(doc["context"]["recipient"]["value"], "local");
+    assert_eq!(source(&doc, "/context/recipient"), "file");
+}
+
 #[test]
 fn precedence_cli_over_environment_over_file() {
     let dir = temp_dir();
@@ -114,8 +154,9 @@ fn vault_selection_reports_the_effective_vault() {
 #[test]
 fn sensitive_material_never_appears_in_the_report() {
     let dir = temp_dir();
+    let config = dir.path().join("do-context-shield.toml");
     common::write_config(
-        &dir.path().join("do-context-shield.toml"),
+        &config,
         "[vault]\nvault = \"json\"\nvault_file = \"/tmp/SECRET-VAULT.json\"\n\
          vault_key_file = \"/tmp/SECRET-KEY.hex\"\n\n\
          [plugins]\ndetector = \"process\"\ndetector_command = \"sh /tmp/SECRET-PLUGIN.sh\"\n\n\
@@ -126,9 +167,14 @@ fn sensitive_material_never_appears_in_the_report() {
     let Some(audit_path_text) = audit_path.to_str() else {
         panic!("audit fixture path is not valid UTF-8");
     };
+    let Some(config_text) = config.to_str() else {
+        panic!("config fixture path is not valid UTF-8");
+    };
     let assert = cmd(dir.path())
         .args([
             "config",
+            "--config",
+            config_text,
             "--vault-file",
             "/tmp/CLI-SECRET-VAULT.json",
             "--vault-key-file",

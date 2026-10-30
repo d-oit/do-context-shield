@@ -43,6 +43,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Auto-discovered repository configuration can no longer weaken the one-shot
+  enforcement context (issue #161). A working-directory
+  `do-context-shield.toml` still supplies plugin, vault, and limit defaults,
+  but its `[context]` section is ignored, so a checked-out repository cannot
+  select `recipient = "local"` or `data_category = "non_personal"` for an
+  unconfigured `sanitize` call that would otherwise keep a raw value. An
+  explicit `--config <path>` opts the section in, the user-level `$HOME`
+  config's `[context]` remains operator configuration, and environment/CLI
+  overrides still win. The `config` diagnostic reports the ignored section as
+  `default`/`none` instead of `file`, and the discovery tests cover ambient,
+  explicit, home, environment, and CLI precedence.
+
 - Security advisory `RUSTSEC-2026-0385` (non-constant-time mask generation and
   `u128` comparisons) is cleared by updating `ctutils` 0.4.3 → 0.4.7 in
   `Cargo.lock`. It reaches the workspace only through `digest`/`hmac`/`sha2`,

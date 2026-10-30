@@ -29,7 +29,7 @@ pub(crate) struct Cli {
 pub(crate) enum Command {
     #[command(
         about = "Sanitize sensitive text from stdin",
-        long_about = "Sanitize sensitive text from stdin.\n\nAuto-discovers `./do-context-shield.toml` or `$HOME/.config/do-context-shield/config.toml` unless `--config` pins an explicit file."
+        long_about = "Sanitize sensitive text from stdin.\n\nAuto-discovers `./do-context-shield.toml` or `$HOME/.config/do-context-shield/config.toml` unless `--config` pins an explicit file. The working-directory file's `[context]` section is ignored unless it is pinned with `--config`, so a repository cannot weaken the default recipient or data category."
     )]
     Sanitize(SanitizeArgs),
     #[command(
@@ -54,7 +54,7 @@ pub(crate) enum Command {
     McpStdio(McpArgs),
     #[command(
         about = "Show the effective plugin selection and enforcement context with their source layer",
-        long_about = "Show the effective plugin selection and enforcement context with their source layer.\n\nAuto-discovers `./do-context-shield.toml` or `$HOME/.config/do-context-shield/config.toml` unless `--config` pins an explicit file."
+        long_about = "Show the effective plugin selection and enforcement context with their source layer.\n\nAuto-discovers `./do-context-shield.toml` or `$HOME/.config/do-context-shield/config.toml` unless `--config` pins an explicit file. A working-directory file's `[context]` section is reported as ignored (`default`/`none`) unless the file is pinned with `--config`."
     )]
     Config(ConfigArgs),
     #[command(about = "Rewrite an existing plaintext JSON vault in the encrypted format")]

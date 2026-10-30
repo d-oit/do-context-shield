@@ -60,11 +60,47 @@ pub(crate) struct Config {
     /// schema has no `env` key, so this is never read from or written to disk.
     #[serde(skip)]
     pub(crate) env: env::EnvSet,
-    /// Whether this configuration was loaded from an explicit `--config <path>`.
-    /// Process plugin commands (`*_command`) in an auto-discovered file are
-    /// ignored unless `is_explicit` is `true`.
+    /// Where the file came from; [`ConfigSource::None`] when no file was read.
+    ///
+    /// Process plugin commands (`*_command`) are only honoured from an explicit
+    /// `--config <path>` file. The `[context]` section of a working-directory
+    /// file is ignored as well: the repository controls that file, whereas the
+    /// user-level home file is operator configuration.
     #[serde(skip)]
-    pub(crate) is_explicit: bool,
+    pub(crate) source: ConfigSource,
+}
+
+impl Config {
+    /// Whether the file was named explicitly with `--config <path>`.
+    pub(crate) fn is_explicit(&self) -> bool {
+        matches!(self.source, ConfigSource::Explicit)
+    }
+
+    /// Whether the file's `[context]` section may set the enforcement context.
+    ///
+    /// Only a working-directory auto-discovery candidate is repository-
+    /// controlled; an explicit `--config`, the user-level home file, and an
+    /// absent file are trusted. Environment overrides are applied separately
+    /// and are always honoured.
+    pub(crate) fn context_is_trusted(&self) -> bool {
+        !matches!(self.source, ConfigSource::WorkingDir)
+    }
+}
+
+/// Where a configuration file was loaded from.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum ConfigSource {
+    /// No file was read; values come from CLI flags, the environment, or the
+    /// built-in defaults.
+    #[default]
+    None,
+    /// A file named with `--config <path>`.
+    Explicit,
+    /// `./do-context-shield.toml`, selected by auto-discovery.
+    WorkingDir,
+    /// `$HOME/.config/do-context-shield/config.toml`, selected by
+    /// auto-discovery.
+    UserHome,
 }
 
 /// Plugin selection; a value here overrides the built-in default and is
@@ -135,7 +171,7 @@ pub(crate) struct ProcessConfig {
 /// candidate that does not exist is simply not selected.
 pub(crate) fn load(explicit: Option<&Path>) -> Result<Config, Box<dyn std::error::Error>> {
     let config = match explicit {
-        Some(path) => read(path, true)?,
+        Some(path) => read(path, ConfigSource::Explicit)?,
         None => read_discovered()?,
     };
     apply_env(config)
@@ -158,7 +194,7 @@ pub(crate) fn load(explicit: Option<&Path>) -> Result<Config, Box<dyn std::error
 /// error, never a silent fallback to defaults.
 pub(crate) fn load_explicit(explicit: Option<&Path>) -> Result<Config, Box<dyn std::error::Error>> {
     let config = match explicit {
-        Some(path) => read(path, true)?,
+        Some(path) => read(path, ConfigSource::Explicit)?,
         None => Config::default(),
     };
     apply_env(config)
@@ -180,15 +216,18 @@ fn apply_env(mut config: Config) -> Result<Config, Box<dyn std::error::Error>> {
 ///
 /// Returns an error when a discovered file cannot be read or parsed.
 fn read_discovered() -> Result<Config, Box<dyn std::error::Error>> {
-    let candidates = [Some(PathBuf::from(CONFIG_FILE_NAME)), home_config_path()];
-    for candidate in candidates.into_iter().flatten() {
-        // Existence, not `is_file()`: a candidate that exists but is not a
-        // regular file (a directory of that name, a dangling symlink) is a
-        // broken setup, not an absent one, and must fail instead of falling
-        // through to the next candidate.
-        if candidate.symlink_metadata().is_ok() {
-            return read(&candidate, false);
-        }
+    // Existence, not `is_file()`: a candidate that exists but is not a regular
+    // file (a directory of that name, a dangling symlink) is a broken setup,
+    // not an absent one, and must fail instead of falling through to the next
+    // candidate.
+    let cwd = Path::new(CONFIG_FILE_NAME);
+    if cwd.symlink_metadata().is_ok() {
+        return read(cwd, ConfigSource::WorkingDir);
+    }
+    if let Some(path) = home_config_path()
+        && path.symlink_metadata().is_ok()
+    {
+        return read(&path, ConfigSource::UserHome);
     }
     Ok(Config::default())
 }
@@ -199,12 +238,12 @@ fn read_discovered() -> Result<Config, Box<dyn std::error::Error>> {
 ///
 /// Returns an error when the file cannot be read or is not valid TOML for
 /// [`Config`].
-fn read(path: &Path, explicit: bool) -> Result<Config, Box<dyn std::error::Error>> {
+fn read(path: &Path, source: ConfigSource) -> Result<Config, Box<dyn std::error::Error>> {
     let text = std::fs::read_to_string(path)
         .map_err(|e| format!("cannot read config {}: {e}", path.display()))?;
     let mut config: Config = toml::from_str(&text)
         .map_err(|e| format!("cannot parse config {}: {e}", path.display()))?;
-    config.is_explicit = explicit;
+    config.source = source;
     Ok(config)
 }
 
@@ -278,12 +317,17 @@ pub(crate) fn resolve(cli: &CliSelection, config: &Config) -> Resolved {
     let vault = &config.vault;
     let context = &config.context;
     let process_cmd = |cmd: &Option<String>| {
-        if config.is_explicit {
+        if config.is_explicit() {
             cmd.clone()
         } else {
             None
         }
     };
+    // A working-directory file is repository content: its `[context]` must not
+    // weaken the conservative defaults. Environment overrides are applied over
+    // the file, so a field the environment supplied is trusted regardless of
+    // which file it replaced.
+    let trusted_context = config.context_is_trusted();
     Resolved {
         detector: pick(cli.detector.detector, plugins.detector.as_deref(), "regex"),
         model_dir: cli.detector.model_dir.or_else(|| plugins.model_dir.clone()),
@@ -322,25 +366,51 @@ pub(crate) fn resolve(cli: &CliSelection, config: &Config) -> Resolved {
         vault_ttl_seconds: cli.vault_ttl_seconds.or(vault.vault_ttl_seconds),
         recipient: pick(
             cli.context.recipient,
-            context.recipient.as_deref(),
+            trusted_file_value(
+                trusted_context,
+                context.recipient.as_deref(),
+                config.env.recipient,
+            ),
             "external",
         ),
         data_category: pick(
             cli.context.data_category,
-            context.data_category.as_deref(),
+            trusted_file_value(
+                trusted_context,
+                context.data_category.as_deref(),
+                config.env.data_category,
+            ),
             "personal",
         ),
-        purpose: cli.context.purpose.or_else(|| context.purpose.clone()),
-        jurisdiction: cli
-            .context
-            .jurisdiction
-            .or_else(|| context.jurisdiction.clone()),
+        purpose: cli.context.purpose.or_else(|| {
+            trusted_file_value(
+                trusted_context,
+                context.purpose.as_deref(),
+                config.env.purpose,
+            )
+            .map(str::to_owned)
+        }),
+        jurisdiction: cli.context.jurisdiction.or_else(|| {
+            trusted_file_value(
+                trusted_context,
+                context.jurisdiction.as_deref(),
+                config.env.jurisdiction,
+            )
+            .map(str::to_owned)
+        }),
         process_timeout_ms: cli
             .process
             .process_timeout_ms
             .or(config.process.timeout_ms)
             .unwrap_or(DEFAULT_TIMEOUT_MS),
     }
+}
+
+/// The file value when the file layer is trusted for this setting, or when the
+/// environment supplied it (the environment value has already replaced the
+/// file value by the time this runs).
+fn trusted_file_value(trusted: bool, value: Option<&str>, from_env: bool) -> Option<&str> {
+    if trusted || from_env { value } else { None }
 }
 
 /// First non-`None` of the CLI value, the config value, and the built-in
