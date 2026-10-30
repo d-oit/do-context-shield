@@ -270,10 +270,16 @@
     "category": "security"
   },
   {
-    "invariant": "The config file's `[context]` values are the default enforcement context of the CLI `sanitize` call and, when selected with an explicit `--config`, of the `mcp-stdio` server for `context.sanitize` requests that omit the arguments (the MCP entry point never reads an ambient project file); a per-call argument (or CLI flag) overrides the file value field by field, and the built-in fallback stays the most restrictive context (external recipient, personal data)",
-    "rationale": "The config file was documented as supplying these defaults, but mcp-stdio resolved them and then dropped them, so a registration pinned to `recipient = \"local\"` silently ran with the external default; both directions are user-visible policy changes and the doc pages disagreed about which one held, and the MCP side additionally reads file values only via `--config` so a project directory cannot set them for the server it spawns",
-    "sensor": "cargo test -p do-context-shield --test mcp_stdio_config",
+    "invariant": "The `[context]` values of an explicitly selected config file are the default enforcement context of the CLI `sanitize` call and, when selected with an explicit `--config`, of the `mcp-stdio` server for `context.sanitize` requests that omit the arguments (the MCP entry point never reads an ambient project file); a working-directory auto-discovery candidate's `[context]` is ignored, so a repository file cannot weaken the defaults; a per-call argument (or CLI flag) overrides the file value field by field, and the built-in fallback stays the most restrictive context (external recipient, personal data)",
+    "rationale": "The config file was documented as supplying these defaults, but mcp-stdio resolved them and then dropped them, so a registration pinned to `recipient = \"local\"` silently ran with the external default; both directions are user-visible policy changes and the doc pages disagreed about which one held, the MCP side additionally reads file values only via `--config` so a project directory cannot set them for the server it spawns, and issue #161 showed the same ambient-trust problem for one-shot `sanitize` (a checked-out file could select `recipient = \"local\"` and keep a raw value)",
+    "sensor": "cargo test -p do-context-shield --test mcp_stdio_config --test cli_config_discovery --test cli_config",
     "category": "contracts"
+  },
+  {
+    "invariant": "A working-directory `do-context-shield.toml` selected by auto-discovery cannot weaken the one-shot enforcement context: its `[context]` section is ignored unless the file is named with `--config`; the user-level `$HOME` file's `[context]`, `DO_CONTEXT_SHIELD_*` overrides, and CLI flags remain authoritative; process plugin commands from any auto-discovered file stay ignored, and the `config` diagnostic reports the ignored section as `default`/`none` rather than `file`",
+    "rationale": "Repository configuration is checked out with project content, so trusting its recipient/data-category could silently keep sensitive input raw for an unconfigured sanitize call (issue #161); the conservative external/personal defaults must survive an ambient project file, while explicit operator configuration keeps its intentional local/non-personal workflows",
+    "sensor": "cargo test -p do-context-shield --test cli_config_discovery --test cli_config --test cli_config_diag + cargo test -p do-context-shield --bins (config::tests::context_trust_follows_the_config_source)",
+    "category": "security"
   },
   {
     "invariant": "A pull request is armed with GitHub auto-merge (`gh pr merge --auto`) only while no review comment or review is unanswered, and every review comment and review is addressed (fixed or answered) before the merge is treated as done; auto-merge itself waits only for the required CI checks",

@@ -109,13 +109,13 @@ fn cwd_config_is_discovered_without_a_flag() {
     let dir = temp_dir();
     write_config(
         &dir.path().join("do-context-shield.toml"),
-        "[context]\nrecipient = \"local\"\n",
+        "[plugins]\ntransformer = \"mask\"\n",
     );
 
-    // `--recipient local` keeps a personal value; observing the keep without
-    // any flag proves the working-directory file was found and applied.
-    let kept = sanitize(dir.path(), &[], "alice@example.com");
-    assert_eq!(kept, "alice@example.com");
+    // The mask output proves the working-directory file was found and applied
+    // without relying on its untrusted `[context]` section.
+    let masked = sanitize(dir.path(), &[], "alice@example.com");
+    assert_eq!(masked, "*************.com");
 }
 
 #[test]
@@ -141,19 +141,20 @@ fn cwd_config_wins_over_the_home_config() {
     if let Err(error) = std::fs::create_dir_all(&home) {
         panic!("cannot create {}: {error}", home.display());
     }
-    // The home file would block the call, so the keep below is the
-    // working-directory file's value.
+    // The home file would block the call, so a successful run proves the
+    // working-directory file won the selection. Its `[context]` is ignored,
+    // so the default context applies on top of its transformer selection.
     write_config(
         &home.join("config.toml"),
         "[context]\nrecipient = \"unknown\"\n",
     );
     write_config(
         &dir.path().join("do-context-shield.toml"),
-        "[context]\nrecipient = \"local\"\n",
+        "[plugins]\ntransformer = \"mask\"\n",
     );
 
-    let kept = sanitize(dir.path(), &[], "alice@example.com");
-    assert_eq!(kept, "alice@example.com");
+    let masked = sanitize(dir.path(), &[], "alice@example.com");
+    assert_eq!(masked, "*************.com");
 }
 
 #[test]

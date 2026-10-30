@@ -1,7 +1,7 @@
 //! Tests for the configuration loader, validation, and CLI merge.
 
-use super::{CliSelection, Config, resolve, resolve_tools, validate};
-use crate::cli::DetectorSelection;
+use super::{CliSelection, Config, ConfigSource, resolve, resolve_tools, validate};
+use crate::cli::{ContextArgs, DetectorSelection};
 use do_context_shield_mcp_server::ToolSet;
 use do_context_shield_plugin_process::DEFAULT_TIMEOUT_MS;
 
@@ -131,5 +131,44 @@ fn cli_overrides_config_and_defaults_fill_gaps() -> Result<(), Box<dyn std::erro
     assert_eq!(resolved.recipient, "local");
     assert_eq!(resolved.data_category, "personal");
     assert_eq!(resolved.process_timeout_ms, DEFAULT_TIMEOUT_MS);
+    Ok(())
+}
+
+/// Issue #161: a repository-controlled working-directory file cannot weaken
+/// the enforcement context, while explicit, home, and environment layers can.
+#[test]
+fn context_trust_follows_the_config_source() -> Result<(), Box<dyn std::error::Error>> {
+    let mut config: Config =
+        toml::from_str("[context]\nrecipient = \"local\"\ndata_category = \"non_personal\"\n")?;
+    let cli = CliSelection::default();
+
+    config.source = ConfigSource::WorkingDir;
+    let resolved = resolve(&cli, &config);
+    assert_eq!(resolved.recipient, "external");
+    assert_eq!(resolved.data_category, "personal");
+
+    config.source = ConfigSource::UserHome;
+    let resolved = resolve(&cli, &config);
+    assert_eq!(resolved.recipient, "local");
+    assert_eq!(resolved.data_category, "non_personal");
+
+    config.source = ConfigSource::Explicit;
+    assert_eq!(resolve(&cli, &config).recipient, "local");
+
+    // An environment override is trusted even when the file it replaced was
+    // discovered in the working directory.
+    config.source = ConfigSource::WorkingDir;
+    config.env.recipient = true;
+    assert_eq!(resolve(&cli, &config).recipient, "local");
+
+    // A CLI flag always wins.
+    let cli = CliSelection {
+        context: ContextArgs {
+            recipient: Some("trusted".to_owned()),
+            ..ContextArgs::default()
+        },
+        ..CliSelection::default()
+    };
+    assert_eq!(resolve(&cli, &config).recipient, "trusted");
     Ok(())
 }

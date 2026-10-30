@@ -10,7 +10,14 @@ Status: implemented (`crates/do-context-shield-cli/src/config.rs`). Every option
 
 The first existing candidate wins. Without any file, every option keeps its built-in default. A candidate that exists but cannot be read or parsed is an error — the tool never falls back to defaults silently, and a candidate of that name that is not a regular file (a directory, a dangling symlink) is such an error rather than an absent one. A missing `--config` path is an error too: the explicit path is an instruction, while an absent auto-discovery candidate is simply not selected.
 
-The one-shot commands use this search for built-in plugin selections, context, limits, and vault paths. However, process plugin commands (`detector_command`, `policy_command`, `transformer_command`, `judge_command`, `vault_command`) in an auto-discovered file are ignored: a repository shipping `do-context-shield.toml` cannot choose which local executables the CLI runs. Process plugin commands must come from an explicit `--config <path>` named by the operator or from explicit CLI flags. `mcp-stdio` reads a file only when `--config <path>` names it: MCP clients spawn the server with the project as its working directory, so an ambient file there could otherwise select process plugins, loosen `[context]`, or expose `context.restore` merely by being the server's cwd. Without `--config` the MCP server starts from the built-in defaults (trusted `DO_CONTEXT_SHIELD_*` environment overrides still apply); register it as `do-context-shield mcp-stdio --config /absolute/trusted/config.toml`.
+The one-shot commands use this search for built-in plugin selections, context, limits, and vault paths. Two settings are not trusted from a working-directory file, because that file is checked out with the repository:
+
+- Process plugin commands (`detector_command`, `policy_command`, `transformer_command`, `judge_command`, `vault_command`) are ignored: a repository shipping `do-context-shield.toml` cannot choose which local executables the CLI runs. They must come from an explicit `--config <path>` named by the operator or from explicit CLI flags.
+- The `[context]` section is ignored: a repository file cannot select a less protective recipient or data category for one-shot `sanitize`/`config` calls, which keep the conservative `external`/`personal` defaults. An explicit `--config <path>` opts the file's section in, and environment variables or CLI flags still set the context directly.
+
+`mcp-stdio` reads a file only when `--config <path>` names it: MCP clients spawn the server with the project as its working directory, so an ambient file there could otherwise select process plugins, loosen `[context]`, or expose `context.restore` merely by being the server's cwd. Without `--config` the MCP server starts from the built-in defaults (trusted `DO_CONTEXT_SHIELD_*` environment overrides still apply); register it as `do-context-shield mcp-stdio --config /absolute/trusted/config.toml`.
+
+The user-level `$HOME/.config/do-context-shield/config.toml` is operator configuration, so its `[context]` section is honored; process plugin commands there still require an explicit `--config <path>`. When a working-directory candidate exists it shadows the home file entirely (the first existing candidate wins), so an ignored `[context]` never falls back to the home file's values.
 
 Paths in the file are literal: environment variables and `~` are not expanded.
 
@@ -175,12 +182,12 @@ Bounds one process-plugin response; the child is killed and reaped on timeout (`
 
 | Command | Reads from the file |
 | --- | --- |
-| `sanitize` | all sections |
+| `sanitize` | all sections, except `[context]` and process commands from an auto-discovered working-directory file (see above) |
 | `restore` | `[vault]`, `[audit]`, `[process]`; detector/policy/transformer selections are ignored (only the vault is built, and restore only resolves placeholders) |
 | `inspect` | detector keys of `[plugins]` (`detector`, `model_dir`, `detector_command`) and `[process]`; policy, transformer, audit, and vault selections are ignored |
 | `forget` | `[vault]`, `[audit]`, `[process]`; detector/policy/transformer selections are ignored |
 | `mcp-stdio` | all sections, but only from a file selected with `--config <path>` (auto-discovery is off); `[context]` becomes the server default for `context.sanitize` and per-call arguments override it (field by field); `[plugins] tools` sets the exposed tool surface |
-| `config` | all sections: it reports the merged one-shot view (the same merge `sanitize` uses) without building a plugin or reading stdin |
+| `config` | all sections: it reports the merged one-shot view (the same merge `sanitize` uses) without building a plugin or reading stdin; an ignored working-directory `[context]` is reported as `default`/`none` |
 | `encrypt-vault` | nothing: both paths are explicit flags, so an ambient file can never trigger an in-place rewrite |
 
 A selection a command does not use is not built, so a plugin that cannot be constructed there (a `process` policy without a command, a JSON vault without a file) fails only the commands that run that stage — `inspect` still works with a broken `[vault]`, `forget` with a broken `[plugins]`.

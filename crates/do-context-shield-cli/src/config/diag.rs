@@ -207,29 +207,32 @@ pub(crate) fn explain(
 /// The reported enforcement context.
 fn context(cli: &CliSelection, config: &Config, resolved: &super::Resolved) -> Context {
     let env = &config.env;
+    // A working-directory `[context]` is ignored by [`super::resolve`], so it
+    // must not be reported as the supplying layer either.
+    let trusted = config.context_is_trusted();
     Context {
         recipient: named(
             &resolved.recipient,
             cli.context.recipient.is_some(),
             env.recipient,
-            config.context.recipient.is_some(),
+            trusted && config.context.recipient.is_some(),
         ),
         data_category: named(
             &resolved.data_category,
             cli.context.data_category.is_some(),
             env.data_category,
-            config.context.data_category.is_some(),
+            trusted && config.context.data_category.is_some(),
         ),
         jurisdiction: maybe_named(
             resolved.jurisdiction.as_deref(),
             cli.context.jurisdiction.is_some(),
             env.jurisdiction,
-            config.context.jurisdiction.is_some(),
+            trusted && config.context.jurisdiction.is_some(),
         ),
         purpose: presence(
             cli.context.purpose.is_some(),
             env.purpose,
-            config.context.purpose.is_some(),
+            trusted && config.context.purpose.is_some(),
         ),
     }
 }
