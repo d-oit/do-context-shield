@@ -89,4 +89,4 @@ Every durable rule is recorded in `plans/invariants.json` as `{invariant, ration
 - Keep files under 500 LOC (decompose when nearing 450).
 - No hard-coded credentials or API keys.
 - Rust 2024, strict lints, `unwrap()` and `expect()` are forbidden; document every `Result`-returning function with an `# Errors` section.
-- Do not invoke the `claude` or `codex` CLIs without explicit human approval: both are installed but unusable in this environment (Codex is account usage-limited; Claude Code produces no output), so the client end-to-end checks stay manual and approval-gated (`plans/backlog.md`).
+- Do not invoke the `claude` or `codex` CLIs without explicit human approval. Codex works in this environment (model turn verified 2026-10-30 with v0.166.0); Claude Code produces no output (`401`/timeout), so its client end-to-end check stays manual and approval-gated (`plans/backlog.md`).

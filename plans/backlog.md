@@ -246,9 +246,18 @@ work lands or the precondition expires.
 
 ## Blocked — approval-gated
 
-### Client end-to-end checks are manual and require explicit human approval
+### Claude Code end-to-end check is manual and requires explicit human approval
 
-- **Progress review (2026-10-13)**: `plans/tasks.json` reports 40 done, 0 pending, 0 in progress, and 0 failed. No implementation task remains open in the harness plan. These client checks are still outstanding: Codex is account usage-limited (`try again at Oct 15th, 2026 10:04 PM`), Claude Code `-p` produced no output and died on timeout (exit 124), and its 1.0.44 attempt returned `401 Invalid Authentication`.
+- **Codex: verified (2026-10-30)**. With explicit human approval, Codex
+  0.166.0 (`gpt-6-luna`, `codex doctor`: chatgpt auth, 21 ok / 0 fail) ran the
+  non-interactive probe against a release binary built from `main`:
+  `codex exec --json` with one-off `-c mcp_servers.do-context-shield.*`
+  overrides called `context.inspect` and `context.sanitize` (session
+  `codex-probe-1`) and replied with the sanitized placeholder only. The
+  transcript is recorded in `docs/client-integration.md` → "Other clients",
+  meeting the probe half of the exit criteria. The 2026-10-13 usage limit
+  (`try again at Oct 15th, 2026 10:04 PM`) has expired.
+- **Progress review (2026-10-13)**: `plans/tasks.json` reports 40 done, 0 pending, 0 in progress, and 0 failed. No implementation task remains open in the harness plan. The remaining client check is Claude Code: `-p` produced no output and died on timeout (exit 124), and its 1.0.44 attempt returned `401 Invalid Authentication`.
 - **Progress review (2026-10-18)**: the 40-task plan is complete and its
   history lives in the **Landed** sections above; the harness state database
   has been reset since, and the re-exported `plans/tasks.json` now carries the
@@ -256,8 +265,8 @@ work lands or the precondition expires.
   bound, mutation re-dispatch, action pinning, glued-only approach verdict)
   plus the deps-sensor repair tracked under **Open**.
   The Codex usage-limit window (`until Oct 15th, 2026 10:04 PM`) has elapsed,
-  so the Codex probe can be re-run — still only with explicit human approval.
-  Claude Code is unchanged (no output / `401 Invalid Authentication`).
-- **Rule**: never invoke `claude` or `codex` in an agent session without explicit human approval. Registration mechanics are verified and documented (`docs/client-integration.md` → "Other clients"); everything beyond that is human-driven.
-- **Remaining work (human-run only)**: Codex — one non-interactive turn calling `context.inspect` + `context.sanitize` (session `codex-probe-1`) and a placeholder-only reply. Claude Code — approve the project server once, then the same turn with session `cc-probe-1`.
-- **Exit criteria**: a transcript proving the tool invocation and the sanitized reply, recorded here and in `docs/client-integration.md`.
+  and the probe was re-run with explicit approval on 2026-10-30 (verified
+  above). Claude Code is unchanged (no output / `401 Invalid Authentication`).
+- **Rule**: never invoke `claude` in an agent session without explicit human approval. Codex now works in this environment; its invocation remains approval-gated by `AGENTS.md`. Registration mechanics are verified and documented (`docs/client-integration.md` → "Other clients"); everything beyond that is human-driven.
+- **Remaining work (human-run only)**: Claude Code — approve the project server once, then one non-interactive turn calling `context.inspect` + `context.sanitize` (session `cc-probe-1`) and a placeholder-only reply.
+- **Exit criteria**: a Claude Code transcript proving the tool invocation and the sanitized reply, recorded here and in `docs/client-integration.md`.
