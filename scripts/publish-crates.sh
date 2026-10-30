@@ -13,7 +13,8 @@
 #
 # Usage:
 #   scripts/publish-crates.sh --dry-run   # rehearse package surfaces and check status
-#   CARGO_REGISTRY_TOKEN=... scripts/publish-crates.sh
+#   scripts/publish-crates.sh             # uses the credentials from `cargo login`
+#   CARGO_REGISTRY_TOKEN=... scripts/publish-crates.sh  # explicit token
 set -euo pipefail
 
 ORDER=(
@@ -88,9 +89,15 @@ if [ "$DRY_RUN" = "1" ]; then
     exit 0
 fi
 
+# `cargo publish` reads CARGO_REGISTRY_TOKEN when it is set, otherwise the
+# credentials stored by `cargo login` ($CARGO_HOME/credentials.toml, or the
+# legacy `credentials` file). Fail early only when neither is configured.
 if [ -z "${CARGO_REGISTRY_TOKEN:-}" ]; then
-    echo "error: CARGO_REGISTRY_TOKEN is not set" >&2
-    exit 1
+    cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+    if [ ! -f "$cargo_home/credentials.toml" ] && [ ! -f "$cargo_home/credentials" ]; then
+        echo "error: no crates.io credentials: set CARGO_REGISTRY_TOKEN or run cargo login" >&2
+        exit 1
+    fi
 fi
 
 PUBLISHED_CRATES=()

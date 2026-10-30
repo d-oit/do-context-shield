@@ -12,9 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release workflow: the crates.io publish job guarded on
   `secrets.CARGO_REGISTRY_TOKEN` in a job-level `if`, which GitHub rejects
   (`secrets` is not an allowed context there), so every release run failed at
-  startup with no jobs. The token is now exposed as a job environment variable
-  and the publish step is guarded with `env.CARGO_REGISTRY_TOKEN != ''`, so an
-  unconfigured secret skips publishing instead of failing the workflow.
+  startup with no jobs. Publishing now uses crates.io trusted publishing
+  (GitHub OIDC via `rust-lang/crates-io-auth-action`, `id-token: write`), so no
+  long-lived registry secret is required. `scripts/publish-crates.sh` accepts
+  the credentials stored by `cargo login` when `CARGO_REGISTRY_TOKEN` is unset,
+  and still skips crate versions already published.
 
 ## [0.1.0] - 2026-10-30
 

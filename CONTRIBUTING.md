@@ -145,7 +145,8 @@ Workspace crates depend on each other via versioned path dependencies, so they a
 
 ```bash
 scripts/publish-crates.sh --dry-run  # rehearse package surface and status
-CARGO_REGISTRY_TOKEN=... scripts/publish-crates.sh  # publish idempotently in order
+cargo login                          # once; the script uses these credentials
+scripts/publish-crates.sh            # publish idempotently in order
 ```
 
 ## Reporting Issues
