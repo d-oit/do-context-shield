@@ -244,6 +244,30 @@ work lands or the precondition expires.
   are covered by the existing Linux tests once the workspace scope is used.
   A raw mutation score is not proof of security.
 
+## Blocked — external action
+
+### First crates.io publish of the v0.1.0 crates
+
+- **Status (2026-10-30)**: the GitHub release `v0.1.0` is published with all
+  four binary archives and `SHA256SUMS` (release run 41128480486). The 18
+  workspace crates are **not** on crates.io.
+- **Blocker A**: the first dispatch (41126181556) failed at the
+  trusted-publishing exchange with `No Trusted Publishing config found for
+  repository d-oit/do-context-shield`. A trusted publisher can only be
+  configured after the crate exists, so the first publish must use a token.
+- **Blocker B**: the local `scripts/publish-crates.sh` (credentials from
+  `cargo login`) authenticated, but crates.io rejected the upload with `A
+  verified email address is required to publish crates to crates.io` (status
+  400). No crate was created.
+- **Next (human)**: verify the crates.io account email at
+  <https://crates.io/settings/profile>, then run
+  `scripts/publish-crates.sh` locally (it uses `cargo login` credentials and
+  skips versions already published). Afterwards configure trusted publishing
+  per crate on crates.io for repository `d-oit/do-context-shield` and workflow
+  `release.yml`; later releases publish from CI. Until then, dispatch with
+  `-f publish_crates=false` (the workflow input added in #172) when only the
+  binary assets are needed.
+
 ## Blocked — approval-gated
 
 ### Claude Code end-to-end check is manual and requires explicit human approval
