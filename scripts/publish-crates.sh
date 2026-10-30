@@ -13,6 +13,7 @@
 #
 # Usage:
 #   scripts/publish-crates.sh --dry-run   # rehearse package surfaces and check status
+#   scripts/publish-crates.sh --needs-publish  # exit 0 when a version is missing
 #   scripts/publish-crates.sh             # uses the credentials from `cargo login`
 #   CARGO_REGISTRY_TOKEN=... scripts/publish-crates.sh  # explicit token
 set -euo pipefail
@@ -42,10 +43,11 @@ ORDER=(
     do-context-shield
 )
 
-DRY_RUN=0
-if [ "${1:-}" = "--dry-run" ] || [ "${1:-}" = "--check" ]; then
-    DRY_RUN=1
-fi
+MODE="publish"
+case "${1:-}" in
+    --dry-run | --check) MODE="dry-run" ;;
+    --needs-publish) MODE="needs-publish" ;;
+esac
 
 get_crate_version() {
     local crate="$1"
@@ -72,8 +74,24 @@ is_crate_published() {
     return 1
 }
 
+# Exit 0 when at least one crate version is missing from crates.io (publish is
+# needed), 1 when every version is already present. The release workflow uses
+# this to skip the trusted-publishing exchange when re-running a release whose
+# crates were already published.
+if [ "$MODE" = "needs-publish" ]; then
+    for crate in "${ORDER[@]}"; do
+        version=$(get_crate_version "$crate")
+        if ! is_crate_published "$crate" "$version"; then
+            echo "publish needed: $crate@$version is not on crates.io" >&2
+            exit 0
+        fi
+    done
+    echo "all crate versions are already published" >&2
+    exit 1
+fi
+
 # Rehearsal validates package surfaces and queries current index status
-if [ "$DRY_RUN" = "1" ]; then
+if [ "$MODE" = "dry-run" ]; then
     echo "=== Rehearsing package surfaces and checking crates.io status ==="
     for crate in "${ORDER[@]}"; do
         version=$(get_crate_version "$crate")
