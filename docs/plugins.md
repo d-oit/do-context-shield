@@ -128,6 +128,18 @@ Inference limits are explicit flags on `sanitize`, `inspect`, and `mcp-stdio`:
 silently truncates it — and the thread count is never derived from the machine
 automatically.
 
+The trade-off is deliberate: encoder attention cost grows faster than linearly
+in the token window, so a large `max_tokens` raises the per-call memory and CPU
+peak for every request, while a small one adds windows (and a little duplicated
+inference in the overlap). 512 tokens keeps a single CPU call predictable on a
+laptop, and reusing the loaded session removes the cold-start cost from every
+call after the first. Raise the window only when a corpus regularly produces
+entities longer than the overlap, and keep `--model-threads` low when the host
+also runs the coding client. The model-backed tests
+(`ORT_DYLIB_PATH` + `DO_CONTEXT_SHIELD_E2E_MODEL_DIR`) exercise warm reuse and
+multi-window input on a real export; they skip when no local model is
+configured.
+
 ### Supported export layouts
 
 **Fragment sets (primary)** — GLiNER2 span exports: `model_dir` holds an `encoder*.onnx` fragment, either flat (`encoder.onnx`, `encoder_fp32.onnx`, `encoder_fp16.onnx`, plus the `_iobinding` variants, as `export_span_v3.py` produces them) or under the legacy `fp16_v2/`/`fp32_v2/` subfolders, together with the other seven fragments (`token_gather`, `span_rep`, `schema_gather`, `count_pred_argmax`, `count_lstm_fixed`, `scorer`, `classifier`) and the export's `tokenizer.json`. The `gliner2-rs` engine (local, Apache-2.0, same `ort` stack) runs the pipeline: label-conditioned schema handling, span enumeration, and count decoding are its job. The engine owns eight ONNX sessions and is hosted on a dedicated worker thread that starts on the first detection (`ort::Session` is not `Send`); the detector talks to it over a channel, so the sessions live as long as that thread, `gliner2_rs` initializes there, and dropping and reconstructing the detector loads them again. The detector feeds `Gliner2Config::labels` (default `PII_LABELS_42`) as the schema and maps the returned entities. The eight ONNX sessions load lazily on the first fragment detect (seconds cold on CPU) and stay cached for that thread's lifetime; long inputs are chunked by the engine (384-token windows, 64 overlapping).
