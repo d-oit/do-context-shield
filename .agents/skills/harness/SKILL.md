@@ -57,6 +57,7 @@ Agent = Model + Harness. Feedforward guides (this skill, `AGENTS.md`, `CONTRIBUT
 | structure | `python3 scripts/validate-structure.py` | CI | restore required files; remove unwrap/expect; shrink files |
 | deny | `cargo deny check` | CI | dependency policy (`deny.toml`) |
 | publish-check | `cargo package --list -p <crate>` | CI | fix the crate's include whitelist |
+| mcp-conformance | `bash scripts/check-mcp-conformance.sh` (MCP Inspector + stdio fixtures; pinned Node 22 / inspector 2.13.0) | CI | keep Node and the inspector version pinned; see `docs/client-integration.md` |
 | secret-scan | gitleaks (`.github/workflows/secret-scan.yml`) | CI | remove and rotate the secret |
 
 Changed-only gate: `do-harness verify --changed --set verification`; preview the selection with `do-harness explain --set verification --changed`. Signal sets: `feedback` (edit loop), `verification` (full local gate), `release`, and `ci` — what the GitHub workflow runs: `verification` minus `commitlint`, because pull-request checkouts are merge refs and this repository enforces conventional PR titles rather than contributor commit subjects. A tool that is unavailable prints `SKIP:` and is reported as WARN, never as a silent pass; under `--strict` a warn is not a pass.

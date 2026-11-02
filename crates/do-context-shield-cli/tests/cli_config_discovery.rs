@@ -291,3 +291,47 @@ fn mcp_stdio_help_documents_explicit_config_only() {
         "mcp-stdio help text must mention --config: {stdout}"
     );
 }
+
+/// A config loaded from a distinctive directory must not leak that directory
+/// (or the parser's source excerpt) through the error text: the path can name a
+/// user or project, and the excerpt can quote a raw configured value.
+#[test]
+fn config_diagnostics_never_echo_paths_or_values() {
+    let dir = temp_dir();
+    let canary = "canary-project-do-not-print";
+    let canary_dir = dir.path().join(canary);
+    if let Err(error) = std::fs::create_dir(&canary_dir) {
+        panic!("cannot create the canary directory: {error}");
+    }
+    let canary_value = "CANARY-CONFIG-VALUE-9f3a";
+
+    let broken = canary_dir.join("do-context-shield.toml");
+    write_config(
+        &broken,
+        format!("[plugins]\nvault_key_file = \"{canary_value}\"\ndetector = \n").as_bytes(),
+    );
+    let assert = cmd(dir.path())
+        .args(["sanitize", "--session", "i", "--config"])
+        .arg(&broken)
+        .write_stdin("alice@example.com")
+        .assert()
+        .code(1);
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
+    assert!(stderr.contains("cannot parse config"), "{stderr}");
+    assert!(!stderr.contains(canary), "config path leaked: {stderr}");
+    assert!(
+        !stderr.contains(canary_value),
+        "config value leaked: {stderr}"
+    );
+
+    let missing = canary_dir.join("missing.toml");
+    let assert = cmd(dir.path())
+        .args(["sanitize", "--session", "j", "--config"])
+        .arg(&missing)
+        .write_stdin("alice@example.com")
+        .assert()
+        .code(1);
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
+    assert!(stderr.contains("cannot read config"), "{stderr}");
+    assert!(!stderr.contains(canary), "config path leaked: {stderr}");
+}

@@ -5,15 +5,27 @@ use do_context_shield_plugin_api::ProcessingContext;
 use do_context_shield_plugin_process::{
     DEFAULT_TIMEOUT_MS, ProcessDetector, ProcessJudge, ProcessPolicy, ProcessTransformer,
 };
-use std::io::{self, BufRead, Write};
+use std::io;
 use std::path::PathBuf;
 use std::time::Duration;
 
 mod handle;
+mod transport;
 mod vault;
 
 use crate::handle::handle_request;
 use crate::vault::build_vault;
+
+/// Maximum newline-delimited request frame accepted on stdio, in bytes
+/// (excluding the framing newline).
+///
+/// This bounds the transport buffer, not the sanitized-context size: it is a
+/// resource-exhaustion boundary for the long-lived stdio server, selected to
+/// comfortably hold a large coding-context payload while capping growth. A
+/// frame over the limit is answered with one `null`-id invalid-request error
+/// and the session ends; the frame never reaches JSON parsing, a plugin, the
+/// vault, or the audit sink. See [`transport`] for the full contract.
+pub const DEFAULT_MAX_REQUEST_BYTES: usize = 4 * 1024 * 1024;
 
 /// Internal entrypoint exported for fuzzing MCP request handling.
 ///
@@ -158,6 +170,10 @@ pub struct ServerConfig {
     pub vault_key_file: Option<PathBuf>,
     /// Optional private local append-only JSONL audit destination.
     pub audit_file: Option<PathBuf>,
+    /// Opt-in audit rotation bound: maximum records in the current file.
+    pub audit_max_records: Option<u64>,
+    /// Opt-in audit rotation bound: maximum bytes in the current file.
+    pub audit_max_bytes: Option<u64>,
     /// Vault plugin: `memory` (default without `vault_file`), `json`, or `process`.
     pub vault: Option<String>,
     /// Command line of a local vault executable; required with `process`.
@@ -168,6 +184,12 @@ pub struct ServerConfig {
     pub detector: String,
     /// Local directory holding the `GLiNER2` ONNX export; only used with `gliner2`.
     pub model_dir: Option<PathBuf>,
+    /// Maximum tokens in one `GLiNER2` inference call (longer input is
+    /// windowed, never truncated). `None` keeps the detector default.
+    pub model_max_tokens: Option<usize>,
+    /// ONNX Runtime intra-op threads for `GLiNER2`. `None` keeps the detector
+    /// default.
+    pub model_threads: Option<usize>,
     /// Command line of a local detector executable; required with `process`.
     /// Split on whitespace; quoting and shell expansion are not supported.
     pub detector_command: Option<String>,
@@ -212,10 +234,14 @@ impl Default for ServerConfig {
             vault_file: None,
             vault_key_file: None,
             audit_file: None,
+            audit_max_records: None,
+            audit_max_bytes: None,
             vault: None,
             vault_command: None,
             detector: "regex".to_owned(),
             model_dir: None,
+            model_max_tokens: None,
+            model_threads: None,
             detector_command: None,
             policy: "default".to_owned(),
             policy_command: None,
@@ -239,11 +265,20 @@ impl Default for ServerConfig {
 /// Returns an error when stdio I/O fails, a request cannot be answered, or a plugin cannot be constructed.
 pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Error>> {
     let audit = match config.audit_file.as_deref() {
-        Some(path) => Some(do_context_shield_plugin_registry::file_audit_sink(
-            path,
-            config.vault_file.as_deref(),
-            config.vault_key_file.as_deref(),
-        )?),
+        Some(path) => {
+            let retention = do_context_shield_audit_file::Retention {
+                max_records: config.audit_max_records,
+                max_bytes: config.audit_max_bytes,
+            };
+            Some(
+                do_context_shield_plugin_registry::file_audit_sink_with_retention(
+                    path,
+                    config.vault_file.as_deref(),
+                    config.vault_key_file.as_deref(),
+                    retention,
+                )?,
+            )
+        }
         None => None,
     };
     let timeout = Duration::from_millis(config.process_timeout_ms);
@@ -254,6 +289,14 @@ pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Err
             let detector_config = match config.model_dir.take() {
                 Some(dir) => Gliner2Config::with_model_dir(dir),
                 None => Gliner2Config::default(),
+            };
+            let detector_config = match (config.model_max_tokens, config.model_threads) {
+                (None, None) => detector_config,
+                (max_tokens, threads) => {
+                    let max_tokens = max_tokens.unwrap_or(detector_config.max_tokens);
+                    let threads = threads.unwrap_or(detector_config.intra_threads);
+                    detector_config.with_limits(max_tokens, threads)
+                }
             };
             let gliner2 = Box::new(Gliner2Detector::new(detector_config));
             if config.detector == "hybrid" {
@@ -309,26 +352,14 @@ pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Err
     let mut input = stdin.lock();
     let stdout = io::stdout();
     let mut output = stdout.lock();
-    let mut line = String::new();
-    let tools = config.tools;
-    let default_context = config.context.clone();
-
-    loop {
-        line.clear();
-        if input.read_line(&mut line)? == 0 {
-            break;
-        }
-        if line.trim().is_empty() {
-            continue;
-        }
-        let response = handle_request(&mut pipeline, tools, &default_context, &line)?;
-        if let Some(response) = response {
-            serde_json::to_writer(&mut output, &response)?;
-            output.write_all(b"\n")?;
-            output.flush()?;
-        }
-    }
-    Ok(())
+    transport::serve(
+        &mut pipeline,
+        config.tools,
+        &config.context,
+        &mut input,
+        &mut output,
+        DEFAULT_MAX_REQUEST_BYTES,
+    )
 }
 
 #[cfg(test)]

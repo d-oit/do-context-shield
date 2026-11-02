@@ -232,17 +232,35 @@ fn read_discovered() -> Result<Config, Box<dyn std::error::Error>> {
     Ok(Config::default())
 }
 
-/// Parse one configuration file, naming it in every error.
+/// Parse one configuration file.
 ///
 /// # Errors
 ///
 /// Returns an error when the file cannot be read or is not valid TOML for
-/// [`Config`].
+/// [`Config`]. The message names the failure class only: the resolved path can
+/// disclose a username or project name, and a TOML parser diagnostic quotes the
+/// source line, which may hold a raw configured value (a key-file path, for
+/// example), so neither is formatted into the error.
 fn read(path: &Path, source: ConfigSource) -> Result<Config, Box<dyn std::error::Error>> {
-    let text = std::fs::read_to_string(path)
-        .map_err(|e| format!("cannot read config {}: {e}", path.display()))?;
-    let mut config: Config = toml::from_str(&text)
-        .map_err(|e| format!("cannot parse config {}: {e}", path.display()))?;
+    let text = std::fs::read_to_string(path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            "cannot read config: the file does not exist; check `--config` or the discovered config location"
+        } else {
+            "cannot read config (inaccessible, a directory, or not valid UTF-8); check `--config` or the discovered config location"
+        }
+    })?;
+    let mut config: Config = toml::from_str(&text).map_err(|error| {
+        // The full parser diagnostic quotes the offending source line, which
+        // may hold a raw configured value; only the schema error's own message
+        // (an unknown field name, never a value) is safe to surface.
+        let message = error.message();
+        if message.starts_with("unknown field") {
+            format!("cannot parse config: {message}")
+        } else {
+            "cannot parse config as TOML; check `--config` or the discovered config location"
+                .to_owned()
+        }
+    })?;
     config.source = source;
     Ok(config)
 }
@@ -262,6 +280,8 @@ pub(crate) struct CliSelection {
     pub(crate) vault_file: Option<PathBuf>,
     pub(crate) vault_key_file: Option<PathBuf>,
     pub(crate) audit_file: Option<PathBuf>,
+    pub(crate) audit_max_records: Option<u64>,
+    pub(crate) audit_max_bytes: Option<u64>,
     pub(crate) vault_ttl_seconds: Option<u64>,
     pub(crate) context: ContextArgs,
     pub(crate) process: ProcessArgs,
@@ -273,6 +293,8 @@ pub(crate) struct CliSelection {
 pub(crate) struct Resolved {
     pub(crate) detector: String,
     pub(crate) model_dir: Option<PathBuf>,
+    pub(crate) model_max_tokens: Option<usize>,
+    pub(crate) model_threads: Option<usize>,
     pub(crate) detector_command: Option<String>,
     pub(crate) policy: String,
     pub(crate) policy_command: Option<String>,
@@ -285,6 +307,8 @@ pub(crate) struct Resolved {
     pub(crate) vault_file: Option<PathBuf>,
     pub(crate) vault_key_file: Option<PathBuf>,
     pub(crate) audit_file: Option<PathBuf>,
+    pub(crate) audit_max_records: Option<u64>,
+    pub(crate) audit_max_bytes: Option<u64>,
     pub(crate) vault_command: Option<String>,
     pub(crate) vault_ttl_seconds: Option<u64>,
     pub(crate) recipient: String,
@@ -331,6 +355,8 @@ pub(crate) fn resolve(cli: &CliSelection, config: &Config) -> Resolved {
     Resolved {
         detector: pick(cli.detector.detector, plugins.detector.as_deref(), "regex"),
         model_dir: cli.detector.model_dir.or_else(|| plugins.model_dir.clone()),
+        model_max_tokens: cli.detector.model_max_tokens,
+        model_threads: cli.detector.model_threads,
         detector_command: cli
             .detector
             .detector_command
@@ -359,6 +385,8 @@ pub(crate) fn resolve(cli: &CliSelection, config: &Config) -> Resolved {
         vault_file: cli.vault_file.or_else(|| vault.vault_file.clone()),
         vault_key_file: cli.vault_key_file.or_else(|| vault.vault_key_file.clone()),
         audit_file: cli.audit_file.or_else(|| config.audit.audit_file.clone()),
+        audit_max_records: cli.audit_max_records,
+        audit_max_bytes: cli.audit_max_bytes,
         vault_command: cli
             .vault
             .vault_command

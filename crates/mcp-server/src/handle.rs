@@ -10,7 +10,9 @@ use serde_json::{Value, json};
 
 use crate::handle::args::{optional_string, processing_context, required_session, text_argument};
 use crate::handle::envelope::{error_response, response, tool_error};
-use crate::handle::protocol::{LEGACY_VERSION, MODERN_VERSION, ValidRequest, validate_request};
+use crate::handle::protocol::{
+    LEGACY_VERSION, MODERN_VERSION, Method, ValidRequest, validate_request,
+};
 use crate::handle::tools::tools_list;
 use crate::{ToolName, ToolSet};
 
@@ -35,7 +37,7 @@ pub(crate) fn handle_request(
             )));
         }
     };
-    let ValidRequest { id, method, params } = match validate_request(&line) {
+    let ValidRequest { id, method } = match validate_request(&line) {
         Ok(Some(request)) => request,
         Ok(None) => return Ok(None),
         Err(response) => return Ok(Some(response)),
@@ -43,7 +45,7 @@ pub(crate) fn handle_request(
 
     let result = match method {
         // Modern MCP 2026-07-28: no initialize handshake; clients may discover first.
-        "server/discover" => response(
+        Method::Discover => response(
             id,
             json!({
                 "supportedVersions":[MODERN_VERSION, LEGACY_VERSION],
@@ -54,7 +56,7 @@ pub(crate) fn handle_request(
             }),
         ),
         // Legacy clients can still negotiate the 2025-era handshake.
-        "initialize" => response(
+        Method::Initialize => response(
             id,
             json!({
                 "protocolVersion":LEGACY_VERSION,
@@ -63,29 +65,23 @@ pub(crate) fn handle_request(
                 "instructions":"Local privacy boundary for coding agents."
             }),
         ),
-        "tools/list" => response(id, tools_list(tools)),
-        "tools/call" => {
-            let name = params
-                .and_then(|params| params.get("name"))
-                .and_then(Value::as_str)
-                .unwrap_or("");
-            let args = params
-                .and_then(|params| params.get("arguments"))
-                .cloned()
-                .unwrap_or_else(|| json!({}));
-            tool_call(pipeline, tools, default_context, id, name, &args)?
+        Method::ToolsList => response(id, tools_list(tools)),
+        Method::ToolsCall { name, arguments } => {
+            tool_call(pipeline, tools, default_context, id, name, arguments)?
         }
-        _ => error_response(id, -32601, "unknown method"),
+        Method::Unknown => error_response(id, -32601, "unknown method"),
     };
     Ok(Some(result))
 }
 
 /// Dispatch one `tools/call`. A tool disabled by the server's [`ToolSet`] is
-/// rejected before any argument handling with a JSON-RPC error, as are a
-/// non-object `arguments` value and an unknown tool name: those are protocol
-/// failures. Everything inside a known tool — argument validation, vault
-/// expiry, and pipeline failures — is reported as a [`tool_error`] result so
-/// the caller sees a tool execution failure, not a transport failure.
+/// rejected before any argument handling with a JSON-RPC error, as is an
+/// unknown tool name. The method-parameter schema (`name` string, object
+/// `arguments`) is already validated in [`protocol`], so rejected requests
+/// never reach this function. Everything inside a known tool — argument
+/// validation, vault expiry, and pipeline failures — is reported as a
+/// [`tool_error`] result so the caller sees a tool execution failure, not a
+/// transport failure.
 /// Sanitize still falls back to the `default` scope for older clients; restore
 /// and forget never do, because they resolve or delete raw values and must name
 /// their session explicitly.
@@ -95,8 +91,11 @@ fn tool_call(
     default_context: &ProcessingContext,
     id: Value,
     name: &str,
-    args: &Value,
+    arguments: Option<&Value>,
 ) -> Result<Value, Box<dyn std::error::Error>> {
+    // A missing `arguments` member behaves like `{}`: every lookup below reads
+    // through `Value::get`, which yields `None` for `Null`.
+    let args = arguments.unwrap_or(&Value::Null);
     if let Some(tool) = ToolName::from_full(name) {
         if !tools.contains(tool) {
             return Ok(error_response(
@@ -108,13 +107,6 @@ fn tool_call(
                 ),
             ));
         }
-    }
-    if !args.is_object() {
-        return Ok(error_response(
-            id,
-            -32602,
-            "`arguments` must be a JSON object",
-        ));
     }
     Ok(match name {
         "context.sanitize" => {
@@ -183,6 +175,14 @@ fn tool_call(
         }
         _ => error_response(id, -32601, "unknown tool"),
     })
+}
+
+/// The JSON-RPC error for a frame the transport could not turn into a request.
+///
+/// The id is always `null`: an unparseable frame has no id the server can
+/// safely recover, and the message never echoes frame bytes.
+pub(crate) fn unusable_frame_response(code: i32, message: &str) -> Value {
+    error_response(Value::Null, code, message)
 }
 
 #[cfg(test)]

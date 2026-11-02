@@ -86,6 +86,60 @@ cargo test -p do-context-shield --features gliner2 --test cli_model_e2e --test m
 
 CI provisions the same archive in the Linux `Test` job (cached per version) and sets `DO_HARNESS_REQUIRE_ORT=1`, which turns an unset `ORT_DYLIB_PATH` into a failure instead of a skip — so the runtime-backed tests (`incomplete_fragment_export_fails_closed` and friends) really run there, and a broken download or a version bump that forgets this pin is red rather than quietly skipped. Local runs keep skipping without the environment variable.
 
+### Preflight (`doctor`)
+
+Check that the selected detector is configured and loadable **before** routing
+private text through it:
+
+```bash
+do-context-shield doctor --detector gliner2 --model-dir ~/.local/share/do-context-shield/gliner2-onnx
+do-context-shield doctor --detector hybrid --model-dir ~/.local/share/do-context-shield/gliner2-onnx --format json
+```
+
+The probe is local-only: it never downloads a model or runtime, never prints
+model contents or raw metadata, and never falls back to regex. It reports the
+recognized layout, the effective `max_tokens`/`intra_threads`, and one stable
+`reason_code`:
+
+| `reason_code` | Meaning |
+| --- | --- |
+| `ready` | configured and loadable |
+| `feature_disabled` | valid export, but the binary lacks the `gliner2` feature |
+| `not_configured` | no `--model-dir` (or no `--detector-command` for a process detector) |
+| `missing_model_dir` | the directory does not exist |
+| `missing_model_file` | neither `model.onnx` nor an `encoder*.onnx` fragment set |
+| `missing_tokenizer` | single-file export without `tokenizer.json` |
+| `missing_labels` | `config.json` has no usable `id2label`, or no labels are configured |
+| `unsupported_export` | a GLiNER2.5 boundary export |
+| `incomplete_fragments` | the fragment set misses one of its seven files |
+| `runtime_unavailable` | the ONNX Runtime or the model failed to load (check `ORT_DYLIB_PATH`) |
+
+`doctor` exits 0 when the detector is ready and 1 when it is not; `--format json`
+emits `{"detector", "available", "reason_code", "guidance", "layout",
+"max_tokens", "intra_threads"}` for scripts. A `hybrid` selection reports
+readiness through its GLiNER2 half: an unavailable model is an unavailable
+hybrid, never a silent regex-only success. A `process` detector is
+configuration-only — the probe checks that a command is configured and never
+runs it.
+
+Inference limits are explicit flags on `sanitize`, `inspect`, and `mcp-stdio`:
+`--model-max-tokens <TOKENS>` (default 512) and `--model-threads <THREADS>`
+(default 2). Longer input is scanned in overlapping windows — the backend never
+silently truncates it — and the thread count is never derived from the machine
+automatically.
+
+The trade-off is deliberate: encoder attention cost grows faster than linearly
+in the token window, so a large `max_tokens` raises the per-call memory and CPU
+peak for every request, while a small one adds windows (and a little duplicated
+inference in the overlap). 512 tokens keeps a single CPU call predictable on a
+laptop, and reusing the loaded session removes the cold-start cost from every
+call after the first. Raise the window only when a corpus regularly produces
+entities longer than the overlap, and keep `--model-threads` low when the host
+also runs the coding client. The model-backed tests
+(`ORT_DYLIB_PATH` + `DO_CONTEXT_SHIELD_E2E_MODEL_DIR`) exercise warm reuse and
+multi-window input on a real export; they skip when no local model is
+configured.
+
 ### Supported export layouts
 
 **Fragment sets (primary)** — GLiNER2 span exports: `model_dir` holds an `encoder*.onnx` fragment, either flat (`encoder.onnx`, `encoder_fp32.onnx`, `encoder_fp16.onnx`, plus the `_iobinding` variants, as `export_span_v3.py` produces them) or under the legacy `fp16_v2/`/`fp32_v2/` subfolders, together with the other seven fragments (`token_gather`, `span_rep`, `schema_gather`, `count_pred_argmax`, `count_lstm_fixed`, `scorer`, `classifier`) and the export's `tokenizer.json`. The `gliner2-rs` engine (local, Apache-2.0, same `ort` stack) runs the pipeline: label-conditioned schema handling, span enumeration, and count decoding are its job. The engine owns eight ONNX sessions and is hosted on a dedicated worker thread that starts on the first detection (`ort::Session` is not `Send`); the detector talks to it over a channel, so the sessions live as long as that thread, `gliner2_rs` initializes there, and dropping and reconstructing the detector loads them again. The detector feeds `Gliner2Config::labels` (default `PII_LABELS_42`) as the schema and maps the returned entities. The eight ONNX sessions load lazily on the first fragment detect (seconds cold on CPU) and stay cached for that thread's lifetime; long inputs are chunked by the engine (384-token windows, 64 overlapping).

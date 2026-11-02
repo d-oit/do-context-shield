@@ -119,3 +119,52 @@ fn group_or_world_readable_key_is_refused() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("chmod 600"), "{stderr}");
 }
+
+/// Key-file diagnostics name the failure class and remediation only: the
+/// resolved path can disclose a username, project name, or mounted-secret
+/// location.
+#[test]
+fn key_file_diagnostics_never_echo_the_path() {
+    let tmp = temp_dir();
+    let canary = "canary-keydir-do-not-print";
+    let dir = tmp.path().join(canary);
+    if let Err(error) = std::fs::create_dir(&dir) {
+        panic!("cannot create the canary directory: {error}");
+    }
+
+    let missing = dir.join("missing.key");
+    let output = cmd(tmp.path())
+        .args(["verify-canary", "--session", "s", "--canary-key-file"])
+        .arg(&missing)
+        .write_stdin("x")
+        .output();
+    let Ok(output) = output else {
+        panic!("cannot run verify-canary");
+    };
+    assert!(!output.status.success(), "a missing key file must fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("does not exist"), "{stderr}");
+    assert!(!stderr.contains(canary), "key path leaked: {stderr}");
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let loose = key_file(&dir, "loose.key", &canary_hex());
+        if let Err(error) = std::fs::set_permissions(&loose, std::fs::Permissions::from_mode(0o644))
+        {
+            panic!("cannot widen the key file: {error}");
+        }
+        let output = cmd(tmp.path())
+            .args(["verify-canary", "--session", "s", "--canary-key-file"])
+            .arg(&loose)
+            .write_stdin("x")
+            .output();
+        let Ok(output) = output else {
+            panic!("cannot run verify-canary");
+        };
+        assert!(!output.status.success(), "a loose key file must fail");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("chmod 600"), "{stderr}");
+        assert!(!stderr.contains(canary), "key path leaked: {stderr}");
+    }
+}

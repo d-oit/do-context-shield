@@ -270,3 +270,61 @@ fn vault_seeds_pin_parse_errors_and_round_trips() -> Result<(), Box<dyn Error>> 
     }
     Ok(())
 }
+
+/// The MCP parser seed pins JSON-RPC batch-array rejection and its lack of side
+/// effects: a batch is one invalid message, so the mutation inside it must not
+/// execute and the seeded mapping must still resolve.
+#[test]
+fn mcp_batch_seed_is_rejected_without_deleting_mappings() -> Result<(), Box<dyn Error>> {
+    use do_context_shield_mcp_server::{ToolSet, handle_request_for_fuzzing};
+
+    let batch = corpus_text("fuzz_mcp_parse/batch_array.json")?;
+    let mut pipeline = PrivacyPipeline::new(
+        Box::new(RegexDetector),
+        Box::new(DefaultPolicy),
+        Box::new(PseudonymizingTransformer),
+        Box::new(MemoryVault::default()),
+    );
+    let tools = ToolSet::all();
+    let context = ProcessingContext::default();
+    let sanitize = concat!(
+        r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"context.sanitize","#,
+        r#""arguments":{"text":"seed-batch@example.com","session":"seed-corpus"}}}"#
+    );
+    let Some(sanitized) = handle_request_for_fuzzing(&mut pipeline, tools, &context, sanitize)?
+    else {
+        return Err("MCP seed: sanitize produced no response".into());
+    };
+    let token = sanitized
+        .pointer("/result/content/0/text")
+        .and_then(|value| value.as_str())
+        .ok_or("MCP seed: sanitize has no text")?
+        .to_owned();
+
+    let Some(rejected) = handle_request_for_fuzzing(&mut pipeline, tools, &context, &batch)? else {
+        return Err("MCP seed: a batch produced no response".into());
+    };
+    let rendered = rejected.to_string();
+    if rendered.contains("\"result\"") {
+        return Err(format!("batch seed was dispatched as a request: {rendered}").into());
+    }
+    if !rendered.contains("-32600") || !rendered.contains("\"id\":null") {
+        return Err(format!("batch seed response shape drifted: {rendered}").into());
+    }
+
+    let restore = format!(
+        r#"{{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{{"name":"context.restore","arguments":{{"text":"{token}","session":"seed-corpus"}}}}}}"#
+    );
+    let Some(restored) = handle_request_for_fuzzing(&mut pipeline, tools, &context, &restore)?
+    else {
+        return Err("MCP seed: restore produced no response".into());
+    };
+    let text = restored
+        .pointer("/result/content/0/text")
+        .and_then(|value| value.as_str())
+        .ok_or("MCP seed: restore has no text")?;
+    if text != "seed-batch@example.com" {
+        return Err("batch seed deleted a mapping it must not reach".into());
+    }
+    Ok(())
+}

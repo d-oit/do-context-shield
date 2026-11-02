@@ -10,11 +10,21 @@ use std::time::Duration;
 /// missing export fails closed on the first detect.
 fn gliner2_detector(
     model_dir: Option<&Path>,
+    max_tokens: Option<usize>,
+    threads: Option<usize>,
 ) -> do_context_shield_detector_gliner2::Gliner2Detector {
     use do_context_shield_detector_gliner2::{Gliner2Config, Gliner2Detector};
     let config = match model_dir {
         Some(dir) => Gliner2Config::with_model_dir(dir.to_path_buf()),
         None => Gliner2Config::default(),
+    };
+    let config = match (max_tokens, threads) {
+        (None, None) => config,
+        (max_tokens, threads) => {
+            let max_tokens = max_tokens.unwrap_or(config.max_tokens);
+            let threads = threads.unwrap_or(config.intra_threads);
+            config.with_limits(max_tokens, threads)
+        }
     };
     Gliner2Detector::new(config)
 }
@@ -30,10 +40,18 @@ fn build_detector(
 ) -> Result<Box<dyn do_context_shield_plugin_api::Detector>, Box<dyn std::error::Error>> {
     let timeout = Duration::from_millis(resolved.process_timeout_ms);
     Ok(match resolved.detector.as_str() {
-        "gliner2" => Box::new(gliner2_detector(resolved.model_dir.as_deref())),
+        "gliner2" => Box::new(gliner2_detector(
+            resolved.model_dir.as_deref(),
+            resolved.model_max_tokens,
+            resolved.model_threads,
+        )),
         "hybrid" => Box::new(do_context_shield_detector_hybrid::HybridDetector::new(
             do_context_shield_plugin_registry::detector("regex")?,
-            Box::new(gliner2_detector(resolved.model_dir.as_deref())),
+            Box::new(gliner2_detector(
+                resolved.model_dir.as_deref(),
+                resolved.model_max_tokens,
+                resolved.model_threads,
+            )),
         )),
         "process" => Box::new(ProcessDetector::from_selection(
             resolved.detector_command.as_deref(),
@@ -141,11 +159,18 @@ fn build_audit(
     let Some(path) = resolved.audit_file.as_deref() else {
         return Ok(None);
     };
-    Ok(Some(do_context_shield_plugin_registry::file_audit_sink(
-        path,
-        resolved.vault_file.as_deref(),
-        resolved.vault_key_file.as_deref(),
-    )?))
+    let retention = do_context_shield_audit_file::Retention {
+        max_records: resolved.audit_max_records,
+        max_bytes: resolved.audit_max_bytes,
+    };
+    Ok(Some(
+        do_context_shield_plugin_registry::file_audit_sink_with_retention(
+            path,
+            resolved.vault_file.as_deref(),
+            resolved.vault_key_file.as_deref(),
+            retention,
+        )?,
+    ))
 }
 
 fn attach_audit(pipeline: PrivacyPipeline, audit: Option<Box<dyn AuditSink>>) -> PrivacyPipeline {

@@ -200,19 +200,18 @@ impl JsonVault {
         let path = path.into();
         let _lock = Lock::exclusive(&path)?;
         if !path.exists() {
-            return Err(VaultError::Message(format!(
-                "vault file `{}` does not exist",
-                path.display()
-            )));
+            return Err(VaultError::Message(
+                "vault file does not exist (the path is passed as `--vault-file` or `vault_file`)"
+                    .to_owned(),
+            ));
         }
         let bytes = fs::read(&path).map_err(|error| io_error(&error))?;
         let value: serde_json::Value =
             serde_json::from_slice(&bytes).map_err(|error| json_error(&error))?;
         if encrypted::is_envelope(&value) {
-            return Err(VaultError::Message(format!(
-                "vault file `{}` is already encrypted",
-                path.display()
-            )));
+            return Err(VaultError::Message(
+                "vault file is already encrypted".to_owned(),
+            ));
         }
         let state: State = serde_json::from_value(value).map_err(|error| json_error(&error))?;
         Self {
@@ -260,19 +259,19 @@ impl JsonVault {
         match format {
             Format::Plaintext => {
                 if encrypted::is_envelope(&value) {
-                    return Err(VaultError::Message(format!(
-                        "vault file `{}` is encrypted; provide the vault key (`--vault-key-file` or `DO_CONTEXT_SHIELD_VAULT_KEY_FILE`)",
-                        path.display()
-                    )));
+                    return Err(VaultError::Message(
+                        "vault file is encrypted; provide the vault key (`--vault-key-file` or `DO_CONTEXT_SHIELD_VAULT_KEY_FILE`)"
+                            .to_owned(),
+                    ));
                 }
                 serde_json::from_value(value).map_err(|error| json_error(&error))
             }
             Format::Encrypted(key) => {
                 if !encrypted::is_envelope(&value) {
-                    return Err(VaultError::Message(format!(
-                        "vault file `{}` is not encrypted; migrate it with `do-context-shield encrypt-vault --vault-file <path> --vault-key-file <path>`",
-                        path.display()
-                    )));
+                    return Err(VaultError::Message(
+                        "vault file is not encrypted; migrate it with `do-context-shield encrypt-vault --vault-file <path> --vault-key-file <path>`"
+                            .to_owned(),
+                    ));
                 }
                 let plaintext = encrypted::decrypt(value, key)?;
                 serde_json::from_slice(&plaintext).map_err(|error| json_error(&error))

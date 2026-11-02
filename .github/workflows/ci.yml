@@ -130,6 +130,28 @@ jobs:
       - name: Run seed-corpus regression tests
         run: cargo test --manifest-path fuzz/Cargo.toml --locked --test seed_corpus
 
+  mcp-conformance:
+    name: MCP conformance
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      # Node and the MCP Inspector version are pinned in the script (22.x,
+      # inspector 2.13.0): never `npx` latest-at-runtime in CI.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+      - name: Run the stdio conformance gate
+        run: bash scripts/check-mcp-conformance.sh
+      - name: Upload conformance results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mcp-conformance
+          path: target/mcp-conformance/
+          if-no-files-found: warn
+
   publish-check:
     name: Publish check
     runs-on: ubuntu-24.04
@@ -147,13 +169,13 @@ jobs:
 
   ci-success:
     name: CI Success
-    needs: [test, cross-platform, deny, structure, harness, fuzz-check, publish-check]
+    needs: [test, cross-platform, deny, structure, harness, fuzz-check, mcp-conformance, publish-check]
     runs-on: ubuntu-24.04
     if: always()
     steps:
       - name: Check all jobs passed
         run: |
-          for res in "${{ needs.test.result }}" "${{ needs.cross-platform.result }}" "${{ needs.deny.result }}" "${{ needs.structure.result }}" "${{ needs.harness.result }}" "${{ needs.fuzz-check.result }}" "${{ needs.publish-check.result }}"; do
+          for res in "${{ needs.test.result }}" "${{ needs.cross-platform.result }}" "${{ needs.deny.result }}" "${{ needs.structure.result }}" "${{ needs.harness.result }}" "${{ needs.fuzz-check.result }}" "${{ needs.mcp-conformance.result }}" "${{ needs.publish-check.result }}"; do
             if [ "$res" != "success" ]; then
               echo "Required CI job did not succeed: $res"
               exit 1

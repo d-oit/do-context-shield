@@ -1,8 +1,10 @@
 use super::*;
 
+mod batch;
 mod context;
 mod errors;
 mod pipeline;
+mod protocol_params;
 mod tool_surface;
 
 fn pipeline() -> PrivacyPipeline {
@@ -23,6 +25,48 @@ fn pipeline() -> PrivacyPipeline {
         Err(error) => panic!("unexpected error: {error}"),
     };
     PrivacyPipeline::new(detector, policy, transformer, vault)
+}
+
+/// A pipeline whose detector counts calls, so a test can prove a rejected
+/// request never reached the plugin stage (and therefore never reached the
+/// vault or the audit sink either).
+struct CountingDetector(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+
+impl do_context_shield_plugin_api::Detector for CountingDetector {
+    fn detect(
+        &self,
+        _input: &str,
+    ) -> Result<
+        Vec<do_context_shield_plugin_api::Entity>,
+        do_context_shield_plugin_api::DetectorError,
+    > {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Ok(Vec::new())
+    }
+}
+
+fn counting_pipeline() -> (
+    PrivacyPipeline,
+    std::sync::Arc<std::sync::atomic::AtomicUsize>,
+) {
+    let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let detector = CountingDetector(std::sync::Arc::clone(&calls));
+    let policy = match do_context_shield_plugin_registry::policy("default") {
+        Ok(policy) => policy,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    let transformer = match do_context_shield_plugin_registry::transformer("pseudonymize") {
+        Ok(transformer) => transformer,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    let vault = match do_context_shield_plugin_registry::vault("memory") {
+        Ok(vault) => vault,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    (
+        PrivacyPipeline::new(Box::new(detector), policy, transformer, vault),
+        calls,
+    )
 }
 
 fn request(pipeline: &mut PrivacyPipeline, body: &str) -> Option<Value> {

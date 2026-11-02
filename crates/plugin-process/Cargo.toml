@@ -17,5 +17,20 @@ do-context-shield-plugin-api.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+# Safe wrapper for killpg(2): process-group termination needs no `unsafe`,
+# which the workspace forbids.
+rustix = { version = "1.1", features = ["process"] }
+
+[target.'cfg(windows)'.dependencies]
+# Safe Job Object API: the process tree is terminated when the host closes the
+# job (an `unsafe` FFI wrapper is not available under `unsafe_code = "forbid"`).
+win32job = "2.0.3"
+
 [dev-dependencies]
 do-context-shield-core.workspace = true
+do-context-shield-detector-regex.workspace = true
+do-context-shield-policy-default.workspace = true
+do-context-shield-transformer-pseudonymize.workspace = true
+do-context-shield-vault-memory.workspace = true
+tempfile = "3"

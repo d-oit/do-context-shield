@@ -13,6 +13,7 @@ include = ["src/**/*", "Cargo.toml"]
 workspace = true
 
 [dependencies]
+do-context-shield-audit-file.workspace = true
 do-context-shield-core.workspace = true
 do-context-shield-detector-gliner2.workspace = true
 do-context-shield-detector-hybrid.workspace = true

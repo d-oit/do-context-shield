@@ -2,9 +2,9 @@
 
 use clap::Parser;
 use cli::{
-    Cli, Command, ConfigArgs, ContextArgs, DetectorSelection, EncryptVaultArgs, ForgetArgs,
-    InspectArgs, InspectOutput, McpArgs, PipelineSelection, RestoreArgs, SanitizeArgs, VaultArgs,
-    VaultSelection,
+    Cli, Command, ConfigArgs, ContextArgs, DetectorSelection, DoctorArgs, EncryptVaultArgs,
+    ForgetArgs, InspectArgs, InspectOutput, McpArgs, PipelineSelection, RestoreArgs, SanitizeArgs,
+    VaultArgs, VaultSelection, VerifyAuditArgs,
 };
 use do_context_shield_core::canary::{canary_marker, verify_canary};
 use do_context_shield_plugin_api::ScopeId;
@@ -31,9 +31,11 @@ fn run_simple(command: Command, config: &config::Config) -> Result<(), Box<dyn s
         Command::Inspect(args) => run_inspect(args, config)?,
         Command::Forget(args) => run_forget(args, config)?,
         Command::McpStdio(args) => run_mcp(args, config)?,
+        Command::Doctor(args) => run_doctor(args, config)?,
         Command::Config(args) => run_config(args, config)?,
         Command::EncryptVault(args) => run_encrypt_vault(&args)?,
         Command::VerifyCanary(args) => run_verify_canary(&args)?,
+        Command::VerifyAudit(args) => run_verify_audit(&args)?,
     }
     io::stdout().flush()?;
     Ok(())
@@ -59,6 +61,8 @@ fn run_sanitize(
             vault_file,
             vault_key_file,
             audit_file: args.audit.audit_file,
+            audit_max_records: args.audit.audit_max_records,
+            audit_max_bytes: args.audit.audit_max_bytes,
             vault_ttl_seconds: None,
             context: args.context,
             process: args.process,
@@ -106,6 +110,8 @@ fn run_restore(
             vault_file,
             vault_key_file,
             audit_file: args.audit.audit_file,
+            audit_max_records: args.audit.audit_max_records,
+            audit_max_bytes: args.audit.audit_max_bytes,
             vault_ttl_seconds: None,
             context: ContextArgs::default(),
             process: args.process,
@@ -134,6 +140,8 @@ fn run_inspect(
             vault_file: None,
             vault_key_file: None,
             audit_file: None,
+            audit_max_records: None,
+            audit_max_bytes: None,
             vault_ttl_seconds: None,
             context: ContextArgs::default(),
             process: args.process,
@@ -165,6 +173,8 @@ fn run_forget(args: ForgetArgs, config: &config::Config) -> Result<(), Box<dyn s
             vault_file,
             vault_key_file,
             audit_file: args.audit.audit_file,
+            audit_max_records: args.audit.audit_max_records,
+            audit_max_bytes: args.audit.audit_max_bytes,
             vault_ttl_seconds: None,
             context: ContextArgs::default(),
             process: args.process,
@@ -187,6 +197,8 @@ fn run_mcp(args: McpArgs, config: &config::Config) -> Result<(), Box<dyn std::er
             vault_file: args.vault_file,
             vault_key_file: args.vault_key_file,
             audit_file: args.audit.audit_file,
+            audit_max_records: args.audit.audit_max_records,
+            audit_max_bytes: args.audit.audit_max_bytes,
             vault_ttl_seconds: args.vault_ttl_seconds,
             context: ContextArgs::default(),
             process: args.process,
@@ -199,11 +211,15 @@ fn run_mcp(args: McpArgs, config: &config::Config) -> Result<(), Box<dyn std::er
         vault_file: resolved.vault_file,
         vault_key_file: resolved.vault_key_file,
         audit_file: resolved.audit_file,
+        audit_max_records: resolved.audit_max_records,
+        audit_max_bytes: resolved.audit_max_bytes,
         vault: resolved.vault,
         vault_command: resolved.vault_command,
         vault_ttl_seconds: resolved.vault_ttl_seconds,
         detector: resolved.detector,
         model_dir: resolved.model_dir,
+        model_max_tokens: resolved.model_max_tokens,
+        model_threads: resolved.model_threads,
         detector_command: resolved.detector_command,
         policy: resolved.policy,
         policy_command: resolved.policy_command,
@@ -215,6 +231,190 @@ fn run_mcp(args: McpArgs, config: &config::Config) -> Result<(), Box<dyn std::er
         process_timeout_ms: resolved.process_timeout_ms,
         context,
     })?;
+    Ok(())
+}
+
+/// Verify a local audit chain (`verify-audit`).
+///
+/// Reports only safe metadata (format marker, record count, failing index and
+/// category). Exits 0 when no integrity failure was found — `verified`, `empty`,
+/// or a recognized legacy v1 file, which is never upgraded — and 1 on any
+/// verification failure.
+///
+/// # Errors
+///
+/// Returns an error when the report cannot be serialized, stdout cannot be
+/// flushed, or the file cannot be read.
+fn run_verify_audit(args: &VerifyAuditArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let report = do_context_shield_audit_file::verify_file(&args.audit_file)?;
+    if args.format == "json" {
+        println!(
+            "{}",
+            serde_json::json!({
+                "format": report.format(),
+                "records": report.records(),
+                "record_index": report.record_index(),
+                "category": report.category(),
+                "ok": report.is_ok(),
+            })
+        );
+    } else {
+        println!("{report}");
+    }
+    io::stdout().flush()?;
+    if !report.is_ok() {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+/// One `doctor` report: stable fields for scripts, fixed guidance only.
+#[derive(serde::Serialize)]
+struct DoctorReport {
+    detector: String,
+    available: bool,
+    reason_code: &'static str,
+    guidance: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    layout: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_tokens: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    intra_threads: Option<usize>,
+}
+
+/// Build the readiness report for one resolved detector selection.
+///
+/// `hybrid` is reported through its `GLiNER2` half: it is ready only when a
+/// model is loadable, so a missing model never looks like a working
+/// regex-only scan. `process` is configuration-only (the probe does not run
+/// the executable). No input text is read and no path is printed.
+fn doctor_report(resolved: &config::Resolved) -> DoctorReport {
+    let detector = resolved.detector.clone();
+    match detector.as_str() {
+        "regex" => DoctorReport {
+            detector,
+            available: true,
+            reason_code: "ready",
+            guidance: "built-in regex detector; selected structured PII/credential formats only"
+                .to_owned(),
+            layout: None,
+            max_tokens: None,
+            intra_threads: None,
+        },
+        "process" => {
+            let configured = resolved
+                .detector_command
+                .as_deref()
+                .is_some_and(|command| !command.trim().is_empty());
+            DoctorReport {
+                detector,
+                available: configured,
+                reason_code: if configured {
+                    "ready"
+                } else {
+                    "not_configured"
+                },
+                guidance: if configured {
+                    "local detector executable configured; doctor checks configuration only and does not run it"
+                        .to_owned()
+                } else {
+                    "set `--detector-command` (or the pinned config file's `[plugins] detector_command`) to a local executable"
+                        .to_owned()
+                },
+                layout: None,
+                max_tokens: None,
+                intra_threads: None,
+            }
+        }
+        "gliner2" | "hybrid" => {
+            use do_context_shield_detector_gliner2::{Gliner2Config, probe};
+            let base = match resolved.model_dir.clone() {
+                Some(dir) => Gliner2Config::with_model_dir(dir),
+                None => Gliner2Config::default(),
+            };
+            let config = match (resolved.model_max_tokens, resolved.model_threads) {
+                (None, None) => base,
+                (max_tokens, threads) => {
+                    let max_tokens = max_tokens.unwrap_or(base.max_tokens);
+                    let threads = threads.unwrap_or(base.intra_threads);
+                    base.with_limits(max_tokens, threads)
+                }
+            };
+            let report = probe(&config);
+            let guidance = if detector == "hybrid" && !report.available {
+                format!(
+                    "hybrid needs a loadable GLiNER2 model; regex alone is not a hybrid result. {}",
+                    report.guidance
+                )
+            } else {
+                report.guidance.to_owned()
+            };
+            DoctorReport {
+                detector,
+                available: report.available,
+                reason_code: report.code.as_str(),
+                guidance,
+                layout: report
+                    .layout
+                    .map(do_context_shield_detector_gliner2::ModelLayout::as_str),
+                max_tokens: Some(report.max_tokens),
+                intra_threads: Some(report.intra_threads),
+            }
+        }
+        other => DoctorReport {
+            detector: other.to_owned(),
+            available: false,
+            reason_code: "unknown_detector",
+            guidance: "expected `regex`, `gliner2`, `hybrid`, or `process`".to_owned(),
+            layout: None,
+            max_tokens: None,
+            intra_threads: None,
+        },
+    }
+}
+
+/// Report detector readiness without reading stdin or running a scan.
+///
+/// Exits 0 when the selected detector is ready and 1 when it is not, so a
+/// preflight can gate routing private content through the pipeline. The
+/// structured report carries a stable `reason_code`; failures are categories,
+/// never paths, model contents, or raw metadata.
+///
+/// # Errors
+///
+/// Returns an error only when the report cannot be serialized or stdout cannot
+/// be flushed.
+fn run_doctor(args: DoctorArgs, config: &config::Config) -> Result<(), Box<dyn std::error::Error>> {
+    let resolved = config::resolve(
+        &config::CliSelection {
+            detector: args.detector,
+            ..config::CliSelection::default()
+        },
+        config,
+    );
+    let report = doctor_report(&resolved);
+    if args.format == "json" {
+        println!("{}", serde_json::to_string(&report)?);
+    } else {
+        println!("detector: {}", report.detector);
+        println!("available: {}", report.available);
+        println!("reason_code: {}", report.reason_code);
+        println!("guidance: {}", report.guidance);
+        if let Some(layout) = report.layout {
+            println!("layout: {layout}");
+        }
+        if let Some(max_tokens) = report.max_tokens {
+            println!("max_tokens: {max_tokens}");
+        }
+        if let Some(intra_threads) = report.intra_threads {
+            println!("intra_threads: {intra_threads}");
+        }
+    }
+    io::stdout().flush()?;
+    if !report.available {
+        std::process::exit(1);
+    }
     Ok(())
 }
 
@@ -236,6 +436,8 @@ fn run_config(args: ConfigArgs, config: &config::Config) -> Result<(), Box<dyn s
         vault_file: args.vault_file,
         vault_key_file: args.vault_key_file,
         audit_file: args.audit.audit_file,
+        audit_max_records: args.audit.audit_max_records,
+        audit_max_bytes: args.audit.audit_max_bytes,
         vault_ttl_seconds: None,
         context: args.context,
         process: args.process,

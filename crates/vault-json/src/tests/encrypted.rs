@@ -220,3 +220,154 @@ fn key_files_are_read_and_permission_checked() {
     cleanup(&path);
     cleanup(&vault_path);
 }
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn error_diagnostics_omit_paths_keys_and_ciphertext() {
+    // The path itself is the disclosure (user names, project names, mounted
+    // secret locations), so a canary directory name stands in for it next to
+    // canary key text and the ciphertext hiding a canary plaintext: every
+    // rendered error below must omit all three.
+    let canary = "canary-project-do-not-print";
+    // The canary component sits under the per-process `temp_path()` root, so
+    // the asserted substring appears in every path below without parallel
+    // checkouts racing on a fixed directory name.
+    let root = temp_path();
+    let dir = root.join(canary);
+    fs::remove_dir_all(&root).ok();
+    if let Err(error) = fs::create_dir_all(&dir) {
+        panic!("cannot create {}: {error}", dir.display());
+    }
+    let key_path = dir.join("vault.key");
+    let canary_hex = "cf".repeat(32);
+    let write_key = |contents: &str| {
+        if let Err(error) = fs::write(&key_path, contents) {
+            panic!("cannot write {}: {error}", key_path.display());
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Err(error) = fs::set_permissions(&key_path, fs::Permissions::from_mode(0o600)) {
+                panic!("cannot restrict {}: {error}", key_path.display());
+            }
+        }
+    };
+    // `VaultKey` has no `Debug`, so `unwrap_err` is unavailable.
+    let key_error = |result: Result<VaultKey, VaultError>| match result {
+        Ok(_) => panic!("expected a key-file error"),
+        Err(error) => error.to_string(),
+    };
+
+    // Missing file: its own category, without the resolved path.
+    let missing = key_error(VaultKey::from_file(&dir.join("absent.key")));
+
+    // Invalid hex and wrong length: format categories without the contents.
+    write_key(&"zz".repeat(32));
+    let invalid_hex = key_error(VaultKey::from_file(&key_path));
+    write_key("ab");
+    let wrong_length = key_error(VaultKey::from_file(&key_path));
+
+    assert!(missing.contains("does not exist"), "{missing}");
+    assert!(invalid_hex.contains("non-hex"), "{invalid_hex}");
+    assert!(wrong_length.contains("64 hex characters"), "{wrong_length}");
+    assert_ne!(missing, invalid_hex);
+    assert_ne!(missing, wrong_length);
+    assert_ne!(invalid_hex, wrong_length);
+
+    // A loose key file: actionable remediation without the path or mode bits.
+    #[cfg(unix)]
+    let permission = {
+        use std::os::unix::fs::PermissionsExt;
+        if let Err(error) = fs::write(&key_path, format!("{canary_hex}\n")) {
+            panic!("cannot write {}: {error}", key_path.display());
+        }
+        if let Err(error) = fs::set_permissions(&key_path, fs::Permissions::from_mode(0o644)) {
+            panic!("cannot loosen {}: {error}", key_path.display());
+        }
+        key_error(VaultKey::from_file(&key_path))
+    };
+    write_key(&format!("{canary_hex}\n"));
+
+    // Wrong key and a modified payload share one category — an AEAD cannot
+    // tell a wrong key from flipped ciphertext — and neither echoes the key
+    // text, the ciphertext, or the plaintext it hides. The key file above
+    // holds `canary_hex`, which is `key(0xcf)`.
+    let vault_path = dir.join("vault.json");
+    let plaintext = "canary@example.com";
+    {
+        let mut vault = open_encrypted(&vault_path, 0xcf);
+        stored(&mut vault, &scope("s"), "email", plaintext);
+    }
+    let wrong_key = match JsonVault::open_encrypted(&vault_path, key(2)) {
+        Ok(_) => panic!("a wrong key must not open the vault"),
+        Err(error) => error.to_string(),
+    };
+    assert!(wrong_key.contains("wrong key"), "{wrong_key}");
+
+    let value: serde_json::Value = match serde_json::from_str(&file_text(&vault_path)) {
+        Ok(value) => value,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    let payload = value["payload"].as_str().unwrap_or_default().to_owned();
+    assert!(!payload.is_empty(), "the envelope must carry a payload");
+    let mut flipped: Vec<char> = payload.chars().collect();
+    if let Some(digit) = flipped.first_mut() {
+        *digit = if *digit == '0' { '1' } else { '0' };
+    }
+    let mut tampered = value.clone();
+    tampered["payload"] = serde_json::Value::String(flipped.into_iter().collect());
+    if let Err(error) = fs::write(&vault_path, tampered.to_string()) {
+        panic!("cannot write {}: {error}", vault_path.display());
+    }
+    let modified = match JsonVault::open_encrypted(&vault_path, key(0xcf)) {
+        Ok(_) => panic!("a modified vault must not open"),
+        Err(error) => error.to_string(),
+    };
+    assert!(modified.contains("wrong key"), "{modified}");
+
+    // A structurally detectable tamper (truncated nonce) keeps its own
+    // category, distinct from the authentication-failure one.
+    let mut truncated = value;
+    truncated["nonce"] = serde_json::Value::String("00".to_owned());
+    if let Err(error) = fs::write(&vault_path, truncated.to_string()) {
+        panic!("cannot write {}: {error}", vault_path.display());
+    }
+    let truncated_nonce = match JsonVault::open_encrypted(&vault_path, key(0xcf)) {
+        Ok(_) => panic!("a truncated nonce must not open the vault"),
+        Err(error) => error.to_string(),
+    };
+    assert!(truncated_nonce.contains("nonce"), "{truncated_nonce}");
+
+    for message in [
+        &missing,
+        &invalid_hex,
+        &wrong_length,
+        &wrong_key,
+        &modified,
+        &truncated_nonce,
+    ] {
+        assert!(!message.contains(canary), "{message}");
+        assert!(!message.contains(canary_hex.as_str()), "{message}");
+        assert!(!message.contains(plaintext), "{message}");
+        assert!(!message.contains(payload.as_str()), "{message}");
+    }
+    assert_ne!(wrong_key, missing);
+    assert_ne!(wrong_key, invalid_hex);
+    assert_ne!(wrong_key, wrong_length);
+    assert_ne!(wrong_key, truncated_nonce);
+
+    // The permission category stays distinct from the read and format ones.
+    #[cfg(unix)]
+    {
+        assert!(permission.contains("chmod 600"), "{permission}");
+        assert_ne!(permission, missing);
+        assert_ne!(permission, invalid_hex);
+        assert_ne!(permission, wrong_key);
+        assert!(!permission.contains(canary), "{permission}");
+        assert!(!permission.contains(canary_hex.as_str()), "{permission}");
+    }
+
+    cleanup(&vault_path);
+    cleanup(&key_path);
+    fs::remove_dir_all(&root).ok();
+}

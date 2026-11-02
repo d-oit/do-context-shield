@@ -1,134 +1,313 @@
 //! Single-file token-classification ONNX backend, gated behind the `gliner2` feature.
+//!
+//! The engine owns the tokenizer, label map, and ONNX session for the lifetime
+//! of one detector instance and executes on a dedicated worker thread
+//! (`ort::Session` is not `Send`), mirroring the fragment worker. Input is
+//! split into overlapping byte windows before tokenization and into token
+//! windows before inference, so neither tokenization memory nor tensor shapes
+//! grow without bound; a slice that cannot be evaluated fails the whole call
+//! instead of returning a partial scan.
 
-use crate::RawSpan;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc::{Receiver, Sender, channel};
+
+use crate::{
+    Gliner2Config, RawSpan, byte_windows, load_id2label, logits_shape_matches, token_windows,
+};
 use do_context_shield_plugin_api::DetectorError;
+
+/// Bytes of input budgeted per token when sizing a tokenization window.
+///
+/// Tokenizers emit at least one token per byte in the worst case, so this is a
+/// heuristic sizing factor; the hard bound is enforced again after tokenizing,
+/// by splitting the token stream into windows of at most `max_tokens`.
+const BYTES_PER_TOKEN_BUDGET: usize = 8;
+
+/// Smallest byte window, so a tiny `max_tokens` cannot produce per-word calls.
+const MIN_BYTE_WINDOW: usize = 1024;
+
+/// Counts export loads in tests, to pin that one detector instance loads the
+/// tokenizer and session once and reuses them.
+#[cfg(test)]
+pub(crate) static ENGINE_LOADS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
 
 /// Error text for the single-file backend, never carrying input or model data.
 fn backend_error(what: &str) -> DetectorError {
     DetectorError::Message(format!("gliner2 onnx backend: {what}"))
 }
 
-/// Entity labels of a single-file export, ordered by class index.
+/// Engine that reuses one loaded tokenizer and ONNX session across calls.
 ///
-/// `config.json` is part of the layout and its `id2label` object is the only
-/// source of tag names: decoding a model whose tags are unknown maps every
-/// token to `O`, so a misconfigured export would report a clean scan with zero
-/// entities instead of failing. Absent file, unreadable file, invalid JSON, or
-/// a map without a single index/BIO-tag pair is therefore an error.
+/// The session is created on the worker thread that uses it and dropped when
+/// the detector is dropped.
+pub(crate) struct SingleFileEngine {
+    worker: Option<Worker>,
+}
+
+struct Worker {
+    requests: Sender<Request>,
+}
+
+impl Drop for Worker {
+    fn drop(&mut self) {
+        let _ = self.requests.send(Request::Shutdown);
+    }
+}
+
+enum Request {
+    Detect {
+        input: String,
+        reply: Sender<Result<Vec<RawSpan>, String>>,
+    },
+    Shutdown,
+}
+
+impl SingleFileEngine {
+    pub(crate) fn new() -> Self {
+        Self { worker: None }
+    }
+
+    /// Detect spans in `input`, loading the export once per engine.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DetectorError`] when the worker cannot start, the export
+    /// cannot be loaded, tokenization fails, inference fails, or the model
+    /// output is malformed. The error names the failure class, never the
+    /// input or model contents.
+    pub(crate) fn detect(
+        &mut self,
+        model_dir: &Path,
+        config: &Gliner2Config,
+        input: &str,
+    ) -> Result<Vec<RawSpan>, DetectorError> {
+        if self.worker.is_none() {
+            self.worker = Some(Worker::spawn(
+                model_dir.to_path_buf(),
+                config.max_tokens,
+                config.intra_threads,
+            )?);
+        }
+        let worker = self
+            .worker
+            .as_ref()
+            .ok_or_else(|| backend_error("worker unavailable"))?;
+        let (reply, answer) = channel();
+        worker
+            .requests
+            .send(Request::Detect {
+                input: input.to_owned(),
+                reply,
+            })
+            .map_err(|_| backend_error("engine thread stopped"))?;
+        answer
+            .recv()
+            .map_err(|_| backend_error("engine thread stopped before answering"))?
+            .map_err(|reason| backend_error(&reason))
+    }
+}
+
+impl Worker {
+    fn spawn(
+        model_dir: PathBuf,
+        max_tokens: usize,
+        intra_threads: usize,
+    ) -> Result<Self, DetectorError> {
+        let (requests, incoming) = channel();
+        std::thread::Builder::new()
+            .name("gliner2-onnx".to_owned())
+            .spawn(move || serve(&incoming, &model_dir, max_tokens, intra_threads))
+            .map_err(|_| backend_error("cannot start the engine thread"))?;
+        Ok(Self { requests })
+    }
+}
+
+/// Worker loop: load the export on first use, answer detect requests.
+fn serve(incoming: &Receiver<Request>, model_dir: &Path, max_tokens: usize, intra_threads: usize) {
+    let mut loaded_engine: Option<Loaded> = None;
+    while let Ok(request) = incoming.recv() {
+        match request {
+            Request::Detect { input, reply } => {
+                let result = match loaded_engine.take() {
+                    Some(mut loaded) => {
+                        let spans = detect_with(&mut loaded, &input);
+                        loaded_engine = Some(loaded);
+                        spans
+                    }
+                    None => {
+                        Loaded::load(model_dir, max_tokens, intra_threads).and_then(|mut loaded| {
+                            let spans = detect_with(&mut loaded, &input);
+                            loaded_engine = Some(loaded);
+                            spans
+                        })
+                    }
+                };
+                let _ = reply.send(result);
+            }
+            Request::Shutdown => return,
+        }
+    }
+}
+
+/// Loaded export: tokenizer, label map, special-token wrapping, and session.
+struct Loaded {
+    tokenizer: tokenizers::Tokenizer,
+    session: ort::session::Session,
+    id2label: Vec<String>,
+    prefix: Vec<i64>,
+    suffix: Vec<i64>,
+    max_tokens: usize,
+}
+
+impl Loaded {
+    fn load(model_dir: &Path, max_tokens: usize, intra_threads: usize) -> Result<Self, String> {
+        #[cfg(test)]
+        ENGINE_LOADS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let id2label =
+            load_id2label(&model_dir.join("config.json")).map_err(|error| error.to_string())?;
+        let tokenizer = tokenizers::Tokenizer::from_file(model_dir.join("tokenizer.json"))
+            .map_err(|_| "cannot load tokenizer.json".to_owned())?;
+        let specials = tokenizer
+            .encode("", true)
+            .map_err(|_| "cannot tokenize special tokens".to_owned())?;
+        let special_ids: Vec<i64> = specials.get_ids().iter().map(|id| i64::from(*id)).collect();
+        // A BERT-style export adds one leading and one trailing special token;
+        // model families without them contribute no wrapping.
+        let (prefix, suffix) = match special_ids.as_slice() {
+            [] => (Vec::new(), Vec::new()),
+            [first, last] => (vec![*first], vec![*last]),
+            other => (other.to_vec(), Vec::new()),
+        };
+        let session = load_session(&model_dir.join("model.onnx"), intra_threads)?;
+        Ok(Self {
+            tokenizer,
+            session,
+            id2label,
+            prefix,
+            suffix,
+            max_tokens,
+        })
+    }
+}
+
+/// Build an ONNX session with explicit, conservative threading.
 ///
 /// # Errors
 ///
-/// Returns [`DetectorError`] when `config_path` does not exist, cannot be read,
-/// is not valid JSON, or carries no usable `id2label` entry.
-fn load_id2label(config_path: &std::path::Path) -> Result<Vec<String>, DetectorError> {
-    if !config_path.is_file() {
-        return Err(backend_error("config.json not found in model_dir"));
-    }
-    let raw = std::fs::read_to_string(config_path)
-        .map_err(|_| backend_error("cannot read config.json"))?;
-    let value: serde_json::Value =
-        serde_json::from_str(&raw).map_err(|_| backend_error("config.json is not valid JSON"))?;
-    let mut pairs: Vec<(usize, String)> = Vec::new();
-    if let Some(map) = value.get("id2label").and_then(serde_json::Value::as_object) {
-        for (id, label) in map {
-            if let (Ok(index), Some(name)) =
-                (id.parse::<usize>(), label.as_str().map(ToString::to_string))
-            {
-                pairs.push((index, name));
-            }
-        }
-    }
-    if pairs.is_empty() {
-        return Err(backend_error(
-            "config.json has no usable `id2label` map (class index -> BIO tag)",
-        ));
-    }
-    pairs.sort_by_key(|pair| pair.0);
-    Ok(pairs.into_iter().map(|pair| pair.1).collect())
-}
-
-/// Run a single-file token-classification ONNX model and BIO-decode logits.
-///
-/// Expected layout: `model.onnx`, `tokenizer.json`, and a `config.json`
-/// carrying an `id2label` map of class indices to BIO tags.
-pub(crate) fn detect(
-    model_dir: &std::path::Path,
-    input: &str,
-) -> Result<Vec<RawSpan>, DetectorError> {
+/// Returns a scrubbed message when the session builder, optimization level,
+/// thread settings, or model load fails (a load-dynamic build without a
+/// usable `ORT_DYLIB_PATH` lands here).
+fn load_session(model_path: &Path, intra_threads: usize) -> Result<ort::session::Session, String> {
     use ort::session::builder::GraphOptimizationLevel;
 
-    let model_path = model_dir.join("model.onnx");
-    let tokenizer_path = model_dir.join("tokenizer.json");
-    if !model_path.is_file() {
-        return Err(backend_error("model.onnx not found in model_dir"));
-    }
-    if !tokenizer_path.is_file() {
-        return Err(backend_error("tokenizer.json not found in model_dir"));
-    }
-    let id2label = load_id2label(&model_dir.join("config.json"))?;
-
-    let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path)
-        .map_err(|_| backend_error("cannot load tokenizer.json"))?;
-    // Exported token-classification models expect their special tokens
-    // (`[CLS]`/`[SEP]` and friends); omitting them shifts the encoder out of
-    // its training distribution and produces misaligned spans. Special-token
-    // offsets are `(0, 0)` and are skipped during decoding.
-    let encoding = tokenizer
-        .encode(input, true)
-        .map_err(|_| backend_error("tokenization failed"))?;
-    let ids: Vec<i64> = encoding.get_ids().iter().map(|id| i64::from(*id)).collect();
-    let mask: Vec<i64> = encoding
-        .get_attention_mask()
-        .iter()
-        .map(|bit| i64::from(*bit))
-        .collect();
-    let offsets = encoding.get_offsets().to_vec();
-    let seq_len = ids.len();
-    if seq_len == 0 {
-        return Ok(Vec::new());
-    }
-
-    let intra_threads = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
-    let builder = ort::session::Session::builder()
-        .map_err(|_| backend_error("cannot create ONNX session builder"))?;
-    let mut session = builder
+    ort::session::Session::builder()
+        .map_err(|_| "cannot create ONNX session builder".to_owned())?
         .with_optimization_level(GraphOptimizationLevel::Level3)
-        .map_err(|_| backend_error("cannot set optimization level"))?
-        .with_intra_threads(intra_threads)
-        .map_err(|_| backend_error("cannot set thread count"))?
-        .commit_from_file(&model_path)
-        .map_err(|_| {
-            backend_error("cannot load model.onnx; check ORT_DYLIB_PATH with load-dynamic")
-        })?;
+        .map_err(|_| "cannot set optimization level".to_owned())?
+        .with_intra_threads(intra_threads.max(1))
+        .map_err(|_| "cannot set intra-op thread count".to_owned())?
+        .with_inter_threads(1)
+        .map_err(|_| "cannot set inter-op thread count".to_owned())?
+        .commit_from_file(model_path)
+        .map_err(|_| "cannot load model.onnx; check ORT_DYLIB_PATH with load-dynamic".to_owned())
+}
 
+/// Load the real backend once, for the readiness probe.
+///
+/// # Errors
+///
+/// Returns [`DetectorError`] when the label map, tokenizer, or session cannot
+/// be loaded; the message never carries model contents.
+pub(crate) fn probe(model_dir: &Path, intra_threads: usize) -> Result<(), DetectorError> {
+    let _labels = load_id2label(&model_dir.join("config.json"))?;
+    let _tokenizer = tokenizers::Tokenizer::from_file(model_dir.join("tokenizer.json"))
+        .map_err(|_| backend_error("cannot load tokenizer.json"))?;
+    let _session = load_session(&model_dir.join("model.onnx"), intra_threads)
+        .map_err(|reason| backend_error(&reason))?;
+    Ok(())
+}
+
+/// Detect spans across every bounded window of `input`.
+fn detect_with(loaded: &mut Loaded, input: &str) -> Result<Vec<RawSpan>, String> {
+    let budget = loaded
+        .max_tokens
+        .saturating_sub(loaded.prefix.len() + loaded.suffix.len())
+        .max(1);
+    let byte_window = loaded
+        .max_tokens
+        .saturating_mul(BYTES_PER_TOKEN_BUDGET)
+        .max(MIN_BYTE_WINDOW);
+    let byte_overlap = byte_window / 8;
+    let token_overlap = budget / 8;
+
+    let mut spans = Vec::new();
+    for (slice_start, slice_end) in byte_windows(input, byte_window, byte_overlap) {
+        let slice = &input[slice_start..slice_end];
+        // Special tokens are added per chunk below, so the slice is tokenized
+        // without them and its offsets index the slice exactly.
+        let encoding = loaded
+            .tokenizer
+            .encode(slice, false)
+            .map_err(|_| "tokenization failed".to_owned())?;
+        let ids: Vec<i64> = encoding.get_ids().iter().map(|id| i64::from(*id)).collect();
+        let offsets = encoding.get_offsets();
+        for (start, end) in token_windows(ids.len(), budget, token_overlap) {
+            let mut chunk_ids =
+                Vec::with_capacity(loaded.prefix.len() + (end - start) + loaded.suffix.len());
+            chunk_ids.extend_from_slice(&loaded.prefix);
+            chunk_ids.extend_from_slice(&ids[start..end]);
+            chunk_ids.extend_from_slice(&loaded.suffix);
+            let mut chunk_offsets: Vec<(usize, usize)> =
+                vec![(0, 0); loaded.prefix.len() + (end - start) + loaded.suffix.len()];
+            chunk_offsets[loaded.prefix.len()..loaded.prefix.len() + (end - start)]
+                .copy_from_slice(&offsets[start..end]);
+            let mut chunk_spans = run_chunk(loaded, chunk_ids, &chunk_offsets)?;
+            for span in &mut chunk_spans {
+                span.start += slice_start;
+                span.end += slice_start;
+            }
+            spans.extend(chunk_spans);
+        }
+    }
+    Ok(spans)
+}
+
+/// One inference call over one token window.
+fn run_chunk(
+    loaded: &mut Loaded,
+    ids: Vec<i64>,
+    offsets: &[(usize, usize)],
+) -> Result<Vec<RawSpan>, String> {
+    let seq_len = ids.len();
+    let mask = vec![1_i64; seq_len];
     let id_value = ort::value::Value::from_array((vec![1_usize, seq_len], ids))
-        .map_err(|_| backend_error("bad input tensor"))?;
+        .map_err(|_| "bad input tensor".to_owned())?;
     let mask_value = ort::value::Value::from_array((vec![1_usize, seq_len], mask))
-        .map_err(|_| backend_error("bad mask tensor"))?;
-    let outputs = session
+        .map_err(|_| "bad attention-mask tensor".to_owned())?;
+    let outputs = loaded
+        .session
         .run(ort::inputs!["input_ids" => id_value, "attention_mask" => mask_value])
-        .map_err(|_| backend_error("inference failed"))?;
+        .map_err(|_| "inference failed".to_owned())?;
     let Some((_name, value)) = outputs.into_iter().next() else {
-        return Err(backend_error("model returned no outputs"));
+        return Err("model returned no outputs".to_owned());
     };
     let (shape, flat) = value
         .try_extract_tensor::<f32>()
-        .map_err(|_| backend_error("logits are not an f32 tensor"))?;
-    let num_labels = id2label.len();
-    if num_labels == 0
-        || shape.num_elements() != seq_len * num_labels
-        || flat.len() != seq_len * num_labels
-    {
-        return Err(backend_error("unexpected logits shape"));
+        .map_err(|_| "logits are not an f32 tensor".to_owned())?;
+    let num_labels = loaded.id2label.len();
+    if num_labels == 0 || !logits_shape_matches(shape, seq_len, num_labels) {
+        return Err("unexpected logits shape".to_owned());
     }
-
-    Ok(bio_decode(seq_len, num_labels, flat, &offsets, &id2label))
+    bio_decode(seq_len, num_labels, flat, offsets, &loaded.id2label)
+        .map_err(|error| error.to_string())
 }
 
 /// Decode `[seq_len, num_labels]` logits with BIO tags into char spans.
 ///
 /// Token offsets `(0, 0)` mark special tokens and are skipped. Scores use a
-/// sigmoid of the winning logit as a bounded heuristic. Adjacent same-kind
+/// sigmoid of the winning logit as a bounded heuristic; a non-finite logit or
+/// score is an error rather than a misleading confidence. Adjacent same-kind
 /// `B-`/`I-` tags extend the open span — the recommended exports tag every
 /// subtoken of a word with `B-`, and splitting those into fragments would
 /// break entities apart. A span still open after the final non-special token
@@ -140,8 +319,14 @@ fn bio_decode(
     flat: &[f32],
     offsets: &[(usize, usize)],
     id2label: &[String],
-) -> Vec<RawSpan> {
+) -> Result<Vec<RawSpan>, DetectorError> {
     let seq_len = seq_len.min(offsets.len());
+    if num_labels == 0 {
+        return Ok(Vec::new());
+    }
+    if flat.len() < seq_len * num_labels {
+        return Err(backend_error("logits shorter than the declared shape"));
+    }
     let mut spans = Vec::new();
     let mut open: Option<(String, usize, f32)> = None;
     let mut last_end = 0;
@@ -160,14 +345,21 @@ fn bio_decode(
         let row = index * num_labels;
         let mut best = 0usize;
         for label in 1..num_labels {
-            if flat.get(row + label).copied().unwrap_or(f32::MIN)
-                > flat.get(row + best).copied().unwrap_or(f32::MIN)
-            {
+            if flat[row + label] > flat[row + best] {
                 best = label;
             }
         }
-        let raw_label = id2label.get(best).map_or("O", String::as_str);
-        let score = 1.0 / (1.0 + (-flat.get(row + best).copied().unwrap_or(0.0)).exp());
+        let best_logit = flat[row + best];
+        if !best_logit.is_finite() {
+            return Err(backend_error("model produced non-finite logits"));
+        }
+        let score = 1.0 / (1.0 + (-best_logit).exp());
+        if !score.is_finite() {
+            return Err(backend_error("model produced a non-finite score"));
+        }
+        let Some(raw_label) = id2label.get(best).map(String::as_str) else {
+            return Err(backend_error("model label count does not match id2label"));
+        };
         let (prefix, name) = raw_label
             .split_once('-')
             .map_or(("O", raw_label), |(prefix, name)| (prefix, name));
@@ -187,7 +379,7 @@ fn bio_decode(
         }
     }
     close(&mut open, &mut spans, last_end);
-    spans
+    Ok(spans)
 }
 
 fn push_span(spans: &mut Vec<RawSpan>, label: String, start: usize, end: usize, score: f32) {
@@ -202,169 +394,4 @@ fn push_span(spans: &mut Vec<RawSpan>, label: String, start: usize, end: usize, 
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{bio_decode, load_id2label};
-
-    /// `config.json` with `contents`, or no file at all, inside a fresh
-    /// temporary directory.
-    fn config_dir(contents: Option<&str>) -> tempfile::TempDir {
-        let dir = match tempfile::tempdir() {
-            Ok(dir) => dir,
-            Err(error) => panic!("cannot create a temp directory: {error}"),
-        };
-        if let Some(contents) = contents {
-            let path = dir.path().join("config.json");
-            if let Err(error) = std::fs::write(&path, contents) {
-                panic!("cannot write {}: {error}", path.display());
-            }
-        }
-        dir
-    }
-
-    #[test]
-    fn id2label_is_ordered_by_class_index() {
-        let dir = config_dir(Some(
-            r#"{"id2label":{"2":"B-city","0":"B-name","1":"I-name"}}"#,
-        ));
-        let labels = match load_id2label(&dir.path().join("config.json")) {
-            Ok(labels) => labels,
-            Err(error) => panic!("expected labels, got error: {error}"),
-        };
-        assert_eq!(labels, ["B-name", "I-name", "B-city"]);
-    }
-
-    #[test]
-    fn unusable_id2label_fails_closed() {
-        // Decoding without tag names maps every token to `O`, so a
-        // misconfigured export would look like a clean scan.
-        for contents in [
-            r#"{"model_type":"bert"}"#,
-            r#"{"id2label":{"name":"B-name"}}"#,
-            r#"{"id2label":["B-name","O"]}"#,
-            r#"{"id2label":{"0":7}}"#,
-        ] {
-            let dir = config_dir(Some(contents));
-            let error = match load_id2label(&dir.path().join("config.json")) {
-                Ok(labels) => panic!("expected an error for {contents}, got {labels:?}"),
-                Err(error) => error.to_string(),
-            };
-            assert!(error.contains("no usable `id2label`"), "got: {error}");
-        }
-    }
-
-    #[test]
-    fn missing_config_json_fails_closed() {
-        let dir = config_dir(None);
-        let error = match load_id2label(&dir.path().join("config.json")) {
-            Ok(labels) => panic!("expected an error, got {labels:?}"),
-            Err(error) => error.to_string(),
-        };
-        assert!(
-            error.contains("config.json not found in model_dir"),
-            "got: {error}"
-        );
-    }
-
-    #[test]
-    fn invalid_config_json_fails_closed() {
-        let dir = config_dir(Some("not json"));
-        let error = match load_id2label(&dir.path().join("config.json")) {
-            Ok(labels) => panic!("expected an error, got {labels:?}"),
-            Err(error) => error.to_string(),
-        };
-        assert!(error.contains("not valid JSON"), "got: {error}");
-    }
-
-    #[test]
-    fn decoding_without_tag_names_reports_no_entities() {
-        // The trap `load_id2label` exists for: an empty label list maps every
-        // token to `O`, so a misconfigured export decodes to zero entities and
-        // would look like a clean scan.
-        let offsets = [(0, 0), (0, 4), (0, 0)];
-        #[rustfmt::skip]
-        let logits = [
-            0.0, 9.0,
-            9.0, 0.0,
-            0.0, 9.0,
-        ];
-        assert!(bio_decode(offsets.len(), 2, &logits, &offsets, &[]).is_empty());
-    }
-
-    fn labels() -> Vec<String> {
-        ["B-name", "I-name", "B-city", "I-city", "O"]
-            .iter()
-            .map(ToString::to_string)
-            .collect()
-    }
-
-    fn spans(logits: &[f32], offsets: &[(usize, usize)]) -> Vec<(String, usize, usize)> {
-        bio_decode(offsets.len(), 5, logits, offsets, &labels())
-            .into_iter()
-            .map(|span| (span.label, span.start, span.end))
-            .collect()
-    }
-
-    #[test]
-    fn closes_span_open_at_last_text_token_when_special_row_follows() {
-        // [CLS](0,0) "John"(0,4) [SEP](0,0): the trailing special row is
-        // skipped, so the open B-name span must close at end of input.
-        let offsets = [(0, 0), (0, 4), (0, 0)];
-        #[rustfmt::skip]
-        let logits = [
-            0.0, 0.0, 0.0, 0.0, 9.0,
-            9.0, 0.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0, 9.0,
-        ];
-        assert_eq!(spans(&logits, &offsets), vec![("name".to_owned(), 0, 4)]);
-    }
-
-    #[test]
-    fn special_and_o_rows_close_spans_without_shifting_alignment() {
-        // [CLS](0,0) "John"(0,4) " Doe"(4,8) " "(8,9): a different kind closes
-        // the first span and opens the second on the right offsets.
-        let offsets = [(0, 0), (0, 4), (4, 8), (8, 9)];
-        #[rustfmt::skip]
-        let logits = [
-            0.0, 0.0, 0.0, 0.0, 9.0,
-            9.0, 0.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, 9.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0, 9.0,
-        ];
-        assert_eq!(
-            spans(&logits, &offsets),
-            vec![("name".to_owned(), 0, 4), ("city".to_owned(), 4, 8)]
-        );
-    }
-
-    #[test]
-    fn merges_adjacent_tags_of_the_same_kind() {
-        // Word-level exports repeat `B-` for every subtoken; fragments of one
-        // entity must decode to a single span.
-        let offsets = [(0, 0), (0, 4), (4, 8), (8, 12)];
-        #[rustfmt::skip]
-        let logits = [
-            0.0, 0.0, 0.0, 0.0, 9.0,
-            9.0, 0.0, 0.0, 0.0, 0.0,
-            9.0, 0.0, 0.0, 0.0, 0.0,
-            0.0, 9.0, 0.0, 0.0, 0.0,
-        ];
-        assert_eq!(spans(&logits, &offsets), vec![("name".to_owned(), 0, 12)]);
-    }
-
-    #[test]
-    fn kind_change_on_i_tag_closes_the_open_span() {
-        // B-name then I-city must emit the name span and start the city span;
-        // dropping the open span would silently lose a detected entity.
-        let offsets = [(0, 0), (0, 4), (4, 8)];
-        #[rustfmt::skip]
-        let logits = [
-            0.0, 0.0, 0.0, 0.0, 9.0,
-            9.0, 0.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 9.0, 0.0,
-        ];
-        assert_eq!(
-            spans(&logits, &offsets),
-            vec![("name".to_owned(), 0, 4), ("city".to_owned(), 4, 8)]
-        );
-    }
-}
+mod tests;

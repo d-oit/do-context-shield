@@ -57,18 +57,38 @@ pub(crate) enum Command {
         long_about = "Show the effective plugin selection and enforcement context with their source layer.\n\nAuto-discovers `./do-context-shield.toml` or `$HOME/.config/do-context-shield/config.toml` unless `--config` pins an explicit file. A working-directory file's `[context]` section is reported as ignored (`default`/`none`) unless the file is pinned with `--config`."
     )]
     Config(ConfigArgs),
+    #[command(
+        about = "Report local detector readiness without scanning any text",
+        long_about = "Report local detector readiness without scanning any text.\n\nChecks plugin availability, feature support, model layout, tokenizer/label metadata, ONNX Runtime loadability, and the effective token/thread limits. The probe is local-only: it never downloads a model or runtime, never prints model contents, and never falls back to regex. Exits 0 when the selected detector is ready and 1 when it is not; `--format json` emits one machine-readable object with a stable `reason_code`.\n\nAuto-discovers `./do-context-shield.toml` or `$HOME/.config/do-context-shield/config.toml` unless `--config` pins an explicit file."
+    )]
+    Doctor(DoctorArgs),
     #[command(about = "Rewrite an existing plaintext JSON vault in the encrypted format")]
     EncryptVault(EncryptVaultArgs),
+    #[command(
+        about = "Verify the integrity chain of a local audit file",
+        long_about = "Verify the integrity chain of a local audit file.\n\nReports only the format marker, record count, and — on failure — a 1-based record index plus a safe category (`record_hash_mismatch`, `sequence_gap`, `truncated`, ...). Serialized events, paths, and parser diagnostics never appear in the report. Legacy v1 files are recognized as not chained; the command never rewrites or upgrades them."
+    )]
+    VerifyAudit(VerifyAuditArgs),
     #[command(about = "Check stdin for a canary marker issued by this shield for a session")]
     VerifyCanary(VerifyCanaryArgs),
 }
 
 /// Explicit local append-only JSONL audit destination.
+///
+/// The field prefix is the documented flag family (`--audit-*`).
+#[allow(clippy::struct_field_names)]
 #[derive(Args, Default, Clone)]
 pub(crate) struct AuditArgs {
     /// Record structure-only operation summaries in a private local file.
     #[arg(long)]
     pub(crate) audit_file: Option<PathBuf>,
+    /// Rotate the audit file after this many records (opt-in; the default
+    /// never rotates or deletes).
+    #[arg(long, value_name = "RECORDS")]
+    pub(crate) audit_max_records: Option<u64>,
+    /// Rotate the audit file before it would exceed this many bytes (opt-in).
+    #[arg(long, value_name = "BYTES")]
+    pub(crate) audit_max_bytes: Option<u64>,
 }
 #[derive(Args)]
 pub(crate) struct SanitizeArgs {
@@ -227,6 +247,28 @@ pub(crate) struct VerifyCanaryArgs {
     pub(crate) canary_key_file: PathBuf,
 }
 
+/// Detector readiness report (`doctor`).
+#[derive(Args)]
+pub(crate) struct DoctorArgs {
+    #[command(flatten)]
+    pub(crate) detector: DetectorSelection,
+    /// `text` (human-readable, default) or `json` (one object with a stable
+    /// `reason_code` for scripts).
+    #[arg(long, value_parser = ["text", "json"], default_value = "text")]
+    pub(crate) format: String,
+}
+
+/// Verify a local audit chain (`verify-audit`).
+#[derive(Args)]
+pub(crate) struct VerifyAuditArgs {
+    /// Audit file to verify.
+    #[arg(long)]
+    pub(crate) audit_file: PathBuf,
+    /// `text` (human-readable, default) or `json` (machine-readable report).
+    #[arg(long, value_parser = ["text", "json"], default_value = "text")]
+    pub(crate) format: String,
+}
+
 /// Parse the `--tools` value into a [`ToolSet`].
 fn parse_tools(value: &str) -> Result<ToolSet, String> {
     ToolSet::parse(value)
@@ -258,6 +300,14 @@ pub(crate) struct DetectorSelection {
     /// `--detector hybrid`.
     #[arg(long)]
     pub(crate) model_dir: Option<PathBuf>,
+    /// Maximum tokens in one `GLiNER2` inference call; longer input is scanned
+    /// in overlapping windows, never silently truncated. Default 512.
+    #[arg(long, value_name = "TOKENS")]
+    pub(crate) model_max_tokens: Option<usize>,
+    /// ONNX Runtime intra-op threads for `GLiNER2`. Default 2; the detector
+    /// never takes every core automatically.
+    #[arg(long, value_name = "THREADS")]
+    pub(crate) model_threads: Option<usize>,
     /// Command line of a local detector executable; required with `--detector process`.
     /// Split on whitespace; quoting and shell expansion are not supported.
     #[arg(long)]

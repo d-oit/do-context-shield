@@ -148,13 +148,27 @@ which the TTL applies normally. `forget` remains the immediate eraser.
 
 | Key | Values | Default | Notes |
 | --- | --- | --- | --- |
-| `audit_file` | path | unset | Private local append-only JSONL audit destination (`0600` on Unix). Fails closed before input if inaccessible, insecure, or aliasing vault paths |
+| `audit_file` | path | unset | Private local append-only JSONL audit destination (`0600` on Unix). Fails closed before input if inaccessible, insecure, aliasing vault paths, or a chain that no longer verifies |
 
 An explicit `audit_file` records structure-only operational events (`sanitize`,
 `restore`, `forget`, policy blocks) without original text, minted tokens,
-vault mappings, or free-form purpose text. Retention is strictly
-operator-controlled (no automatic rotation or silent truncation). On non-Unix
-platforms, opting into file audit logging fails explicitly.
+vault mappings, or free-form purpose text. Every record is a versioned
+SHA-256-chained envelope; the chain is verified before any append and by
+`do-context-shield verify-audit --audit-file <path>`, which detects
+modification, deletion, truncation, and reordering and reports only a record
+index plus a safe category. Legacy v1 files are recognized but never rewritten
+or upgraded, and the sink refuses to append to them. Retention stays
+operator-controlled: without the explicit CLI bounds below the file grows
+without limit and is never rotated or truncated.
+
+| CLI flag | Default | Notes |
+| --- | --- | --- |
+| `--audit-max-records <RECORDS>` | unset | Rotate to `<name>.1` before a record would exceed this count |
+| `--audit-max-bytes <BYTES>` | unset | Rotate to `<name>.1` before the file would exceed this size |
+
+Rotation replaces the previous `<name>.1` file and starts a fresh chain; each
+file is verified independently. On non-Unix platforms, opting into file audit
+logging fails explicitly.
 
 
 ### `[context]`
