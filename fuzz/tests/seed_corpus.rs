@@ -312,10 +312,9 @@ fn mcp_batch_seed_is_rejected_without_deleting_mappings() -> Result<(), Box<dyn 
         return Err(format!("batch seed response shape drifted: {rendered}").into());
     }
 
-    let restore = format!(concat!(
-        r#"{{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{{"name":"context.restore","#,
-        r#""arguments":{{"text":"{token}","session":"seed-corpus"}}}}}}"#
-    ));
+    let restore = format!(
+        r#"{{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{{"name":"context.restore","arguments":{{"text":"{token}","session":"seed-corpus"}}}}}}"#
+    );
     let Some(restored) = handle_request_for_fuzzing(&mut pipeline, tools, &context, &restore)?
     else {
         return Err("MCP seed: restore produced no response".into());

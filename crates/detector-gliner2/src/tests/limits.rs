@@ -200,13 +200,19 @@ fn model_env() -> Option<PathBuf> {
         "DO_CONTEXT_SHIELD_E2E_MODEL_DIR is set but ORT_DYLIB_PATH is not; provide both or neither"
     );
     let required = std::env::var("DO_HARNESS_REQUIRE_ORT").is_ok_and(|value| value == "1");
-    let (Some(_ort), Some(model)) = (ort, model) else {
+    let Some(_ort) = ort else {
         assert!(
             !required,
             "DO_HARNESS_REQUIRE_ORT=1 but ORT_DYLIB_PATH is unset; CI must provision the pinned ONNX Runtime"
         );
         eprintln!(
             "skip: set ORT_DYLIB_PATH and DO_CONTEXT_SHIELD_E2E_MODEL_DIR to run the model-backed reasoning tests"
+        );
+        return None;
+    };
+    let Some(model) = model else {
+        eprintln!(
+            "skip: set DO_CONTEXT_SHIELD_E2E_MODEL_DIR to a local export to run the model-backed reasoning tests"
         );
         return None;
     };

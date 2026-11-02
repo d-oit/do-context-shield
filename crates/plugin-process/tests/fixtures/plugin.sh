@@ -19,7 +19,12 @@ case "$mode" in
   # secret label. Longest-span-wins must keep the secret.
   detect-overlap-secret) printf '%s\n' '{"entities":[{"kind":"person","start":0,"end":5,"confidence":0.9},{"kind":"api_key","start":0,"end":12,"confidence":0.99}]}' ;;
   # Two valid lines: the driver reads exactly one response line per call.
-  multiline)       printf '%s\n' '{"entities":[],"text":""}'; printf '%s\n' '{"entities":[{"kind":"email","start":0,"end":5}]}' ;;
+  multiline)
+    printf '%s\n' '{"entities":[],"text":""}'
+    printf '%s\n' '{"entities":[{"kind":"email","start":0,"end":5}]}'
+    # Stay alive so the driver's exit grace expires and it terminates the
+    # child deterministically, instead of racing SIGPIPE on a closed pipe.
+    exec sleep 30 ;;
   detect-clean)    printf '%s\n' '{"entities":[],"text":""}' ;;
   # policy
   plan-ok)      printf '%s\n' '{"plan":[{"index":0,"action":"pseudonymize"}]}' ;;
