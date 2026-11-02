@@ -17,12 +17,15 @@
 //!   boundary architecture needs a different engine (see `docs/plugins.md`).
 
 use do_context_shield_plugin_api::{Detector, DetectorError, Entity, resolve_overlaps};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[cfg(feature = "gliner2")]
 mod fragments;
 #[cfg(feature = "gliner2")]
 mod onnx;
+mod readiness;
+
+pub use readiness::{ModelLayout, ReadinessCode, ReadinessReport, probe};
 
 /// The 42 PII entity types of the GLiNER2-PII taxonomy, grouped as
 /// person / contact / government / financial / digital / secret / dates.
@@ -74,6 +77,23 @@ pub const PII_LABELS_42: [&str; 42] = [
 /// Default confidence threshold applied to model spans.
 pub const DEFAULT_THRESHOLD: f32 = 0.5;
 
+/// Default maximum token sequence length for one inference call.
+///
+/// Conservative on purpose: encoder attention and the input tensor grow with
+/// the square/cube of sequence length, and the single-file backend chunks
+/// longer input with overlap instead of raising this value.
+pub const DEFAULT_MAX_TOKENS: usize = 512;
+
+/// Smallest accepted inference sequence length.
+pub const MIN_MAX_TOKENS: usize = 16;
+
+/// Default ONNX Runtime intra-op threads.
+///
+/// Two threads keep a local CLI/MCP server from taking every core on a busy
+/// machine; the value is configurable and never derived from the processor
+/// count automatically.
+pub const DEFAULT_INTRA_THREADS: usize = 2;
+
 /// Configuration for [`Gliner2Detector`].
 #[derive(Clone, Debug)]
 pub struct Gliner2Config {
@@ -84,6 +104,12 @@ pub struct Gliner2Config {
     pub labels: Vec<String>,
     /// Minimum score for a span to become an entity.
     pub threshold: f32,
+    /// Maximum tokens in one inference call, including the export's special
+    /// tokens. Longer input is split into overlapping windows, never
+    /// silently truncated.
+    pub max_tokens: usize,
+    /// ONNX Runtime intra-op threads per session.
+    pub intra_threads: usize,
 }
 
 impl Default for Gliner2Config {
@@ -92,6 +118,8 @@ impl Default for Gliner2Config {
             model_dir: None,
             labels: PII_LABELS_42.iter().map(ToString::to_string).collect(),
             threshold: DEFAULT_THRESHOLD,
+            max_tokens: DEFAULT_MAX_TOKENS,
+            intra_threads: DEFAULT_INTRA_THREADS,
         }
     }
 }
@@ -104,6 +132,18 @@ impl Gliner2Config {
             model_dir: Some(model_dir),
             ..Self::default()
         }
+    }
+
+    /// Set the inference resource limits.
+    ///
+    /// Values below the supported floor are clamped (`MIN_MAX_TOKENS`, one
+    /// thread) rather than accepted, so a misconfiguration cannot shrink a
+    /// sequence below the export's special tokens or create zero threads.
+    #[must_use]
+    pub fn with_limits(mut self, max_tokens: usize, intra_threads: usize) -> Self {
+        self.max_tokens = max_tokens.max(MIN_MAX_TOKENS);
+        self.intra_threads = intra_threads.max(1);
+        self
     }
 }
 
@@ -152,6 +192,155 @@ pub fn decode_spans(input: &str, spans: &[RawSpan], threshold: f32) -> Vec<Entit
     resolve_overlaps(entities)
 }
 
+/// Byte window plan for one detection pass.
+///
+/// Contiguous `window`-byte ranges stepping by `window - overlap`, each
+/// aligned to a UTF-8 character boundary. Tokenizing one window at a time
+/// bounds tokenizer memory to the window instead of the whole input; the
+/// overlap keeps an entity that straddles a window edge visible in a
+/// neighbouring window. Empty input yields no windows.
+#[cfg_attr(not(feature = "gliner2"), allow(dead_code))]
+pub(crate) fn byte_windows(input: &str, window: usize, overlap: usize) -> Vec<(usize, usize)> {
+    let len = input.len();
+    if len == 0 {
+        return Vec::new();
+    }
+    let window = window.max(1);
+    let overlap = overlap.min(window.saturating_sub(1));
+    let step = window - overlap;
+    let mut windows = Vec::new();
+    let mut start = 0;
+    loop {
+        let mut end = (start + window).min(len);
+        while end < len && !input.is_char_boundary(end) {
+            end += 1;
+        }
+        windows.push((start, end));
+        if end == len {
+            return windows;
+        }
+        let mut next = (start + step).min(len);
+        while next < len && !input.is_char_boundary(next) {
+            next += 1;
+        }
+        if next <= start {
+            return windows;
+        }
+        start = next;
+    }
+}
+
+/// Token window plan for one tokenized slice.
+///
+/// Windows are `window` tokens wide and step by `window - overlap`, so the
+/// same tokens appear in consecutive windows and a boundary-crossing span can
+/// be decoded whole in at least one of them. The overlap is capped at half the
+/// window so a misconfiguration cannot multiply the inference count.
+#[cfg_attr(not(feature = "gliner2"), allow(dead_code))]
+pub(crate) fn token_windows(tokens: usize, window: usize, overlap: usize) -> Vec<(usize, usize)> {
+    if tokens == 0 {
+        return Vec::new();
+    }
+    let window = window.max(1);
+    let overlap = overlap.min(window / 2);
+    let step = window - overlap;
+    let mut windows = Vec::new();
+    let mut start = 0;
+    loop {
+        let end = (start + window).min(tokens);
+        windows.push((start, end));
+        if end == tokens {
+            return windows;
+        }
+        start += step;
+    }
+}
+
+/// Whether a logits tensor has the expected `[1, seq, labels]` or
+/// `[seq, labels]` shape.
+///
+/// Checking element count alone would accept a transposed tensor whose rows
+/// are class scores instead of token scores, decoding garbage spans.
+#[cfg_attr(not(feature = "gliner2"), allow(dead_code))]
+pub(crate) fn logits_shape_matches(dims: &[i64], seq_len: usize, labels: usize) -> bool {
+    let seq_len = i64::try_from(seq_len).ok();
+    let labels = i64::try_from(labels).ok();
+    match dims {
+        [batch, seq, classes] => Some(*seq) == seq_len && Some(*classes) == labels && *batch == 1,
+        [seq, classes] => Some(*seq) == seq_len && Some(*classes) == labels,
+        _ => false,
+    }
+}
+
+/// The directory that actually holds the fragment set: the export root or one
+/// of the legacy `fp32_v2/` / `fp16_v2/` subfolders.
+pub(crate) fn fragment_layout_dir(model_dir: &Path) -> Option<PathBuf> {
+    for subdir in ["", "fp32_v2", "fp16_v2"] {
+        let dir = if subdir.is_empty() {
+            model_dir.to_path_buf()
+        } else {
+            model_dir.join(subdir)
+        };
+        if has_onnx_with_prefix(&dir, "encoder") {
+            return Some(dir);
+        }
+    }
+    None
+}
+
+/// Whether `dir` holds a file whose name starts with `prefix` and ends in `.onnx`.
+pub(crate) fn has_onnx_with_prefix(dir: &Path, prefix: &str) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        name.starts_with(prefix) && name.ends_with(".onnx")
+    })
+}
+
+/// Entity labels of a single-file export, ordered by class index.
+///
+/// `config.json` is part of the layout and its `id2label` object is the only
+/// source of tag names: decoding a model whose tags are unknown maps every
+/// token to `O`, so a misconfigured export would report a clean scan with zero
+/// entities instead of failing. Absent file, unreadable file, invalid JSON, or
+/// a map without a single index/tag pair is therefore an error.
+///
+/// # Errors
+///
+/// Returns [`DetectorError`] when `config_path` does not exist, cannot be read,
+/// is not valid JSON, or carries no usable `id2label` entry. The message names
+/// the file and failure class only, never file contents.
+pub(crate) fn load_id2label(config_path: &Path) -> Result<Vec<String>, DetectorError> {
+    let label_error = |what: &str| DetectorError::Message(format!("gliner2 onnx backend: {what}"));
+    if !config_path.is_file() {
+        return Err(label_error("config.json not found in model_dir"));
+    }
+    let raw =
+        std::fs::read_to_string(config_path).map_err(|_| label_error("cannot read config.json"))?;
+    let value: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|_| label_error("config.json is not valid JSON"))?;
+    let mut pairs: Vec<(usize, String)> = Vec::new();
+    if let Some(map) = value.get("id2label").and_then(serde_json::Value::as_object) {
+        for (id, label) in map {
+            if let (Ok(index), Some(name)) =
+                (id.parse::<usize>(), label.as_str().map(ToString::to_string))
+            {
+                pairs.push((index, name));
+            }
+        }
+    }
+    if pairs.is_empty() {
+        return Err(label_error(
+            "config.json has no usable `id2label` map (class index -> BIO tag)",
+        ));
+    }
+    pairs.sort_by_key(|pair| pair.0);
+    Ok(pairs.into_iter().map(|pair| pair.1).collect())
+}
+
 /// Local NER detector backed by a `GLiNER2` ONNX export.
 ///
 /// Without the `gliner2` feature or a configured `model_dir`, [`Detector::detect`]
@@ -160,6 +349,8 @@ pub struct Gliner2Detector {
     config: Gliner2Config,
     #[cfg(feature = "gliner2")]
     fragment: std::sync::Mutex<Option<fragments::FragmentEngine>>,
+    #[cfg(feature = "gliner2")]
+    single: std::sync::Mutex<Option<onnx::SingleFileEngine>>,
 }
 
 impl Gliner2Detector {
@@ -170,6 +361,8 @@ impl Gliner2Detector {
             config,
             #[cfg(feature = "gliner2")]
             fragment: std::sync::Mutex::new(None),
+            #[cfg(feature = "gliner2")]
+            single: std::sync::Mutex::new(None),
         }
     }
 
@@ -222,7 +415,7 @@ impl Detector for Gliner2Detector {
         }
         #[cfg(feature = "gliner2")]
         {
-            let spans = onnx::detect(&model_dir, input)?;
+            let spans = self.single_file_spans(&model_dir, input)?;
             Ok(decode_spans(input, &spans, self.config.threshold))
         }
         #[cfg(not(feature = "gliner2"))]
@@ -247,15 +440,29 @@ impl Gliner2Detector {
         let mut guard = self.fragment.lock().map_err(|_| {
             DetectorError::Message("gliner2 fragment backend: engine lock poisoned".to_owned())
         })?;
-        let intra_threads = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
         let engine = guard.get_or_insert_with(fragments::FragmentEngine::new);
         engine.extract(
             model_dir,
-            intra_threads,
+            self.config.intra_threads,
             &self.config.labels,
             self.config.threshold,
             input,
         )
+    }
+
+    /// Single-file-export spans for `input`, reusing the loaded tokenizer and
+    /// ONNX session across calls.
+    #[cfg(feature = "gliner2")]
+    fn single_file_spans(
+        &self,
+        model_dir: &std::path::Path,
+        input: &str,
+    ) -> Result<Vec<RawSpan>, DetectorError> {
+        let mut guard = self.single.lock().map_err(|_| {
+            DetectorError::Message("gliner2 onnx backend: engine lock poisoned".to_owned())
+        })?;
+        let engine = guard.get_or_insert_with(onnx::SingleFileEngine::new);
+        engine.detect(model_dir, &self.config, input)
     }
 }
 
@@ -266,25 +473,7 @@ impl Gliner2Detector {
 /// `fp16_v2/` / `fp32_v2/` subfolder layout. Presence only routes the call: an
 /// incomplete set still fails closed when the engine loads it.
 fn fragment_export(model_dir: &std::path::Path) -> bool {
-    for subdir in ["", "fp32_v2", "fp16_v2"] {
-        let dir = if subdir.is_empty() {
-            model_dir.to_path_buf()
-        } else {
-            model_dir.join(subdir)
-        };
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            continue;
-        };
-        let has_encoder = entries.flatten().any(|entry| {
-            let name = entry.file_name();
-            let name = name.to_string_lossy();
-            name.starts_with("encoder") && name.ends_with(".onnx")
-        });
-        if has_encoder {
-            return true;
-        }
-    }
-    false
+    fragment_layout_dir(model_dir).is_some()
 }
 
 /// Whether `model_dir` holds a `GLiNER2.5` boundary export (unsupported here).

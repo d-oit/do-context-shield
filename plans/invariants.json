@@ -430,5 +430,59 @@
     "rationale": "Backtracking on untrusted input is a ReDoS vector at the privacy boundary and a new dependency against the local/CPU-minimal rule; dropping \b for weak prefixes (sk-, hf_, xox) redacts ordinary text such as disk-usage-of-the-container with no lookaround to separate glued-real from in-word, so neither option passes review and no slice follows the verdict",
     "sensor": "cargo test -p do-context-shield-detector-regex --test quality + review of new pattern entries",
     "category": "security"
+  },
+  {
+    "invariant": "The MCP stdio transport reads each request frame with a bound of DEFAULT_MAX_REQUEST_BYTES (4 MiB, excluding the newline) and buffers at most the limit plus one detection byte; an oversized frame produces one null-id invalid-request error and ends the session without being parsed, so it can never reach a plugin, the vault, or the audit sink, and an unterminated trailing frame is a null-id parse error, never a partial request",
+    "rationale": "An unbounded read_line let a client grow the long-lived server's input buffer without limit before any JSON parsing or tool validation; the limit is a transport resource bound, deliberately distinct from any sanitized-context size policy, and the recovery contract (terminate, never drain an attacker-controlled stream) keeps the bound deterministic",
+    "sensor": "crates/mcp-server/src/transport.rs transport::tests (at-limit, one-byte-over, multibyte, unterminated, no-dispatch) + crates/do-context-shield-cli/tests/mcp_threat_matrix.rs oversized case",
+    "category": "security"
+  },
+  {
+    "invariant": "A JSON-RPC batch array is one invalid MCP message in both advertised revisions (2026-07-28 and 2025-11-25): it is rejected with a null-id invalid-request error and no member executes, even when the first member is a valid mutating tools/call",
+    "rationale": "JSON-RPC batching was removed from MCP after 2025-03-26 and this server never advertised that revision; dispatching a member would let a batch smuggle a forget/sanitize past the per-request validation and authorization surface",
+    "sensor": "crates/mcp-server/src/handle/tests/batch.rs + crates/do-context-shield-cli/tests/mcp_stdio_revisions.rs + fuzz/tests/seed_corpus.rs mcp_batch_seed_is_rejected_without_deleting_mappings",
+    "category": "security"
+  },
+  {
+    "invariant": "MCP method parameters are validated against a per-method schema before dispatch (tools/call requires a bounded non-empty name and an object arguments value; discover/list/initialize accept only their fields plus _meta), params._meta must be an object, and clientInfo — when supplied — must be an object with non-empty bounded name and version strings but is informational only, never used for authorization, tool selection, or policy",
+    "rationale": "The generic request validator only checked that params was an object, so malformed metadata and wrong parameter shapes could reach dispatch; validating the schema before dispatch guarantees a rejected request produces no sanitizer, vault, plugin, or audit side effects, and treating client identity as informational prevents a client from influencing enforcement",
+    "sensor": "crates/mcp-server/src/handle/tests/protocol_params.rs",
+    "category": "security"
+  },
+  {
+    "invariant": "Key-file and configuration diagnostics never interpolate a resolved path, key bytes, ciphertext, OS error text, parser source excerpts, or mode bits: they name the operation and a safe failure category, with remediation pointing at the flag (and the pinned `chmod 600` guidance) instead",
+    "rationale": "A key-file or config path can disclose a username, a private project name, or a mounted-secret location, and a TOML parser diagnostic quotes the offending source line, which may contain a raw configured value; data-minimized categories still distinguish missing file, permission rejection, invalid format, wrong key, and tamper",
+    "sensor": "crates/vault-json/src/tests/encrypted.rs error_diagnostics_omit_paths_keys_and_ciphertext + crates/do-context-shield-cli/tests/cli_config_discovery.rs config_diagnostics_never_echo_paths_or_values + crates/do-context-shield-cli/tests/cli_canary.rs key_file_diagnostics_never_echo_the_path",
+    "category": "security"
+  },
+  {
+    "invariant": "The single-file GLiNER2 ONNX backend loads the tokenizer, label map, and session once per detector instance on a worker thread and reuses them for every detection; inference is bounded by explicit `max_tokens` (default 512) and `intra_threads` (default 2), with input split into overlapping byte windows and token windows rather than truncated, and any unevaluable window fails the whole call",
+    "rationale": "Reloading `tokenizer.json` and creating/loading an ONNX session per call made every detection pay cold-start cost; an unbounded single sequence and an automatic thread count derived from the machine made memory, tensor size, and CPU usage unpredictable for long-lived CLI/MCP workloads, and silent truncation would leave tail PII unscanned",
+    "sensor": "crates/detector-gliner2 tests: limits_default_to_conservative_values_and_clamp_floor, byte_windows_cover_the_input_with_bounded_overlapping_ranges, token_windows_bound_inference_and_preserve_boundary_spans, logits_shape_accepts_only_expected_ranks_and_transposes, non_finite_logits_are_rejected_not_mapped_to_a_score, repeated_detections_reuse_the_loaded_engine (model-backed, feature-gated)",
+    "category": "architecture"
+  },
+  {
+    "invariant": "`doctor` preflights a detector locally with no network, no model download, no model contents, and no path in its output: it distinguishes feature_disabled, not_configured, missing_model_dir, missing_model_file, missing_tokenizer, missing_labels, unsupported_export, incomplete_fragments, and runtime_unavailable with a stable reason_code, reports the effective token/thread limits, exits 1 when unavailable, and never presents a hybrid selection whose GLiNER2 half is unavailable as a regex-only success",
+    "rationale": "A privacy product must let an operator prove a configured local model is loadable before routing private content; file existence alone is not readiness (a tokenizer/runtime/label mismatch only surfaces on inference), and treating a missing model as a clean regex scan would misrepresent the selected detection coverage",
+    "sensor": "crates/do-context-shield-cli/tests/cli_doctor.rs + crates/detector-gliner2 tests readiness_reports_stable_categories and readiness_reports_runtime_unavailable_for_a_broken_export",
+    "category": "security"
+  },
+  {
+    "invariant": "A process plugin call terminates the whole process tree on timeout, error, or completion: Unix launches each child as its own process-group leader and signals the group, Windows assigns it to a kill-on-close Job Object, direct kill is only a containment fallback, the writer surfaces broken-pipe/write failures, and the call stays bounded (timeout + exit grace + a fixed tree/thread wait, with pipe-blocked helper threads detached) with no shell in the launch path",
+    "rationale": "Killing only the direct child left descendants that inherited stdout alive and blocked the reader, so a hostile plugin could hold a request open past its timeout and survive it; explicit per-platform containment with a bounded wait keeps the transport promise without introducing shell expansion",
+    "sensor": "crates/plugin-process/tests/process_tree.rs (Unix and Windows tree cases) + crates/plugin-process/tests/detector_protocol.rs timeout/oversized cases + cargo clippy --target x86_64-pc-windows-gnu",
+    "category": "security"
+  },
+  {
+    "invariant": "Every audit record is a versioned v2 envelope (sequence, previous_hash, record_hash over the canonical event bytes); the full chain is verified on open and before append, `verify-audit` detects modification, deletion, truncation, and reordering and reports only a record index plus a safe category, legacy v1 files are never rewritten or upgraded and the sink refuses to append to them, and rotation is opt-in (`--audit-max-records`/`--audit-max-bytes`) with the previous file preserved as `<name>.1`",
+    "rationale": "The append-only JSONL sink could not show whether earlier records had been edited or removed, and unbounded growth had no operator control; a SHA-256 chain makes tampering evident on open and on demand, while opt-in rotation preserves the default no-deletion posture and the versioned format keeps old files untouched",
+    "sensor": "crates/audit-file tests (chain categories, rotation boundaries, tamper/legacy refusal) + crates/do-context-shield-cli/tests/cli_audit.rs verify-audit and retention cases",
+    "category": "security"
+  },
+  {
+    "invariant": "Hostile but syntactically valid plugin responses cannot weaken the boundary: a policy that keeps a secret fails the call, overlapping aliases follow longest-span-wins so a wider secret label survives, a transformer edit outside the planned spans is accepted only because that text is documented as trusted while planned values and emitted placeholders stay validated and reversible, a second response line is never read, and a failed call does not poison the next one",
+    "rationale": "The highest-risk composition is the interaction between a model-facing adapter, process plugins, the vault, and audit output; per-capability tests did not prove that a malicious response cannot bypass the whole boundary, and the transformer's out-of-span trust contract had to be pinned rather than implied",
+    "sensor": "crates/plugin-process/tests/adversarial.rs + crates/plugin-process/tests/transformer_protocol.rs + crates/plugin-process/tests/vault_protocol.rs + crates/do-context-shield-cli/tests/mcp_threat_matrix.rs",
+    "category": "security"
   }
 ]

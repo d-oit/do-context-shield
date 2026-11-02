@@ -13,9 +13,17 @@ case "$mode" in
   detect-badspan)  printf '%s\n' '{"entities":[{"kind":"person","start":1,"end":3}]}' ;;
   detect-late-long) printf '%s\n' '{"entities":[{"kind":"person","start":0,"end":2},{"kind":"api_key","start":1,"end":12}]}' ;;
   detect-zero)     printf '%s\n' '{"entities":[]}' ;;
+  # A secret-shaped span, for the policy/overlap threat cases.
+  detect-secret)   printf '%s\n' '{"entities":[{"kind":"api_key","start":0,"end":12,"confidence":0.99}]}' ;;
+  # Two aliases for overlapping spans: a shorter person label inside a wider
+  # secret label. Longest-span-wins must keep the secret.
+  detect-overlap-secret) printf '%s\n' '{"entities":[{"kind":"person","start":0,"end":5,"confidence":0.9},{"kind":"api_key","start":0,"end":12,"confidence":0.99}]}' ;;
+  # Two valid lines: the driver reads exactly one response line per call.
+  multiline)       printf '%s\n' '{"entities":[],"text":""}'; printf '%s\n' '{"entities":[{"kind":"email","start":0,"end":5}]}' ;;
   detect-clean)    printf '%s\n' '{"entities":[],"text":""}' ;;
   # policy
   plan-ok)      printf '%s\n' '{"plan":[{"index":0,"action":"pseudonymize"}]}' ;;
+  plan-keep)    printf '%s\n' '{"plan":[{"index":0,"action":"keep"}]}' ;;
   plan-two)     printf '%s\n' '{"plan":[{"index":0,"action":"pseudonymize"},{"index":1,"action":"redact"}]}' ;;
   plan-missing) printf '%s\n' '{"plan":[{"index":0,"action":"keep"}]}' ;;
   plan-dupe)    printf '%s\n' '{"plan":[{"index":0,"action":"keep"},{"index":0,"action":"redact"}]}' ;;
@@ -85,5 +93,15 @@ case "$mode" in
   empty) : ;;
   exit)  exit 3 ;;
   hang)  exec sleep 30 ;;
+  # First call fails, later calls in the same test succeed: a hostile request
+  # must not poison the next invocation (each call starts a fresh child).
+  counter)
+    if [ -n "${2:-}" ] && [ -f "$2" ]; then
+      printf '%s\n' '{"entities":[],"text":""}'
+    else
+      : "${2:?counter mode needs a marker file}"
+      : > "$2"
+      printf '%s\n' 'not json'
+    fi ;;
   *)     printf '%s\n' '{"entities":[]}' ;;
 esac

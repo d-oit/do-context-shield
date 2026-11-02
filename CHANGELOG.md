@@ -7,6 +7,129 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- MCP stdio conformance gate (`scripts/check-mcp-conformance.sh`, `mcp-conformance`
+  CI job, issue #181). The pinned MCP Inspector CLI (2.13.0, Node 22) runs over
+  stdio for both advertised revisions — `--protocol-era modern` exercises the
+  2026-07-28 `server/discover` flow, `legacy` the 2025-11-25 `initialize`
+  handshake — checking tool listing, a benign inspect, a synthetic PII
+  sanitize, and default-denied restore. `crates/do-context-shield-cli/tests/mcp_stdio_revisions.rs`
+  adds direct stdio fixtures per revision (discovery/initialize, batch
+  rejection, no raw-value egress). Results are uploaded as CI artifacts, and
+  the summary records why the official `@modelcontextprotocol/conformance`
+  server runner is *not* scored: it accepts only an HTTP `--url` (stdio
+  support is upstream issue #258), so HTTP-only scenarios are neither run nor
+  marked as passed. No network transport was added to the product.
+
+- Local detector preflight: `do-context-shield doctor` (issue #182). It checks
+  plugin availability, feature support, model layout, tokenizer/`id2label`
+  metadata, ONNX Runtime loadability, and the effective limits without reading
+  input, downloading anything, printing model contents, or falling back to
+  regex. `--format json` emits `{detector, available, reason_code, guidance,
+  layout, max_tokens, intra_threads}` with stable codes (`ready`,
+  `feature_disabled`, `not_configured`, `missing_model_dir`,
+  `missing_model_file`, `missing_tokenizer`, `missing_labels`,
+  `unsupported_export`, `incomplete_fragments`, `runtime_unavailable`); exit 0
+  when ready, 1 otherwise. A `hybrid` report is unavailable whenever its
+  `gliner2` half is, and a `process` detector is configuration-only. Inference
+  limits are explicit on `sanitize`, `inspect`, and `mcp-stdio`:
+  `--model-max-tokens` (default 512) and `--model-threads` (default 2).
+
+- Single-file GLiNER2 engine reuse and bounded inference (issue #178). The
+  tokenizer, label map, and ONNX session now load once per detector instance on
+  a worker thread and are reused across calls (previously every detection
+  reloaded `tokenizer.json` and rebuilt the session). Input is split into
+  overlapping byte and token windows instead of one unbounded sequence, with
+  explicit `max_tokens`/`intra_threads`; over-limit input is fully scanned, an
+  unevaluable window fails the whole call, tensor shapes are validated against
+  `[1, seq, labels]`, and non-finite logits or scores are rejected instead of
+  becoming a confidence. The crate also exposes a network-free
+  `probe(&Gliner2Config)` readiness report (`ReadinessReport`,
+  `ReadinessCode`, `ModelLayout`), used by `doctor`.
+
+- Verifiable audit integrity and opt-in retention (issue #179). Each record is
+  now a versioned envelope with `sequence`, `previous_hash`, and a SHA-256
+  `record_hash` over the canonical event bytes. `FileAuditSink::open` verifies
+  the whole chain before accepting appends, and `do-context-shield
+  verify-audit --audit-file <path> [--format json]` detects modification,
+  deletion, truncation, and reordering while reporting only a record index and
+  a safe category. Legacy v1 JSONL files are recognized, never rewritten or
+  upgraded, and the sink refuses to append to them. Rotation is opt-in with
+  `--audit-max-records`/`--audit-max-bytes` (the previous file is preserved as
+  `<name>.1`, each file keeps its own chain); the default remains unbounded and
+  never deletes.
+
+- Adversarial boundary regression matrix (issue #180). MCP cases are a
+  table-driven manifest (`crates/do-context-shield-cli/tests/fixtures/mcp_threat_cases.json`)
+  over the real stdio transport: batch mutation, missing name, non-object
+  arguments, unsupported task field, default-denied restore/forget, fabricated
+  placeholders, unknown method, malformed JSON, modern-then-initialize, invalid
+  context, and an oversized frame with a persistent-vault side-effect check.
+  Process-plugin cases (`crates/plugin-process/tests/adversarial.rs`) pin that a
+  policy cannot keep a secret, overlapping secret/non-secret aliases follow
+  longest-span-wins, a transformer edit outside planned spans is accepted only
+  under the documented trusted-text contract and stays reversible, a smuggled
+  second response line is never read, and a failed hostile call does not poison
+  the next one.
+
+- Security contract documentation (issue #183): `docs/architecture.md` gains a
+  threat model (assets, trust boundaries, attacker capabilities, guarantees,
+  capability matrix, deployment profiles), `README.md` gains a "What this does
+  not protect against" section, and `SECURITY.md`/`docs/process-plugin.md`
+  state that plugins are trusted local software, process isolation is not
+  sandboxing, restore belongs in trusted harness code, encrypted vaults protect
+  data at rest only, and audit files are tamper-evident rather than
+  tamper-proof.
+
+### Changed
+
+- MCP stdio frames are bounded (issue #174): `DEFAULT_MAX_REQUEST_BYTES`
+  (4 MiB) replaces the unbounded `read_line`. A frame over the limit buffers at
+  most `limit + 1` bytes, gets one `null`-id invalid-request error, and ends
+  the session without being parsed, so it never reaches the sanitizer, a
+  plugin, the vault, or the audit sink. An unterminated trailing frame is a
+  `null`-id parse error; a complete bounded frame that is not valid UTF-8 is a
+  parse error and is skipped. The framing newline is consumed with its frame
+  (a leftover newline previously spun the read loop forever).
+
+- JSON-RPC batch arrays are rejected in both advertised revisions (issue
+  #175). An array is one invalid MCP message (`-32600`, `null` id) and no
+  member executes, even when the first member is a valid mutation; a committed
+  fuzz seed and `fuzz/tests/seed_corpus.rs` pin that a batched forget cannot
+  delete a live mapping.
+
+- MCP request metadata and method parameters are validated before dispatch
+  (issue #176). `params._meta` must be an object; `tools/call` requires a
+  non-empty bounded `name` and an object `arguments` when present;
+  `server/discover`, `tools/list`, and `initialize` accept only their fields
+  plus `_meta` (pagination is not implemented, so a cursor is rejected);
+  `initialize` is rejected under modern metadata and validates
+  `protocolVersion`/`capabilities`; `clientInfo` is validated when supplied but
+  stays informational and never influences authorization or policy. Rejected
+  requests produce no pipeline, vault, plugin, or audit side effects and never
+  echo submitted argument text.
+
+- Process plugins terminate the whole process tree (issue #177). Unix launches
+  each child in its own process group and kills the group; Windows assigns it
+  to a kill-on-close Job Object. The writer reports broken-pipe/write failures,
+  reader/writer completion is bounded (a pipe-blocked helper is detached rather
+  than awaited), and the call stays within `timeout + exit grace + 500 ms`. No
+  shell is introduced.
+
+### Fixed
+
+- Vault, canary, and configuration diagnostics no longer disclose filesystem
+  paths or raw configured values (issue #184). `VaultKey::from_file`,
+  `check_key_file_permissions`, the canary key loader, and the config loader
+  now report fixed operation labels and safe failure categories
+  (missing/inaccessible/not-owner-only/invalid format) with flag-based
+  remediation (`chmod 600` preserved), never the resolved path, OS error text,
+  key bytes, ciphertext, mode bits, or TOML source excerpts; an unknown
+  configuration field is still named because a field name is not a value.
+  Regression tests assert a canary directory and value never appear in the
+  rendered errors.
+
 ### Fixed
 
 - Release workflow: the crates.io publish job guarded on

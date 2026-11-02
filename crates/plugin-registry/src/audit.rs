@@ -1,6 +1,6 @@
 //! Local audit sink construction and protected-path collision checks.
 
-use do_context_shield_audit_file::FileAuditSink;
+use do_context_shield_audit_file::{FileAuditSink, Retention};
 use do_context_shield_plugin_api::{AuditError, AuditSink};
 use std::path::Path;
 
@@ -21,9 +21,24 @@ pub fn file_audit_sink(
     vault_file: Option<&Path>,
     vault_key_file: Option<&Path>,
 ) -> Result<Box<dyn AuditSink>, AuditError> {
+    file_audit_sink_with_retention(path, vault_file, vault_key_file, Retention::unbounded())
+}
+
+/// Construct the private local audit sink with explicit retention bounds.
+///
+/// # Errors
+///
+/// Same as [`file_audit_sink`], plus a refusal when an existing chain fails
+/// verification or is a legacy v1 file.
+pub fn file_audit_sink_with_retention(
+    path: &Path,
+    vault_file: Option<&Path>,
+    vault_key_file: Option<&Path>,
+    retention: Retention,
+) -> Result<Box<dyn AuditSink>, AuditError> {
     #[cfg(not(unix))]
     {
-        let _ = (vault_file, vault_key_file);
+        let _ = (vault_file, vault_key_file, retention);
         Ok(Box::new(FileAuditSink::open(path)?))
     }
 
@@ -49,7 +64,7 @@ pub fn file_audit_sink(
         if let Some(vault_key_file) = vault_key_file {
             reject_alias(path, vault_key_file, "vault_key_file", "--vault-key-file")?;
         }
-        Ok(Box::new(FileAuditSink::open(path)?))
+        Ok(Box::new(FileAuditSink::open_with(path, retention)?))
     }
 }
 

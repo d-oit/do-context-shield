@@ -25,8 +25,8 @@ fn read_events(path: &Path) -> Vec<AuditEvent> {
     contents
         .split(|byte| *byte == b'\n')
         .filter(|line| !line.is_empty())
-        .map(|line| match serde_json::from_slice(line) {
-            Ok(event) => event,
+        .map(|line| match serde_json::from_slice::<Envelope>(line) {
+            Ok(envelope) => envelope.event,
             Err(error) => panic!("cannot decode audit fixture ({:?})", error.classify()),
         })
         .collect()
@@ -343,3 +343,6 @@ fn opt_in_sink_reports_unsupported_filesystem_guarantees() {
             if message == "file audit logging requires Unix filesystem guarantees"
     ));
 }
+
+#[cfg(unix)]
+mod chained;

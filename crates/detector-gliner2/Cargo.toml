@@ -11,11 +11,13 @@ include = ["src/**/*", "Cargo.toml"]
 
 [features]
 default = []
-# Enable the bundled ONNX backend (ort + tokenizers + serde_json) for
-# single-file token-classification exports, and the gliner2-rs fragment
-# engine for GLiNER2 span exports (encoder + span_rep + scorer + ...).
-# Off by default so the base workspace builds light and offline.
-gliner2 = ["dep:ort", "dep:tokenizers", "dep:serde_json", "dep:gliner2-rs"]
+# Enable the bundled ONNX backend (ort + tokenizers) for single-file
+# token-classification exports, and the gliner2-rs fragment engine for GLiNER2
+# span exports (encoder + span_rep + scorer + ...). Off by default so the base
+# workspace stays free of native dependencies. `serde_json` stays unconditional
+# because the readiness probe validates `config.json`/`id2label` without a
+# runtime, and it is a light pure-Rust dependency.
+gliner2 = ["dep:ort", "dep:tokenizers", "dep:gliner2-rs"]
 
 [lints]
 workspace = true
@@ -24,7 +26,7 @@ workspace = true
 do-context-shield-plugin-api.workspace = true
 gliner2-rs = { workspace = true, optional = true }
 ort = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
+serde_json.workspace = true
 tokenizers = { workspace = true, optional = true }
 
 [dev-dependencies]

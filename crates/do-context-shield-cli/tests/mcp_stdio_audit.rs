@@ -40,8 +40,9 @@ fn events(path: &Path) -> Vec<Value> {
     bytes
         .split(|byte| *byte == b'\n')
         .filter(|line| !line.is_empty())
-        .map(|line| match serde_json::from_slice(line) {
-            Ok(event) => event,
+        .map(|line| match serde_json::from_slice::<Value>(line) {
+            // Chained records wrap the event in a versioned envelope.
+            Ok(value) => value.get("event").cloned().unwrap_or(value),
             Err(error) => panic!("cannot parse audit fixture ({:?})", error.classify()),
         })
         .collect()

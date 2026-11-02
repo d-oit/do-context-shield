@@ -7,13 +7,43 @@ Transport: newline-delimited JSON on the child's stdin/stdout. One child process
 Every method shares the same driver:
 
 - One response line, capped at 8 MiB.
-- `--process-timeout-ms` (default 30 000) bounds the wait for that line; the child is killed and reaped on timeout, on every other error path, and after it has answered.
+- `--process-timeout-ms` (default 30 000) bounds the wait for that line. On timeout, on every other error path, and after the child has answered, the whole **process tree** is terminated: Unix launches each child as its own process-group leader and signals the group, Windows assigns it to a Job Object configured to kill its members when the host closes the job. Direct `Child::kill` is only a fallback when containment cannot be established. Reaping is bounded, and a helper thread still blocked on a pipe held by a surviving descendant is detached rather than awaited, so the call never exceeds `timeout + 500 ms` plus the 100 ms exit grace.
+- The writer reports a broken pipe or write failure instead of ignoring it; a call with no usable response line surfaces it as "request could not be delivered".
 - A non-zero exit fails even when a response line was printed.
 - stderr is discarded and never logged, and error messages never echo input values. The pipeline additionally scrubs the input and detected values from any stage error text before it reaches a caller, so a backend cannot leak a value through an error.
 - A command line is split on whitespace; quoting and shell expansion are not supported. Point the flag at a wrapper script for anything more elaborate. A missing or blank command fails at startup, not on the first call.
 
-Common rules:
+## Adversarial-response regression matrix
 
+Syntactically valid but hostile responses are pinned by
+`crates/plugin-process/tests/adversarial.rs`: a policy that keeps a secret, a
+detector reporting a shorter non-secret alias inside a wider secret span, a
+transformer that edits text outside the planned spans (documented as trusted,
+and verified to stay reversible), a smuggled second response line, and a
+failed hostile call followed by a valid one. The transformer/vault protocol
+suites cover leftover values, unplanned mappings, duplicate tokens or
+mappings, unresolvable or foreign tokens, and unconfirmed deletions; the driver
+suite covers oversized, delayed, malformed, multi-line, and non-zero-exit
+children.
+
+## Trust and isolation
+
+A process plugin's executable path and code are **trusted local software**, as
+trusted as `do-context-shield` itself. The driver validates responses, never uses
+a shell, and terminates the child's process tree on timeout or error — but process
+isolation is **not sandboxing**: the child runs with the same user's filesystem
+and network permissions and can read the vault, the key file, and any other file
+that account can read. Install only plugins you would run directly, from paths
+only you can write.
+
+A process **transformer** additionally receives text outside the planned entities
+as trusted input and may rewrite it (see the transformer checks below). The
+pipeline verifies planned values and emitted placeholders, not the rest of the
+text, so the transformer is part of the trusted computing base for everything it
+returns. The threat model and deployment profiles are in
+[`docs/architecture.md`](architecture.md#threat-model).
+
+Common rules:
 - `scope` is the caller's session scope string.
 - `start` / `end` are UTF-8 byte offsets into the exact input named in the request; `start < end` is required and both offsets must fall on character boundaries.
 - Kind labels are trimmed, lowercased, and have spaces replaced by underscores (`API Key` becomes `api_key`); the default policy matches kinds by lowercase substring.

@@ -125,7 +125,7 @@ fn detect_with_missing_dir_fails_closed() {
 }
 
 /// Temp directory holding the named files (parent directories created).
-fn temp_dir_with(names: &[&str]) -> tempfile::TempDir {
+pub(super) fn temp_dir_with(names: &[&str]) -> tempfile::TempDir {
     let dir = match tempfile::tempdir() {
         Ok(dir) => dir,
         Err(error) => panic!("cannot create a temp directory: {error}"),
@@ -282,3 +282,5 @@ fn fragment_engine_lock_poisoning_fails_closed() {
         }
     }
 }
+
+mod limits;

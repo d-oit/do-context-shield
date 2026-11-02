@@ -51,15 +51,12 @@ impl VaultKey {
     ///
     /// Returns [`VaultError`] when the file cannot be read, is accessible
     /// beyond its owner (Unix), or does not hold exactly 32 hex-encoded bytes.
+    /// The message names only the operation and failure class: never the
+    /// resolved path, the OS error text, or any key material.
     pub fn from_file(path: &Path) -> Result<Self, VaultError> {
         #[cfg(unix)]
         check_key_file_permissions(path)?;
-        let text = fs::read_to_string(path).map_err(|error| {
-            VaultError::Message(format!(
-                "cannot read vault key file `{}`: {error}",
-                path.display()
-            ))
-        })?;
+        let text = fs::read_to_string(path).map_err(|error| key_file_read_error(&error))?;
         Self::from_hex(&text)
     }
 
@@ -68,14 +65,15 @@ impl VaultKey {
     /// # Errors
     ///
     /// Returns [`VaultError`] when the text is not exactly 32 hex-encoded bytes.
+    /// The message states the required format only: never the parsed text or
+    /// any decoded bytes.
     pub fn from_hex(text: &str) -> Result<Self, VaultError> {
         let bytes = decode_hex(text)?;
         if bytes.len() != KEY_BYTES {
-            return Err(VaultError::Message(format!(
-                "vault key must be {KEY_BYTES} bytes ({} hex characters), got {} bytes",
-                KEY_BYTES * 2,
-                bytes.len()
-            )));
+            return Err(VaultError::Message(
+                "invalid vault key format: the key must be exactly 32 bytes, encoded as 64 hex characters (`openssl rand -hex 32` writes one)"
+                    .to_owned(),
+            ));
         }
         let mut key = [0u8; KEY_BYTES];
         key.copy_from_slice(&bytes);
@@ -83,25 +81,38 @@ impl VaultKey {
     }
 }
 
+/// Fixed operation label for a key-file read failure.
+///
+/// The message names the failure class and the flag that carries the path —
+/// never the resolved path, the OS error text, or the file contents, which
+/// would disclose user names, project names, or mounted-secret locations to
+/// anyone reading a log line or an error report.
+fn key_file_read_error(error: &std::io::Error) -> VaultError {
+    let text = if error.kind() == std::io::ErrorKind::NotFound {
+        "vault key file does not exist; check the path given to `--vault-key-file` or `DO_CONTEXT_SHIELD_VAULT_KEY_FILE`"
+    } else {
+        "cannot read the vault key file (inaccessible, a directory, or not valid UTF-8)"
+    };
+    VaultError::Message(text.to_owned())
+}
+
 /// Reject a key file that other users on the machine could read.
+///
+/// The message names the operation, the failure class, and the fix — never
+/// the path, the OS error text, or the mode bits, which would describe the
+/// file system layout to anyone reading a log line.
 #[cfg(unix)]
 fn check_key_file_permissions(path: &Path) -> Result<(), VaultError> {
     use std::os::unix::fs::PermissionsExt;
     let mode = fs::metadata(path)
-        .map_err(|error| {
-            VaultError::Message(format!(
-                "cannot read vault key file `{}`: {error}",
-                path.display()
-            ))
-        })?
+        .map_err(|error| key_file_read_error(&error))?
         .permissions()
         .mode();
     if mode & 0o077 != 0 {
-        return Err(VaultError::Message(format!(
-            "vault key file `{}` is accessible beyond its owner (mode {:03o}); restrict it with `chmod 600`",
-            path.display(),
-            mode & 0o777
-        )));
+        return Err(VaultError::Message(
+            "vault key file permissions must be owner-only; restrict it with `chmod 600` (the path is passed as `--vault-key-file` or `DO_CONTEXT_SHIELD_VAULT_KEY_FILE`)"
+                .to_owned(),
+        ));
     }
     Ok(())
 }
@@ -128,11 +139,8 @@ pub(super) fn is_envelope(value: &serde_json::Value) -> bool {
 /// AEAD fails, or the envelope cannot be serialized.
 pub(super) fn encrypt(state_json: &[u8], key: &VaultKey) -> Result<Vec<u8>, VaultError> {
     let mut nonce = [0u8; NONCE_BYTES];
-    getrandom::fill(&mut nonce).map_err(|error| {
-        VaultError::Message(format!(
-            "cannot obtain entropy for the vault nonce ({error})"
-        ))
-    })?;
+    getrandom::fill(&mut nonce)
+        .map_err(|_| VaultError::Message("cannot obtain entropy for the vault nonce".to_owned()))?;
     let ciphertext = cipher(key)?
         .encrypt(
             &XNonce::from(nonce),
@@ -148,7 +156,8 @@ pub(super) fn encrypt(state_json: &[u8], key: &VaultKey) -> Result<Vec<u8>, Vaul
         nonce: encode_hex(&nonce),
         payload: encode_hex(&ciphertext),
     };
-    serde_json::to_vec(&envelope).map_err(|error| super::json_error(&error))
+    serde_json::to_vec(&envelope)
+        .map_err(|_| VaultError::Message("cannot serialize the vault envelope".to_owned()))
 }
 
 /// Decrypt an envelope file value into the serialized vault state.
@@ -157,27 +166,29 @@ pub(super) fn encrypt(state_json: &[u8], key: &VaultKey) -> Result<Vec<u8>, Vaul
 ///
 /// Returns [`VaultError`] when the envelope is malformed, uses an unsupported
 /// version or cipher, or fails authentication with `key` (wrong key or a
-/// modified file).
+/// modified file). The messages are fixed operation labels: no envelope
+/// content, ciphertext, key bytes, or path is echoed back.
 pub(super) fn decrypt(value: serde_json::Value, key: &VaultKey) -> Result<Vec<u8>, VaultError> {
-    let envelope: Envelope =
-        serde_json::from_value(value).map_err(|error| super::json_error(&error))?;
+    let envelope: Envelope = serde_json::from_value(value).map_err(|_| {
+        VaultError::Message(
+            "vault envelope is malformed (expected `version`, `cipher`, `nonce`, and `payload` fields)"
+                .to_owned(),
+        )
+    })?;
     if envelope.version != VERSION {
         return Err(VaultError::Message(format!(
-            "unsupported vault format version {} (this build reads version {VERSION})",
-            envelope.version
+            "unsupported vault format version (this build reads version {VERSION})"
         )));
     }
     if envelope.cipher != CIPHER {
         return Err(VaultError::Message(format!(
-            "unsupported vault cipher `{}` (this build reads `{CIPHER}`)",
-            envelope.cipher
+            "unsupported vault cipher (this build reads `{CIPHER}`)"
         )));
     }
     let nonce = decode_hex(&envelope.nonce)?;
     if nonce.len() != NONCE_BYTES {
         return Err(VaultError::Message(format!(
-            "vault nonce must be {NONCE_BYTES} bytes, got {}",
-            nonce.len()
+            "vault nonce must be {NONCE_BYTES} bytes"
         )));
     }
     let mut nonce_bytes = [0u8; NONCE_BYTES];
@@ -221,6 +232,8 @@ fn encode_hex(bytes: &[u8]) -> String {
 /// # Errors
 ///
 /// Returns [`VaultError`] for an odd number of characters or a non-hex digit.
+/// The messages are fixed labels: the parsed text and the offending character
+/// are never echoed, so a key or ciphertext byte cannot leak through an error.
 fn decode_hex(text: &str) -> Result<Vec<u8>, VaultError> {
     let text = text.trim();
     if text.len() % 2 != 0 {

@@ -140,6 +140,20 @@ fn loaded<'a>(
         .ok_or_else(|| "engine unavailable".to_owned())
 }
 
+/// Load the real fragment engine once, for the readiness probe.
+///
+/// # Errors
+///
+/// Returns [`DetectorError`] when the export cannot be loaded; the message
+/// names the failure class only (never the path or engine diagnostics).
+pub(crate) fn probe(models_dir: &Path, intra_threads: usize) -> Result<(), DetectorError> {
+    gliner2_rs::init("do-context-shield");
+    let config = SpanConfig::new(models_dir).with_intra_threads(intra_threads.max(1));
+    SpanEngine::new(config)
+        .map(|_engine| ())
+        .map_err(|_| engine_error("cannot load export"))
+}
+
 /// One batched extraction; entities map 1:1 onto [`RawSpan`]s.
 fn extract_spans(
     engine: &mut SpanEngine,

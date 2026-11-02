@@ -83,6 +83,12 @@ printf '%s' 'contact me at alice@example.com' | do-context-shield sanitize --ses
 do-context-shield mcp-stdio --vault-file ~/.local/share/do-context-shield/vault.json
 
 do-context-shield config   # effective plugin/context selection with its source layer
+
+do-context-shield doctor --detector gliner2 --model-dir ~/.local/share/do-context-shield/gliner2-onnx
+# ^ local preflight: configured and loadable, or a stable reason_code (exit 1)
+
+do-context-shield verify-audit --audit-file ~/.local/share/do-context-shield/audit.jsonl
+# ^ hash-chain integrity report: record index + safe category only
 ```
 
 `restore` only resolves tokens held by the same local vault/session, and only the exact token the vault minted. The built-in memory and JSON vaults add per-mapping entropy, so a fabricated `__DO_PRIVATE_*__` string does not resolve; process vaults own their token policy and must be trusted local plugins. Nothing leaves the process unless a caller explicitly sends sanitized text onward. The optional JSON vault contains original values by design; protect that local file and use it only when cross-process restoration is required.
@@ -108,6 +114,16 @@ This first slice is intentionally conservative:
 - Sanitized text is a separate value from the original input.
 
 This is a foundation, not a claim of complete DLP coverage. Name/entity detection should be added through a local detector plugin such as GLiNER2 rather than hard-coded into the core.
+
+### What this does not protect against
+
+- **Prompt injection or hostile instructions.** Sanitization rewrites detected spans; it does not neutralize untrusted instructions, jailbreaks, or hidden directives, and it is not a security boundary for instruction integrity.
+- **Downstream tool authorization.** The product does not decide which tools a model may call, or what a tool is allowed to read or do.
+- **Model output.** Validating, trusting, or acting on a model reply is the caller/harness responsibility, including placeholder-shaped tokens the model invents.
+- **A compromised local account.** A same-user process can read the vault, key file, and audit log; the encrypted vault protects data at rest, not from the account that owns the key. Plugin executables and their code are trusted local software, and process isolation is not sandboxing.
+- **Complete detection.** The regex detector covers selected structured formats; semantic NER is model-dependent; free-form names and unknown formats can be missed.
+
+See the [threat model](docs/architecture.md#threat-model) for assets, trust boundaries, guarantees, and the safe deployment profiles (CLI, MCP stdio, encrypted JSON vault, audit logging, process plugins).
 
 ## License
 

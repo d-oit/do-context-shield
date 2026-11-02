@@ -58,6 +58,7 @@ printf '%s' 'Email Alice at alice@example.com' \
 - The model directory must hold a local single-file token-classification ONNX export (`model.onnx`, `tokenizer.json`, `config.json`); multi-fragment boundary exports are rejected with guidance. Models are never fetched automatically — expect roughly 600MB–1.1GB downloaded once, outside this tool.
 - With the `load-dynamic` ONNX backend, point `ORT_DYLIB_PATH` at a local ONNX Runtime 1.23+ library when the session fails to load.
 - Without a configured model the detector fails closed (non-zero exit, no entities) rather than passing text through unsanitized. Fall back to `--detector regex` explicitly if no model is available.
+- Preflight the local model before routing private text: `do-context-shield doctor --detector gliner2 --model-dir <dir> --format json` exits 0 only when the export and runtime actually load, and reports a stable `reason_code` (`missing_tokenizer`, `missing_labels`, `runtime_unavailable`, ...) otherwise. `--model-max-tokens` (default 512) and `--model-threads` (default 2) bound inference; longer input is windowed, never silently truncated. A `hybrid` doctor report is unavailable whenever its model half is unavailable — regex alone is not a hybrid result.
 
 ## Process plugins (any language)
 

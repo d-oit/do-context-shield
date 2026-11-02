@@ -1,0 +1,149 @@
+{
+  "canary": "CANARY-THREAT-MATRIX-8f3a@example.com",
+  "session": "matrix",
+  "notes": "Table-driven MCP threat matrix. Each case is one request sent over the real stdio transport after a known mapping exists. The test asserts the protocol result, that a rejected or failed request left the mapping intact, that no response or stderr carries the raw canary, and that a valid follow-up request still works (no poisoning).",
+  "cases": [
+    {
+      "name": "batch_array_cannot_delete_a_mapping",
+      "threat": "A JSON-RPC batch array smuggles a mutation past the boundary",
+      "request": "[{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"context.forget\",\"arguments\":{\"session\":\"matrix\"}}}]",
+      "expect": {
+        "response": "error",
+        "code": -32600
+      },
+      "mapping": "alive",
+      "tools": "all"
+    },
+    {
+      "name": "batch_array_with_notification_member",
+      "threat": "A mixed batch makes a valid mutation look like a notification set",
+      "request": "[{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"context.forget\",\"arguments\":{\"session\":\"matrix\"}}},{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}]",
+      "expect": {
+        "response": "error",
+        "code": -32600
+      },
+      "mapping": "alive",
+      "tools": "all"
+    },
+    {
+      "name": "missing_tool_name",
+      "threat": "A request with no tool name is dispatched as an empty call",
+      "request": "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"arguments\":{\"session\":\"matrix\"}}}",
+      "expect": {
+        "response": "error",
+        "code": -32602
+      },
+      "mapping": "alive",
+      "tools": "all"
+    },
+    {
+      "name": "non_object_arguments",
+      "threat": "A scalar arguments value reaches the sanitizer",
+      "request": "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"context.sanitize\",\"arguments\":\"CANARY-THREAT-MATRIX-8f3a@example.com\"}}",
+      "expect": {
+        "response": "error",
+        "code": -32602
+      },
+      "mapping": "alive",
+      "tools": "all"
+    },
+    {
+      "name": "unsupported_task_field",
+      "threat": "An unimplemented task field selects a different execution path",
+      "request": "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"context.forget\",\"arguments\":{\"session\":\"matrix\"},\"task\":{\"id\":\"t\"}}}",
+      "expect": {
+        "response": "error",
+        "code": -32602
+      },
+      "mapping": "alive",
+      "tools": "all"
+    },
+    {
+      "name": "restore_denied_on_default_surface",
+      "threat": "A model calls restore to read originals",
+      "request": "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"context.restore\",\"arguments\":{\"text\":\"__DO_PRIVATE_EMAIL_1_0000000000000000__\",\"session\":\"matrix\"}}}",
+      "expect": {
+        "response": "error",
+        "code": -32601
+      },
+      "mapping": "alive",
+      "tools": "default"
+    },
+    {
+      "name": "forget_denied_on_default_surface",
+      "threat": "A model deletes the operator's mappings",
+      "request": "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"context.forget\",\"arguments\":{\"session\":\"matrix\"}}}",
+      "expect": {
+        "response": "error",
+        "code": -32601
+      },
+      "mapping": "alive",
+      "tools": "default"
+    },
+    {
+      "name": "fabricated_placeholder_restores_nothing",
+      "threat": "A model invents a well-formed placeholder to pull a value out",
+      "request": "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"context.restore\",\"arguments\":{\"text\":\"__DO_PRIVATE_EMAIL_1_0000000000000000__\",\"session\":\"matrix\"}}}",
+      "expect": {
+        "response": "result"
+      },
+      "mapping": "alive",
+      "response_contains": "__DO_PRIVATE_EMAIL_1_0000000000000000__",
+      "tools": "all"
+    },
+    {
+      "name": "unknown_method",
+      "threat": "An unknown method reaches a dispatch arm",
+      "request": "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"resources/read\",\"params\":{}}",
+      "expect": {
+        "response": "error",
+        "code": -32601
+      },
+      "mapping": "alive",
+      "tools": "all"
+    },
+    {
+      "name": "malformed_json",
+      "threat": "A malformed frame is partially interpreted",
+      "request": "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\": CANARY-THREAT-MATRIX-8f3a@example.com}",
+      "expect": {
+        "response": "error",
+        "code": -32700
+      },
+      "mapping": "alive",
+      "tools": "all"
+    },
+    {
+      "name": "initialize_after_modern_negotiation",
+      "threat": "A modern request downgrades itself to the legacy handshake",
+      "request": "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"initialize\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}}}}",
+      "expect": {
+        "response": "error",
+        "code": -32602
+      },
+      "mapping": "alive",
+      "tools": "all"
+    },
+    {
+      "name": "invalid_context_enum_is_a_tool_error",
+      "threat": "An invalid enforcement context silently downgrades to a weaker one",
+      "request": "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"context.sanitize\",\"arguments\":{\"text\":\"CANARY-THREAT-MATRIX-8f3a@example.com\",\"session\":\"matrix\",\"recipient\":\"boss\"}}}",
+      "expect": {
+        "response": "tool_error"
+      },
+      "mapping": "alive",
+      "tools": "all"
+    }
+  ],
+  "oversized": {
+    "name": "oversized_frame_never_reaches_a_plugin",
+    "threat": "An oversized frame is parsed and its mutation executed",
+    "request_prefix": "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"context.forget\",\"arguments\":{\"session\":\"matrix\"}}}",
+    "expect": {
+      "response": "error",
+      "code": -32600
+    },
+    "mapping": "alive",
+    "tools": "all"
+  }
+}
