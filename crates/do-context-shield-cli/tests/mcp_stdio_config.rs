@@ -267,7 +267,7 @@ fn vault_ttl_expires_json_mappings_across_restarts() {
     common::assert_placeholder(&sanitized, "EMAIL", 1);
     session.close();
 
-    std::thread::sleep(std::time::Duration::from_millis(1_200));
+    std::thread::sleep(std::time::Duration::from_millis(1_500));
     let mut restarted = McpSession::start_with(&flags);
     let restored = content_text(&restarted.send(&tool_call(
         "context.restore",
