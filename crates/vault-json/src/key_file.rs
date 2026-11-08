@@ -12,13 +12,24 @@ const PUBLISH_ERROR: &str = "cannot publish key file atomically; destination may
 const CLEANUP_ERROR: &str =
     "cannot clean up a private temporary key file; check the destination directory before retrying";
 
+#[cfg(not(windows))]
+type TemporaryKeyFile = File;
+
+#[cfg(windows)]
+struct TemporaryKeyFile {
+    file: File,
+    // Keep the CREATE_NEW handle alive until the std file closes; it denies FILE_SHARE_DELETE.
+    _creation_handle: winsafe::guard::CloseHandleGuard<winsafe::HFILE>,
+}
+
 /// Create a new random 32-byte key file without replacing an existing path.
 ///
-/// The file contains 64 lowercase hexadecimal characters and a newline. On
-/// Unix, it is created with mode `0600`. On Windows, its DACL is replaced and
-/// protected before key material is written; allow ACEs are limited to the
-/// current user, SYSTEM, and Built-in Administrators. A same-directory hard
-/// link publishes the completed file atomically without replacing a target.
+/// The file contains 64 lowercase hexadecimal characters and a newline.
+/// On Unix, it is created with mode `0600`. On Windows, the initial `CREATE_NEW`
+/// call receives a protected DACL limited to the effective user, SYSTEM, and
+/// Built-in Administrators; the file ACL is verified before any key material
+/// is written. A same-directory hard link publishes the completed file
+/// atomically without replacing a target.
 ///
 /// # Errors
 ///
@@ -49,17 +60,7 @@ pub fn create_key_file(path: &Path) -> Result<(), VaultError> {
             return Err(cleanup_failure(&temporary_path, CREATE_ERROR));
         }
     }
-    #[cfg(windows)]
-    if set_restrictive_windows_dacl(&file).is_err() {
-        drop(file);
-        return Err(cleanup_failure(&temporary_path, CREATE_ERROR));
-    }
-
-    if file
-        .write_all(contents.as_bytes())
-        .and_then(|()| file.sync_all())
-        .is_err()
-    {
+    if write_and_sync_key_contents(&mut file, contents.as_bytes()).is_err() {
         drop(file);
         return Err(cleanup_failure(&temporary_path, CREATE_ERROR));
     }
@@ -98,12 +99,13 @@ fn temporary_key_path(path: &Path) -> Result<PathBuf, VaultError> {
     )))
 }
 
-/// Open a new temporary file with restrictive platform defaults.
+/// Open a new temporary file exclusively with restrictive platform permissions.
 ///
 /// # Errors
 ///
-/// Returns a fixed error if the file cannot be opened exclusively.
-fn open_temporary_key_file(path: &Path) -> Result<File, VaultError> {
+/// Returns a fixed error if the file cannot be opened securely.
+#[cfg(not(windows))]
+fn open_temporary_key_file(path: &Path) -> Result<TemporaryKeyFile, VaultError> {
     let mut options = OpenOptions::new();
     options.read(true).write(true).create_new(true);
 
@@ -113,18 +115,101 @@ fn open_temporary_key_file(path: &Path) -> Result<File, VaultError> {
         options.mode(0o600);
     }
 
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::OpenOptionsExt;
-        const GENERIC_READ: u32 = 0x8000_0000;
-        const GENERIC_WRITE: u32 = 0x4000_0000;
-        const WRITE_DAC: u32 = 0x0004_0000;
-        options
-            .share_mode(0)
-            .access_mode(GENERIC_READ | GENERIC_WRITE | WRITE_DAC);
+    options.open(path).map_err(|_| message(CREATE_ERROR))
+}
+
+#[cfg(windows)]
+/// Open a key file whose protected DACL was supplied during `CREATE_NEW`.
+///
+/// # Errors
+///
+/// Returns a fixed error if the descriptor, initial ACL, or file handle is invalid.
+fn open_temporary_key_file(path: &Path) -> Result<TemporaryKeyFile, VaultError> {
+    let (handle, current_sid) = create_temporary_key_file_handle(path)?;
+    if verify_restrictive_windows_dacl(&handle, &current_sid).is_err() {
+        drop(handle);
+        return Err(cleanup_failure(path, CREATE_ERROR));
     }
 
-    options.open(path).map_err(|_| message(CREATE_ERROR))
+    let Ok(file) = OpenOptions::new().read(true).write(true).open(path) else {
+        drop(handle);
+        return Err(cleanup_failure(path, CREATE_ERROR));
+    };
+    Ok(TemporaryKeyFile {
+        file,
+        _creation_handle: handle,
+    })
+}
+
+#[cfg(windows)]
+/// Create a file handle with a protected DACL in the initial `CREATE_NEW` operation.
+///
+/// # Errors
+///
+/// Returns a fixed error if token lookup, descriptor setup, or file creation fails.
+fn create_temporary_key_file_handle(
+    path: &Path,
+) -> Result<(winsafe::guard::CloseHandleGuard<winsafe::HFILE>, String), VaultError> {
+    use windows_permissions::wrappers::ConvertStringSecurityDescriptorToSecurityDescriptor;
+    use winsafe::{self as w, co};
+
+    let current_sid = current_user_sid().ok_or_else(|| message(CREATE_ERROR))?;
+    let sddl = format!("D:P(A;;FA;;;{current_sid})(A;;FA;;;SY)(A;;FA;;;BA)");
+    let parsed_descriptor = ConvertStringSecurityDescriptorToSecurityDescriptor(&sddl)
+        .map_err(|_| message(CREATE_ERROR))?;
+    let dacl = parsed_descriptor
+        .dacl()
+        .ok_or_else(|| message(CREATE_ERROR))?;
+
+    let mut descriptor = w::InitializeSecurityDescriptor().map_err(|_| message(CREATE_ERROR))?;
+    descriptor.Dacl = std::ptr::from_ref(dacl).cast_mut().cast::<w::ACL>();
+    descriptor.Control = co::SE::DACL_PRESENT | co::SE::DACL_PROTECTED;
+    let mut attributes = w::SECURITY_ATTRIBUTES::default();
+    attributes.set_bInheritHandle(false);
+    attributes.set_lpSecurityDescriptor(Some(&mut descriptor));
+
+    let path_str = path.to_str().ok_or_else(|| message(CREATE_ERROR))?;
+    let (handle, _) = w::HFILE::CreateFile(
+        path_str,
+        co::GENERIC::READ | co::GENERIC::WRITE,
+        Some(co::FILE_SHARE::READ | co::FILE_SHARE::WRITE),
+        Some(&attributes),
+        co::DISPOSITION::CREATE_NEW,
+        co::FILE_ATTRIBUTE::NORMAL,
+        None,
+        None,
+        None,
+    )
+    .map_err(|_| message(CREATE_ERROR))?;
+    Ok((handle, current_sid))
+}
+
+#[cfg(not(windows))]
+/// Write key material and sync it to storage.
+///
+/// # Errors
+///
+/// Returns an I/O error if writing or syncing fails.
+fn write_and_sync_key_contents(
+    file: &mut TemporaryKeyFile,
+    contents: &[u8],
+) -> std::io::Result<()> {
+    file.write_all(contents)?;
+    file.sync_all()
+}
+
+#[cfg(windows)]
+/// Write key material and sync it to storage while retaining the creation handle.
+///
+/// # Errors
+///
+/// Returns an I/O error if writing or syncing fails.
+fn write_and_sync_key_contents(
+    file: &mut TemporaryKeyFile,
+    contents: &[u8],
+) -> std::io::Result<()> {
+    file.file.write_all(contents)?;
+    file.file.sync_all()
 }
 
 /// Remove a temporary path, treating an already-absent file as cleaned up.
@@ -167,61 +252,77 @@ fn message(text: &str) -> VaultError {
 }
 
 #[cfg(windows)]
-/// Replace inherited access entries with the required protected allow-list.
+pub(super) fn current_user_sid() -> Option<String> {
+    use winsafe::{self as w, co};
+
+    let token = w::HACCESSTOKEN::GetCurrentThreadEffectiveToken();
+    let info = token
+        .GetTokenInformation(co::TOKEN_INFORMATION_CLASS::User)
+        .ok()?;
+    let w::TokenInfo::User(user) = info else {
+        return None;
+    };
+    user.User.Sid().map(|sid| sid.to_string())
+}
+
+#[cfg(windows)]
+/// Verify that a newly created key-file handle has the exact protected allow-list.
 ///
 /// # Errors
 ///
-/// Returns a fixed error if the handle ACL cannot be read, replaced, or
-/// verified. No key bytes are written before this succeeds.
-fn set_restrictive_windows_dacl(file: &File) -> Result<(), VaultError> {
-    use std::os::windows::io::AsRawHandle;
+/// Returns a fixed error if the DACL is unreadable or differs from the required allow-list.
+fn verify_restrictive_windows_dacl(
+    handle: &winsafe::guard::CloseHandleGuard<winsafe::HFILE>,
+    current_sid: &str,
+) -> Result<(), VaultError> {
     use windows_acl::acl::{ACL, AceType};
-    use windows_acl::helper::{sid_to_string, string_to_sid};
 
     const FILE_ALL_ACCESS: u32 = 0x001F_01FF;
 
-    let mut acl =
-        ACL::from_file_handle(file.as_raw_handle(), false).map_err(|_| message(CREATE_ERROR))?;
-    for entry in acl.all().map_err(|_| message(CREATE_ERROR))? {
-        if entry.string_sid.is_empty() {
+    let acl = ACL::from_file_handle(handle.ptr(), false).map_err(|_| message(CREATE_ERROR))?;
+    let entries = acl.all().map_err(|_| message(CREATE_ERROR))?;
+    let expected = [current_sid, "S-1-5-18", "S-1-5-32-544"];
+    let mut found = [false; 3];
+
+    if entries.len() != expected.len() {
+        return Err(message(CREATE_ERROR));
+    }
+    for entry in entries {
+        if entry.entry_type != AceType::AccessAllow
+            || entry.flags != 0
+            || entry.mask != FILE_ALL_ACCESS
+        {
             return Err(message(CREATE_ERROR));
         }
-        let sid = string_to_sid(&entry.string_sid).map_err(|_| message(CREATE_ERROR))?;
-        acl.remove_entry(sid.as_ptr().cast_mut().cast(), Some(entry.entry_type), None)
-            .map_err(|_| message(CREATE_ERROR))?;
-    }
-    if !acl.all().map_err(|_| message(CREATE_ERROR))?.is_empty() {
-        return Err(message(CREATE_ERROR));
-    }
-
-    let username = windows_acl::helper::current_user().ok_or_else(|| message(CREATE_ERROR))?;
-    let user_sid =
-        windows_acl::helper::name_to_sid(&username, None).map_err(|_| message(CREATE_ERROR))?;
-    let current_sid =
-        sid_to_string(user_sid.as_ptr().cast_mut().cast()).map_err(|_| message(CREATE_ERROR))?;
-    let system_sid = string_to_sid("S-1-5-18").map_err(|_| message(CREATE_ERROR))?;
-    let admin_sid = string_to_sid("S-1-5-32-544").map_err(|_| message(CREATE_ERROR))?;
-
-    for sid in [&user_sid, &system_sid, &admin_sid] {
-        match acl.allow(sid.as_ptr().cast_mut().cast(), false, FILE_ALL_ACCESS) {
-            Ok(true) => {}
-            Ok(false) | Err(_) => return Err(message(CREATE_ERROR)),
+        let Some(index) = expected
+            .iter()
+            .position(|sid| *sid == entry.string_sid.as_str())
+        else {
+            return Err(message(CREATE_ERROR));
+        };
+        if found[index] {
+            return Err(message(CREATE_ERROR));
         }
+        found[index] = true;
     }
-
-    // windows-acl applies every DACL mutation with
-    // PROTECTED_DACL_SECURITY_INFORMATION, preventing inherited ACEs.
-    let entries = acl.all().map_err(|_| message(CREATE_ERROR))?;
-    let expected = [current_sid.as_str(), "S-1-5-18", "S-1-5-32-544"];
-    if entries.len() != expected.len()
-        || entries.iter().any(|entry| {
-            entry.entry_type != AceType::AccessAllow
-                || entry.flags != 0
-                || entry.mask != FILE_ALL_ACCESS
-                || !expected.contains(&entry.string_sid.as_str())
-        })
-    {
+    if found.iter().any(|was_found| !was_found) {
         return Err(message(CREATE_ERROR));
     }
+    Ok(())
+}
+
+#[cfg(all(test, windows))]
+/// Create a temporary key file through the initial `CREATE_NEW` helper for immediate-DACL tests.
+///
+/// # Errors
+///
+/// Returns a fixed error if the DACL is not restrictive before any later file operation.
+pub(super) fn create_temporary_file_for_test(path: &Path) -> Result<(), VaultError> {
+    let (handle, current_sid) = create_temporary_key_file_handle(path)?;
+    if verify_restrictive_windows_dacl(&handle, &current_sid).is_err() {
+        drop(handle);
+        return Err(cleanup_failure(path, CREATE_ERROR));
+    }
+    drop(handle);
     Ok(())
 }

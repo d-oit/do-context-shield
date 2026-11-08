@@ -117,33 +117,6 @@ pub(super) fn check_key_file_permissions(path: &Path) -> Result<(), VaultError> 
     Ok(())
 }
 #[cfg(windows)]
-fn sid_bytes_to_string(bytes: &[u8]) -> Option<String> {
-    if bytes.len() < 8 {
-        return None;
-    }
-    let rev = bytes[0];
-    let sub_count = bytes[1] as usize;
-    if bytes.len() < 8 + sub_count * 4 {
-        return None;
-    }
-    let mut auth_bytes = [0u8; 8];
-    auth_bytes[2..8].copy_from_slice(&bytes[2..8]);
-    let auth = u64::from_be_bytes(auth_bytes);
-    let mut subs = Vec::with_capacity(sub_count);
-    for i in 0..sub_count {
-        let start = 8 + i * 4;
-        let sub_bytes: [u8; 4] = bytes[start..start + 4].try_into().ok()?;
-        subs.push(u32::from_le_bytes(sub_bytes));
-    }
-    let mut sid_string = format!("S-{rev}-{auth}");
-    for sub in subs {
-        use std::fmt::Write as _;
-        let _ = write!(sid_string, "-{sub}");
-    }
-    Some(sid_string)
-}
-
-#[cfg(windows)]
 pub(super) fn check_key_file_permissions(path: &Path) -> Result<(), VaultError> {
     fs::metadata(path).map_err(|error| key_file_read_error(&error))?;
     let path_str = path.to_str().ok_or_else(|| {
@@ -162,9 +135,12 @@ pub(super) fn check_key_file_permissions(path: &Path) -> Result<(), VaultError> 
         ));
     }
 
-    let current_sid = windows_acl::helper::current_user()
-        .and_then(|user| windows_acl::helper::name_to_sid(&user, None).ok())
-        .and_then(|bytes| sid_bytes_to_string(&bytes));
+    let current_sid = crate::key_file::current_user_sid().ok_or_else(|| {
+        VaultError::Message(
+            "vault key file permissions must be owner-only; in Windows, restrict ACLs to the current user (the path is passed as `--vault-key-file` or `DO_CONTEXT_SHIELD_VAULT_KEY_FILE`)"
+                .to_owned(),
+        )
+    })?;
 
     let mut has_owner_allow = false;
 
@@ -172,11 +148,11 @@ pub(super) fn check_key_file_permissions(path: &Path) -> Result<(), VaultError> 
         match entry.entry_type {
             windows_acl::acl::AceType::AccessAllow => {
                 let sid = &entry.string_sid;
-                let is_current_user = current_sid.as_deref().is_some_and(|cur| cur == sid);
+                let is_current_user = current_sid.as_str() == sid.as_str();
                 let is_system = sid == "S-1-5-18";
                 let is_admin = sid == "S-1-5-32-544";
                 if is_current_user || is_system || is_admin {
-                    if is_current_user || (current_sid.is_none() && (is_system || is_admin)) {
+                    if is_current_user {
                         has_owner_allow = true;
                     }
                 } else {

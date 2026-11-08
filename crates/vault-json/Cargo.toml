@@ -23,3 +23,5 @@ thiserror.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-acl = "0.3"
+windows-permissions = "0.2.4"
+winsafe = { version = "0.0.29", default-features = false, features = ["advapi"] }

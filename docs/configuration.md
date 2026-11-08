@@ -264,8 +264,9 @@ never on disk in the clear.
   or auto-discover configuration. The parent directory must exist, and the
   filesystem must support same-directory hard links for atomic publication;
   the command fails closed if it does not. Unix files use mode `0600`; on
-  Windows, a protected DACL allowing only the current user, SYSTEM, and
-  Built-in Administrators is applied before key bytes are written.
+  Windows uses the effective access-token SID and passes a protected
+  allow-list DACL to the initial `CREATE_NEW` operation; it verifies that DACL
+  before writing key bytes.
 - Existing key files, including files created by other tools, are validated
   but their permissions and ACLs are never changed. On Unix a key file must
   not be readable or writable by group or others. On Windows, broad allow

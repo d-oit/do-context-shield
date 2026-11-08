@@ -76,33 +76,6 @@ fn check_owner_only(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(windows)]
-fn sid_bytes_to_string(bytes: &[u8]) -> Option<String> {
-    if bytes.len() < 8 {
-        return None;
-    }
-    let rev = bytes[0];
-    let sub_count = bytes[1] as usize;
-    if bytes.len() < 8 + sub_count * 4 {
-        return None;
-    }
-    let mut auth_bytes = [0u8; 8];
-    auth_bytes[2..8].copy_from_slice(&bytes[2..8]);
-    let auth = u64::from_be_bytes(auth_bytes);
-    let mut subs = Vec::with_capacity(sub_count);
-    for i in 0..sub_count {
-        let start = 8 + i * 4;
-        let sub_bytes: [u8; 4] = bytes[start..start + 4].try_into().ok()?;
-        subs.push(u32::from_le_bytes(sub_bytes));
-    }
-    let mut sid_string = format!("S-{rev}-{auth}");
-    for sub in subs {
-        use std::fmt::Write as _;
-        let _ = write!(sid_string, "-{sub}");
-    }
-    Some(sid_string)
-}
-
-#[cfg(windows)]
 fn check_owner_only(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let _metadata = fs::metadata(path).map_err(|error| {
         if error.kind() == ErrorKind::NotFound {
@@ -127,9 +100,8 @@ fn check_owner_only(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    let current_sid = windows_acl::helper::current_user()
-        .and_then(|user| windows_acl::helper::name_to_sid(&user, None).ok())
-        .and_then(|bytes| sid_bytes_to_string(&bytes));
+    let current_sid = current_user_sid()
+        .ok_or("cannot inspect the canary key file (inaccessible); check `--canary-key-file`")?;
 
     let mut has_owner_allow = false;
 
@@ -137,11 +109,11 @@ fn check_owner_only(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         match entry.entry_type {
             windows_acl::acl::AceType::AccessAllow => {
                 let sid = &entry.string_sid;
-                let is_current_user = current_sid.as_deref().is_some_and(|cur| cur == sid);
+                let is_current_user = current_sid.as_str() == sid.as_str();
                 let is_system = sid == "S-1-5-18";
                 let is_admin = sid == "S-1-5-32-544";
                 if is_current_user || is_system || is_admin {
-                    if is_current_user || (current_sid.is_none() && (is_system || is_admin)) {
+                    if is_current_user {
                         has_owner_allow = true;
                     }
                 } else {
@@ -178,4 +150,45 @@ fn check_owner_only(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         );
     }
     Ok(())
+}
+
+#[cfg(windows)]
+fn current_user_sid() -> Option<String> {
+    use winsafe::{self as w, co};
+
+    let token = w::HACCESSTOKEN::GetCurrentThreadEffectiveToken();
+    let info = token
+        .GetTokenInformation(co::TOKEN_INFORMATION_CLASS::User)
+        .ok()?;
+    let w::TokenInfo::User(user) = info else {
+        return None;
+    };
+    user.User.Sid().map(|sid| sid.to_string())
+}
+#[cfg(all(test, windows))]
+#[test]
+fn effective_token_sid_matches_windows_identity() {
+    let actual =
+        current_user_sid().unwrap_or_else(|| panic!("cannot read effective Windows token SID"));
+    let output = std::process::Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-Command",
+            "[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
+        ])
+        .output();
+    let expected = match output {
+        Ok(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        }
+        Ok(output) => panic!(
+            "PowerShell could not read the current Windows SID: {}",
+            output.status
+        ),
+        Err(error) => panic!("cannot execute PowerShell to read the current Windows SID: {error}"),
+    };
+    assert!(
+        actual == expected,
+        "effective token SID must match WindowsIdentity.GetCurrent().User.Value"
+    );
 }
