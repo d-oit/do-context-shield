@@ -11,7 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Official MCP Rust SDK (`rmcp` 3.x) interoperability tests (`crates/do-context-shield-cli/tests/mcp_rmcp_interop.rs`, issue #191). Exercises `do-context-shield mcp-stdio` using the official SDK client over stdio for both modern (2026-07-28 discovery/per-request meta) and legacy (2025-11-25 initialize handshake) protocols, verifying tool enumeration, default model-facing surface restrictions, sanitize/restore/forget lifecycles, and error reporting without raw canary leakage.
 
-- Secure key-file generation (issue #190). `do-context-shield create-key --output <path>` writes a random 32-byte key in hex without printing it, refuses existing destinations, and publishes atomically. Unix files use mode `0600`; Windows applies a protected allow-list DACL before writing key material. The same command creates vault and canary keys; existing files are validated but never have permissions or ACLs changed.
+- Secure key-file generation (issue #190). `do-context-shield create-key --output <path>` writes a random 32-byte key in hex without printing it,
+  refuses existing destinations, and publishes atomically. Unix files use
+  mode `0600`; Windows supplies a protected allow-list DACL through
+  `SECURITY_ATTRIBUTES` in the initial `CREATE_NEW` operation before writing
+  key material. The same command creates vault and canary keys; existing files
+  are validated but never have permissions or ACLs changed.
 
 - Windows ACL validation for vault and canary key files (issue #190). On
   Windows, `VaultKey::from_file`, `check_key_file_permissions`, and
@@ -129,6 +134,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shell is introduced.
 
 ### Fixed
+
+- Windows key files now receive their protected allow-list DACL in the initial
+  `CREATE_NEW` call. Creation and both permission validators derive the owner
+  SID from the effective access token, eliminating account-name ambiguity and
+  the post-create `WRITE_DAC` race; unresolved token identity fails closed.
+  Windows tests compare the token SID with
+  `WindowsIdentity.GetCurrent().User.Value` and check inherited broad DACLs
+  immediately after creation.
 
 - Vault, canary, and configuration diagnostics no longer disclose filesystem
   paths or raw configured values (issue #184). `VaultKey::from_file`,

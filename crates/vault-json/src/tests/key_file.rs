@@ -106,6 +106,28 @@ fn generated_key_file_overrides_inherited_broad_permissions() {
         panic!("cannot remove ACL test probe: {error}");
     }
 
+    let initial_path = output_dir.join("initial.tmp");
+    if let Err(error) = crate::key_file::create_temporary_file_for_test(&initial_path) {
+        panic!("temporary key file was not private at creation: {error}");
+    }
+    let verify_initial_acl = format!(
+        "$ErrorActionPreference = 'Stop'; \
+         try {{ \
+             $acl = [System.IO.File]::GetAccessControl('{}'); \
+             $sddl = $acl.GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access); \
+             if (!$acl.AreAccessRulesProtected) {{ throw 'initial DACL is not protected' }} \
+             if ($sddl -match 'WD|S-1-1-0') {{ throw 'Everyone ACE was inherited at creation' }} \
+         }} catch {{ [Console]::Error.WriteLine($_.Exception.ToString()); exit 1 }}",
+        initial_path.display()
+    );
+    run_powershell(
+        &verify_initial_acl,
+        "checking temporary-file DACL at creation",
+    );
+    if let Err(error) = fs::remove_file(&initial_path) {
+        panic!("cannot remove immediate-DACL test file: {error}");
+    }
+
     let key_path = output_dir.join("vault.key");
     if let Err(error) = create_key_file(&key_path) {
         panic!("cannot create key under a broad inherited DACL: {error}");
@@ -127,6 +149,38 @@ fn generated_key_file_overrides_inherited_broad_permissions() {
     );
     run_powershell(&verify_acl, "checking generated key DACL");
     let _ = fs::remove_dir_all(root);
+}
+
+#[cfg(windows)]
+#[test]
+fn effective_token_sid_matches_windows_identity() {
+    let sid = crate::key_file::current_user_sid()
+        .unwrap_or_else(|| panic!("cannot read effective Windows token SID"));
+    assert!(
+        sid == powershell_current_user_sid(),
+        "effective token SID must match WindowsIdentity.GetCurrent().User.Value"
+    );
+}
+
+#[cfg(windows)]
+fn powershell_current_user_sid() -> String {
+    let output = std::process::Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-Command",
+            "[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
+        ])
+        .output();
+    match output {
+        Ok(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        }
+        Ok(output) => panic!(
+            "PowerShell could not read the current Windows SID: {}",
+            output.status
+        ),
+        Err(error) => panic!("cannot execute PowerShell to read the current Windows SID: {error}"),
+    }
 }
 
 #[cfg(windows)]

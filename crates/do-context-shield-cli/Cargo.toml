@@ -52,6 +52,7 @@ do-context-shield-mcp-server.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-acl = "0.3"
+winsafe = { version = "0.0.29", default-features = false, features = ["advapi"] }
 
 [dev-dependencies]
 assert_cmd = "2.2"
