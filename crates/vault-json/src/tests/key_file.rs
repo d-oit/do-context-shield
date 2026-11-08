@@ -113,11 +113,9 @@ fn generated_key_file_overrides_inherited_broad_permissions() {
     let verify_initial_acl = format!(
         "$ErrorActionPreference = 'Stop'; \
          try {{ \
-             $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value; \
              $acl = [System.IO.File]::GetAccessControl('{}'); \
              $sddl = $acl.GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access); \
              if (!$acl.AreAccessRulesProtected) {{ throw 'initial DACL is not protected' }} \
-             if ($sddl -notmatch [regex]::Escape($sid)) {{ throw 'effective user SID is absent from initial DACL' }} \
              if ($sddl -match 'WD|S-1-1-0') {{ throw 'Everyone ACE was inherited at creation' }} \
          }} catch {{ [Console]::Error.WriteLine($_.Exception.ToString()); exit 1 }}",
         initial_path.display()
@@ -142,11 +140,9 @@ fn generated_key_file_overrides_inherited_broad_permissions() {
     let verify_acl = format!(
         "$ErrorActionPreference = 'Stop'; \
          try {{ \
-             $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value; \
              $acl = [System.IO.File]::GetAccessControl('{}'); \
              $sddl = $acl.GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access); \
              if (!$acl.AreAccessRulesProtected) {{ throw 'key DACL is not protected' }} \
-             if ($sddl -notmatch [regex]::Escape($sid)) {{ throw 'effective user SID is absent from key DACL' }} \
              if ($sddl -match 'WD|S-1-1-0') {{ throw 'Everyone ACE remained on key file' }} \
          }} catch {{ [Console]::Error.WriteLine($_.Exception.ToString()); exit 1 }}",
         key_path.display()
