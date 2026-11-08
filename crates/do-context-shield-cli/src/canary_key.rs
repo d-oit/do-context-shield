@@ -103,6 +103,14 @@ fn sid_bytes_to_string(bytes: &[u8]) -> Option<String> {
 
 #[cfg(windows)]
 fn check_owner_only(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let _metadata = fs::metadata(path).map_err(|error| {
+        if error.kind() == ErrorKind::NotFound {
+            "canary key file does not exist; check the path given to `--canary-key-file`".to_owned()
+        } else {
+            "cannot inspect the canary key file (inaccessible); check `--canary-key-file`"
+                .to_owned()
+        }
+    })?;
     let path_str = path
         .to_str()
         .ok_or("cannot read the canary key file (not valid UTF-8)")?;

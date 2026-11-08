@@ -26,7 +26,7 @@ case "$mode" in
       '{"entities":[{"kind":"email","start":0,"end":5}]}'
     # Stay alive so the driver's exit grace expires and it terminates the
     # child deterministically, instead of racing SIGPIPE on a closed pipe.
-    exec sleep 30 ;;
+    sleep 30 ;;
   detect-clean)    printf '%s\n' '{"entities":[],"text":""}' ;;
   # policy
   plan-ok)      printf '%s\n' '{"plan":[{"index":0,"action":"pseudonymize"}]}' ;;
@@ -99,7 +99,7 @@ case "$mode" in
   junk)  printf '%s\n' 'not json' ;;
   empty) : ;;
   exit)  exit 3 ;;
-  hang)  exec sleep 30 ;;
+  hang)  sleep 30 ;;
   # First call fails, later calls in the same test succeed: a hostile request
   # must not poison the next invocation (each call starts a fresh child).
   counter)

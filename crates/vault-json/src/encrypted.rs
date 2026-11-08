@@ -145,6 +145,7 @@ fn sid_bytes_to_string(bytes: &[u8]) -> Option<String> {
 
 #[cfg(windows)]
 pub(super) fn check_key_file_permissions(path: &Path) -> Result<(), VaultError> {
+    fs::metadata(path).map_err(|error| key_file_read_error(&error))?;
     let path_str = path.to_str().ok_or_else(|| {
         VaultError::Message("cannot read the vault key file (not valid UTF-8)".to_owned())
     })?;
