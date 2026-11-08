@@ -180,10 +180,13 @@ fn windows_canary_key_file_acl_validation() {
     }
     let null_dacl = key_file(&dir, "null_dacl.key", &canary_hex());
     let ps_null_dacl = format!(
-        "$sec = New-Object System.Security.AccessControl.FileSecurity; \
+        "$ErrorActionPreference = 'Stop'; \
+         try {{ \
+             $sec = New-Object System.Security.AccessControl.FileSecurity; \
              $sec.SetSecurityDescriptorBinaryForm([byte[]]@(1,0,4,128,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0), \
              [System.Security.AccessControl.AccessControlSections]::Access); \
-             [System.IO.File]::SetAccessControl('{}', $sec)",
+             [System.IO.File]::SetAccessControl('{}', $sec) \
+         }} catch {{ [Console]::Error.WriteLine($_.Exception.ToString()); exit 1 }}",
         null_dacl.display()
     );
     let status = std::process::Command::new("powershell")
@@ -212,10 +215,16 @@ fn windows_canary_key_file_acl_validation() {
     // Regression: owner allow + Everyone callback allow must fail closed.
     let callback_dacl = key_file(&dir, "callback_dacl.key", &canary_hex());
     let ps_callback = format!(
-        "$sddl = 'D:P(A;;FA;;;OW)(XA;;FR;;;WD)'; \
+        "$ErrorActionPreference = 'Stop'; \
+         try {{ \
+             $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value; \
+             $sddl = \"D:P(A;;FA;;;$sid)(XA;;FR;;;WD;(Member_of {{SID(S-1-1-0)}}))\"; \
              $sec = New-Object System.Security.AccessControl.FileSecurity; \
              $sec.SetSecurityDescriptorSddlForm($sddl); \
-             [System.IO.File]::SetAccessControl('{}', $sec)",
+             [System.IO.File]::SetAccessControl('{}', $sec); \
+             if ((Get-Acl -LiteralPath '{}').Sddl -notmatch 'XA') {{ throw 'callback ACE missing after ACL write' }} \
+         }} catch {{ [Console]::Error.WriteLine($_.Exception.ToString()); exit 1 }}",
+        callback_dacl.display(),
         callback_dacl.display()
     );
     let status = std::process::Command::new("powershell")

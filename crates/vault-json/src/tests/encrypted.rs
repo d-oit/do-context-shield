@@ -381,64 +381,76 @@ fn error_diagnostics_omit_paths_keys_and_ciphertext() {
 fn windows_key_file_acl_validation() {
     let root = temp_path();
     let dir = root.join("win-acl-test");
-    fs::create_dir_all(&dir).ok();
+    if let Err(error) = fs::create_dir_all(&dir) {
+        panic!("cannot create Windows ACL test directory: {error}");
+    }
     let key_path = dir.join("vault.key");
-    if fs::write(&key_path, "ab".repeat(32)).is_ok() {
-        match VaultKey::from_file(&key_path) {
-            Ok(_) => {}
-            Err(error) => assert!(error.to_string().contains("permissions")),
-        }
+    if let Err(error) = fs::write(&key_path, "ab".repeat(32)) {
+        panic!("cannot write Windows ACL test key file: {error}");
+    }
+    match VaultKey::from_file(&key_path) {
+        Ok(_) => {}
+        Err(error) => assert!(error.to_string().contains("permissions")),
+    }
 
-        // Regression: a NULL DACL grants full access to everyone and must be rejected.
-        let ps_null_dacl = format!(
-            "$sec = New-Object System.Security.AccessControl.FileSecurity; \
+    // Regression: a NULL DACL grants full access to everyone and must be rejected.
+    let ps_null_dacl = format!(
+        "$ErrorActionPreference = 'Stop'; \
+         try {{ \
+             $sec = New-Object System.Security.AccessControl.FileSecurity; \
              $sec.SetSecurityDescriptorBinaryForm([byte[]]@(1,0,4,128,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0), \
              [System.Security.AccessControl.AccessControlSections]::Access); \
-             [System.IO.File]::SetAccessControl('{}', $sec)",
-            key_path.display()
-        );
-        let status = std::process::Command::new("powershell")
-            .args(["-NoProfile", "-Command", &ps_null_dacl])
-            .status();
-        match status {
-            Ok(s) => assert!(s.success(), "powershell failed to configure NULL-DACL: {s}"),
-            Err(e) => panic!("cannot execute powershell for NULL-DACL test: {e}"),
-        }
-        let null_dacl_res = VaultKey::from_file(&key_path);
-        match null_dacl_res {
-            Ok(_) => panic!("NULL DACL key file must be rejected"),
-            Err(e) => assert!(
-                e.to_string().contains("permissions"),
-                "expected permissions error on NULL DACL, got: {e}"
-            ),
-        }
+             [System.IO.File]::SetAccessControl('{}', $sec) \
+         }} catch {{ [Console]::Error.WriteLine($_.Exception.ToString()); exit 1 }}",
+        key_path.display()
+    );
+    let status = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-Command", &ps_null_dacl])
+        .status();
+    match status {
+        Ok(s) => assert!(s.success(), "powershell failed to configure NULL-DACL: {s}"),
+        Err(e) => panic!("cannot execute powershell for NULL-DACL test: {e}"),
+    }
+    let null_dacl_res = VaultKey::from_file(&key_path);
+    match null_dacl_res {
+        Ok(_) => panic!("NULL DACL key file must be rejected"),
+        Err(e) => assert!(
+            e.to_string().contains("permissions"),
+            "expected permissions error on NULL DACL, got: {e}"
+        ),
+    }
 
-        // Regression: owner allow + Everyone callback allow must fail closed.
-        let ps_callback = format!(
-            "$sddl = 'D:P(A;;FA;;;OW)(XA;;FR;;;WD)'; \
+    // Regression: owner allow + Everyone callback allow must fail closed.
+    let ps_callback = format!(
+        "$ErrorActionPreference = 'Stop'; \
+         try {{ \
+             $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value; \
+             $sddl = \"D:P(A;;FA;;;$sid)(XA;;FR;;;WD;(Member_of {{SID(S-1-1-0)}}))\"; \
              $sec = New-Object System.Security.AccessControl.FileSecurity; \
              $sec.SetSecurityDescriptorSddlForm($sddl); \
-             [System.IO.File]::SetAccessControl('{}', $sec)",
-            key_path.display()
-        );
-        let status = std::process::Command::new("powershell")
-            .args(["-NoProfile", "-Command", &ps_callback])
-            .status();
-        match status {
-            Ok(s) => assert!(
-                s.success(),
-                "powershell failed to configure callback allow: {s}"
-            ),
-            Err(e) => panic!("cannot execute powershell for callback allow test: {e}"),
-        }
-        let callback_res = VaultKey::from_file(&key_path);
-        match callback_res {
-            Ok(_) => panic!("callback grant key file must be rejected"),
-            Err(e) => assert!(
-                e.to_string().contains("permissions"),
-                "expected permissions error on callback allow, got: {e}"
-            ),
-        }
+             [System.IO.File]::SetAccessControl('{}', $sec); \
+             if ((Get-Acl -LiteralPath '{}').Sddl -notmatch 'XA') {{ throw 'callback ACE missing after ACL write' }} \
+         }} catch {{ [Console]::Error.WriteLine($_.Exception.ToString()); exit 1 }}",
+        key_path.display(),
+        key_path.display()
+    );
+    let status = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-Command", &ps_callback])
+        .status();
+    match status {
+        Ok(s) => assert!(
+            s.success(),
+            "powershell failed to configure callback allow: {s}"
+        ),
+        Err(e) => panic!("cannot execute powershell for callback allow test: {e}"),
+    }
+    let callback_res = VaultKey::from_file(&key_path);
+    match callback_res {
+        Ok(_) => panic!("callback grant key file must be rejected"),
+        Err(e) => assert!(
+            e.to_string().contains("permissions"),
+            "expected permissions error on callback allow, got: {e}"
+        ),
     }
     cleanup(&key_path);
     fs::remove_dir_all(&root).ok();

@@ -11,11 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Official MCP Rust SDK (`rmcp` 3.x) interoperability tests (`crates/do-context-shield-cli/tests/mcp_rmcp_interop.rs`, issue #191). Exercises `do-context-shield mcp-stdio` using the official SDK client over stdio for both modern (2026-07-28 discovery/per-request meta) and legacy (2025-11-25 initialize handshake) protocols, verifying tool enumeration, default model-facing surface restrictions, sanitize/restore/forget lifecycles, and error reporting without raw canary leakage.
 
-- Windows ACL validation for vault and canary key files (issue #190). On Windows,
-  `VaultKey::from_file`, `check_key_file_permissions`, and `read_canary_key`
-  validate the key file's DACL to ensure only the current user, SYSTEM, and
-  Built-in Administrators have access; broad access (Everyone, Users, Guests)
-  fails closed with a path-free, non-sensitive diagnostic.
+- Windows ACL validation for vault and canary key files (issue #190). On
+  Windows, `VaultKey::from_file`, `check_key_file_permissions`, and
+  `read_canary_key` validate the key file's DACL to ensure only the current
+  user, SYSTEM, and Built-in Administrators have access; broad access
+  (Everyone, Users, Guests), NULL DACLs, callback/object ACEs, and unsupported
+  ACE types fail closed with a path-free, non-sensitive diagnostic.
 
 - MCP stdio conformance gate (`scripts/check-mcp-conformance.sh`, `mcp-conformance`
   CI job, issue #181). The pinned MCP Inspector CLI (2.13.0, Node 22) runs over

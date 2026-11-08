@@ -32,7 +32,12 @@ fn key_hex_round_trips_and_rejects_bad_input() {
         Ok(parsed) => parsed,
         Err(error) => panic!("unexpected error: {error}"),
     };
-    assert_eq!(parsed.0, [0xab; KEY_BYTES]);
+    let expected = VaultKey::new([0xab; KEY_BYTES]);
+    let decrypted = match decrypt(envelope(b"hex key check", &expected), &parsed) {
+        Ok(plaintext) => plaintext,
+        Err(error) => panic!("parsed hex key did not match the expected bytes: {error}"),
+    };
+    assert_eq!(decrypted, b"hex key check");
 
     // Surrounding whitespace is tolerated; a wrong length or character is not.
     assert!(VaultKey::from_hex(&format!("  {}  \n", "0f".repeat(KEY_BYTES))).is_ok());

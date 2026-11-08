@@ -486,9 +486,9 @@
     "category": "security"
   },
   {
-    "invariant": "Vault and canary key files require owner-only permissions on Unix (mode 0600) and restrictive DACLs on Windows (current user, SYSTEM, Administrators only); any broad access (Everyone, Users, Guests) or unreadable file fails closed with a path-free diagnostic",
-    "rationale": "An encryption or canary key readable by other local users on the machine allows unauthorized decryption of stored mappings or forgery of egress canary tokens",
-    "sensor": "crates/vault-json tests: key_files_are_read_and_permission_checked, error_diagnostics_omit_paths_keys_and_ciphertext + crates/do-context-shield-cli/tests/cli_canary.rs: group_or_world_readable_key_is_refused, key_file_diagnostics_never_echo_the_path + cargo clippy --target x86_64-pc-windows-gnu",
+    "invariant": "Vault and canary key files require owner-only permissions on Unix (mode 0600) and restrictive DACLs on Windows (current user, SYSTEM, Administrators only); broad access, NULL DACLs, callback/object/unknown ACEs that can grant access, or unreadable files fail closed with a path-free diagnostic",
+    "rationale": "An encryption or canary key readable by other local users on the machine allows unauthorized decryption of stored mappings or forgery of egress canary tokens; unsupported ACE forms and NULL DACLs must not bypass the DACL policy",
+    "sensor": "crates/vault-json tests: key_files_are_read_and_permission_checked, error_diagnostics_omit_paths_keys_and_ciphertext, windows_key_file_acl_validation + crates/do-context-shield-cli/tests/cli_canary.rs: group_or_world_readable_key_is_refused, key_file_diagnostics_never_echo_the_path, windows_canary_key_file_acl_validation + cargo clippy --target x86_64-pc-windows-gnu",
     "category": "security"
   },
   {

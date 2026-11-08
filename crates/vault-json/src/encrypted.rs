@@ -31,7 +31,7 @@ const ASSOCIATED_DATA: &[u8] = b"do-context-shield-json-vault:v2";
 ///
 /// Deliberately has no `Debug` implementation, so a key cannot be formatted
 /// into a log line or an error by accident.
-pub struct VaultKey(pub(crate) [u8; KEY_BYTES]);
+pub struct VaultKey([u8; KEY_BYTES]);
 
 impl VaultKey {
     /// Wrap raw key bytes.
@@ -43,15 +43,15 @@ impl VaultKey {
     /// Read a key from a file holding exactly 64 hex characters.
     ///
     /// Surrounding whitespace (for example a trailing newline) is ignored. On
-    /// Unix the file must not be readable or writable by group or others;
-    /// elsewhere the permission check is skipped because the platform has no
-    /// equivalent mode.
+    /// Unix the file must not be readable or writable by group or others; on
+    /// Windows its DACL must restrict allow ACEs to the current user, SYSTEM,
+    /// and Built-in Administrators. Other platforms skip the permission check.
     ///
     /// # Errors
     ///
-    /// Returns [`VaultError`] when the file cannot be read, is accessible
-    /// beyond its owner (Unix), or does not hold exactly 32 hex-encoded bytes.
-    /// The message names only the operation and failure class: never the
+    /// Returns [`VaultError`] when the file cannot be read, violates its
+    /// platform's permission policy, or does not hold exactly 32 hex-encoded
+    /// bytes. The message names only the operation and failure class: never the
     /// resolved path, the OS error text, or any key material.
     pub fn from_file(path: &Path) -> Result<Self, VaultError> {
         #[cfg(any(unix, windows))]
@@ -186,12 +186,20 @@ pub(super) fn check_key_file_permissions(path: &Path) -> Result<(), VaultError> 
                     ));
                 }
             }
-            windows_acl::acl::AceType::AccessDeny => {
-                // Deny entries do not grant permissions to other users.
+            windows_acl::acl::AceType::AccessDeny
+            | windows_acl::acl::AceType::AccessDenyCallback
+            | windows_acl::acl::AceType::AccessDenyObject
+            | windows_acl::acl::AceType::AccessDenyCallbackObject
+            | windows_acl::acl::AceType::SystemAudit
+            | windows_acl::acl::AceType::SystemAuditCallback
+            | windows_acl::acl::AceType::SystemAuditObject
+            | windows_acl::acl::AceType::SystemAuditCallbackObject
+            | windows_acl::acl::AceType::SystemMandatoryLabel
+            | windows_acl::acl::AceType::SystemResourceAttribute => {
+                // Deny entries and SACL metadata do not grant access.
             }
-            // Fail closed on callback allows, object allows, and unknown ACE types:
-            // they can grant access to unauthorized principals or bypass normal owner checks.
             _ => {
+                // Fail closed on callback allows, object allows, and unknown ACE types.
                 return Err(VaultError::Message(
                     "vault key file permissions must be owner-only; in Windows, restrict ACLs to the current user (the path is passed as `--vault-key-file` or `DO_CONTEXT_SHIELD_VAULT_KEY_FILE`)"
                         .to_owned(),

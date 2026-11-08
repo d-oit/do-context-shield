@@ -105,7 +105,7 @@ pub(crate) struct SanitizeArgs {
     #[command(flatten)]
     pub(crate) audit: AuditArgs,
     /// Append a keyed canary marker (HMAC-SHA256 over the session) to the output.
-    /// The key file holds 64 hex characters and must be owner-only on Unix.
+    /// The key must be owner-only on Unix or have a restrictive DACL on Windows.
     #[arg(long)]
     pub(crate) canary_key_file: Option<PathBuf>,
 }
@@ -242,7 +242,7 @@ pub(crate) struct VerifyCanaryArgs {
     /// Session scope the marker was issued for.
     #[arg(long)]
     pub(crate) session: String,
-    /// Canary key file (64 hex characters, owner-only on Unix).
+    /// Canary key file (64 hex characters; owner-only on Unix, restrictive DACL on Windows).
     #[arg(long)]
     pub(crate) canary_key_file: PathBuf,
 }

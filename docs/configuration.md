@@ -259,8 +259,11 @@ version, the cipher name, the nonce, and the ciphertext, so original values are
 never on disk in the clear.
 
 - The key file holds exactly 64 hex characters (`openssl rand -hex 32` writes
-  one). On Unix it must not be readable or writable by group or others —
-  `chmod 600` — and the tool refuses a key file that is.
+  one). On Unix it must not be readable or writable by group or others
+  (`chmod 600`). On Windows, its DACL must restrict allow ACEs to the current
+  user, SYSTEM, and Built-in Administrators; broad allow ACEs, a NULL DACL, or
+  callback, object, and other unsupported ACE types fail closed. The canary
+  key file uses the same platform-specific permission checks.
 - `--vault-key-file <path>`, `DO_CONTEXT_SHIELD_VAULT_KEY_FILE`, or
   `[vault] vault_key_file` select it; it requires a `vault_file`.
 - A plaintext vault with a key configured is **not** rewritten silently: the

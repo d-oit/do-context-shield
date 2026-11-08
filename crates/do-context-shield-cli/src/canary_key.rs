@@ -3,7 +3,7 @@
 //! The canary key is deliberately separate from the vault key: a leaked canary
 //! key must not expose vault ciphertext, and rotating one must not rotate the
 //! other. The file format matches the vault key (64 hex characters) and the
-//! same owner-only permission rule applies on Unix.
+//! same platform-specific permission policy applies.
 //!
 //! Diagnostics name the operation and a safe failure class only. The resolved
 //! path can disclose a username, a project name, or a mounted-secret location,
@@ -20,9 +20,10 @@ use do_context_shield_core::canary::MIN_KEY_BYTES;
 ///
 /// # Errors
 ///
-/// Returns an error when the file is unreadable, accessible beyond its owner
-/// (Unix), or does not hold exactly `MIN_KEY_BYTES * 2` hex characters. The
-/// message names the failure class, never the path, key text, or OS error text.
+/// Returns an error when the file is unreadable, violates its Unix mode or
+/// Windows DACL policy, or does not hold exactly `MIN_KEY_BYTES * 2` hex
+/// characters. The message names the failure class, never the path, key text,
+/// or OS error text.
 pub(crate) fn read_canary_key(path: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     #[cfg(any(unix, windows))]
     check_owner_only(path)?;
@@ -150,8 +151,17 @@ fn check_owner_only(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                     );
                 }
             }
-            windows_acl::acl::AceType::AccessDeny => {
-                // Deny entries do not grant permissions to other users.
+            windows_acl::acl::AceType::AccessDeny
+            | windows_acl::acl::AceType::AccessDenyCallback
+            | windows_acl::acl::AceType::AccessDenyObject
+            | windows_acl::acl::AceType::AccessDenyCallbackObject
+            | windows_acl::acl::AceType::SystemAudit
+            | windows_acl::acl::AceType::SystemAuditCallback
+            | windows_acl::acl::AceType::SystemAuditObject
+            | windows_acl::acl::AceType::SystemAuditCallbackObject
+            | windows_acl::acl::AceType::SystemMandatoryLabel
+            | windows_acl::acl::AceType::SystemResourceAttribute => {
+                // Deny entries and SACL metadata do not grant access.
             }
             _ => {
                 return Err(
