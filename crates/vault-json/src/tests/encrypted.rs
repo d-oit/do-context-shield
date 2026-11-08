@@ -384,8 +384,10 @@ fn windows_key_file_acl_validation() {
     fs::create_dir_all(&dir).ok();
     let key_path = dir.join("vault.key");
     if fs::write(&key_path, "ab".repeat(32)).is_ok() {
-        let res = VaultKey::from_file(&key_path);
-        assert!(res.is_ok() || res.unwrap_err().to_string().contains("permissions"));
+        match VaultKey::from_file(&key_path) {
+            Ok(_) => {}
+            Err(error) => assert!(error.to_string().contains("permissions")),
+        }
     }
     cleanup(&key_path);
     fs::remove_dir_all(&root).ok();
