@@ -133,18 +133,29 @@ fn check_owner_only(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut has_owner_allow = false;
 
     for entry in entries {
-        if entry.entry_type == windows_acl::acl::AceType::AccessAllow {
-            let sid = &entry.string_sid;
-            let is_current_user = current_sid.as_deref().is_some_and(|cur| cur == sid);
-            let is_system = sid == "S-1-5-18";
-            let is_admin = sid == "S-1-5-32-544";
-            if is_current_user || is_system || is_admin {
-                if is_current_user || (current_sid.is_none() && (is_system || is_admin)) {
-                    has_owner_allow = true;
+        match entry.entry_type {
+            windows_acl::acl::AceType::AccessAllow => {
+                let sid = &entry.string_sid;
+                let is_current_user = current_sid.as_deref().is_some_and(|cur| cur == sid);
+                let is_system = sid == "S-1-5-18";
+                let is_admin = sid == "S-1-5-32-544";
+                if is_current_user || is_system || is_admin {
+                    if is_current_user || (current_sid.is_none() && (is_system || is_admin)) {
+                        has_owner_allow = true;
+                    }
+                } else {
+                    return Err(
+                        "canary key file is accessible beyond its owner; restrict it to the current user in Windows"
+                            .into(),
+                    );
                 }
-            } else {
+            }
+            windows_acl::acl::AceType::AccessDeny => {
+                // Deny entries do not grant permissions to other users.
+            }
+            _ => {
                 return Err(
-                    "canary key file is accessible beyond its owner; restrict it with `chmod 600`"
+                    "canary key file is accessible beyond its owner; restrict it to the current user in Windows"
                         .into(),
                 );
             }

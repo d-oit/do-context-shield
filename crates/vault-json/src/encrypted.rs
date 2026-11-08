@@ -169,16 +169,29 @@ pub(super) fn check_key_file_permissions(path: &Path) -> Result<(), VaultError> 
     let mut has_owner_allow = false;
 
     for entry in entries {
-        if entry.entry_type == windows_acl::acl::AceType::AccessAllow {
-            let sid = &entry.string_sid;
-            let is_current_user = current_sid.as_deref().is_some_and(|cur| cur == sid);
-            let is_system = sid == "S-1-5-18";
-            let is_admin = sid == "S-1-5-32-544";
-            if is_current_user || is_system || is_admin {
-                if is_current_user || (current_sid.is_none() && (is_system || is_admin)) {
-                    has_owner_allow = true;
+        match entry.entry_type {
+            windows_acl::acl::AceType::AccessAllow => {
+                let sid = &entry.string_sid;
+                let is_current_user = current_sid.as_deref().is_some_and(|cur| cur == sid);
+                let is_system = sid == "S-1-5-18";
+                let is_admin = sid == "S-1-5-32-544";
+                if is_current_user || is_system || is_admin {
+                    if is_current_user || (current_sid.is_none() && (is_system || is_admin)) {
+                        has_owner_allow = true;
+                    }
+                } else {
+                    return Err(VaultError::Message(
+                        "vault key file permissions must be owner-only; in Windows, restrict ACLs to the current user (the path is passed as `--vault-key-file` or `DO_CONTEXT_SHIELD_VAULT_KEY_FILE`)"
+                            .to_owned(),
+                    ));
                 }
-            } else {
+            }
+            windows_acl::acl::AceType::AccessDeny => {
+                // Deny entries do not grant permissions to other users.
+            }
+            // Fail closed on callback allows, object allows, and unknown ACE types:
+            // they can grant access to unauthorized principals or bypass normal owner checks.
+            _ => {
                 return Err(VaultError::Message(
                     "vault key file permissions must be owner-only; in Windows, restrict ACLs to the current user (the path is passed as `--vault-key-file` or `DO_CONTEXT_SHIELD_VAULT_KEY_FILE`)"
                         .to_owned(),

@@ -167,36 +167,83 @@ fn key_file_diagnostics_never_echo_the_path() {
         assert!(stderr.contains("chmod 600"), "{stderr}");
         assert!(!stderr.contains(canary), "key path leaked: {stderr}");
     }
-    #[cfg(windows)]
-    {
-        let null_dacl = key_file(&dir, "null_dacl.key", &canary_hex());
-        let ps_null_dacl = format!(
-            "$sec = New-Object System.Security.AccessControl.FileSecurity; \
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_canary_key_file_acl_validation() {
+    let tmp = temp_dir();
+    let canary = "canary-keydir-do-not-print";
+    let dir = tmp.path().join(canary);
+    if let Err(error) = std::fs::create_dir_all(&dir) {
+        panic!("cannot create a temp directory: {error}");
+    }
+    let null_dacl = key_file(&dir, "null_dacl.key", &canary_hex());
+    let ps_null_dacl = format!(
+        "$sec = New-Object System.Security.AccessControl.FileSecurity; \
              $sec.SetSecurityDescriptorBinaryForm([byte[]]@(1,0,4,128,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0), \
              [System.Security.AccessControl.AccessControlSections]::Access); \
              [System.IO.File]::SetAccessControl('{}', $sec)",
-            null_dacl.display()
-        );
-        let applied = std::process::Command::new("powershell")
-            .args(["-NoProfile", "-Command", &ps_null_dacl])
-            .status()
-            .is_ok_and(|s| s.success());
-        if applied {
-            let output = cmd(tmp.path())
-                .args(["verify-canary", "--session", "s", "--canary-key-file"])
-                .arg(&null_dacl)
-                .write_stdin("x")
-                .output();
-            let Ok(output) = output else {
-                panic!("cannot run verify-canary");
-            };
-            assert!(!output.status.success(), "a NULL DACL key file must fail");
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            assert!(
-                stderr.contains("restrict it to the current user"),
-                "expected owner restriction error, got: {stderr}"
-            );
-            assert!(!stderr.contains(canary), "key path leaked: {stderr}");
-        }
+        null_dacl.display()
+    );
+    let status = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-Command", &ps_null_dacl])
+        .status();
+    match status {
+        Ok(s) => assert!(s.success(), "powershell failed to configure NULL-DACL: {s}"),
+        Err(e) => panic!("cannot execute powershell for NULL-DACL test: {e}"),
     }
+    let output = cmd(tmp.path())
+        .args(["verify-canary", "--session", "s", "--canary-key-file"])
+        .arg(&null_dacl)
+        .write_stdin("x")
+        .output();
+    let Ok(output) = output else {
+        panic!("cannot run verify-canary");
+    };
+    assert!(!output.status.success(), "a NULL DACL key file must fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("restrict it to the current user"),
+        "expected owner restriction error on NULL DACL, got: {stderr}"
+    );
+    assert!(!stderr.contains(canary), "key path leaked: {stderr}");
+
+    // Regression: owner allow + Everyone callback allow must fail closed.
+    let callback_dacl = key_file(&dir, "callback_dacl.key", &canary_hex());
+    let ps_callback = format!(
+        "$sddl = 'D:P(A;;FA;;;OW)(XA;;FR;;;WD)'; \
+             $sec = New-Object System.Security.AccessControl.FileSecurity; \
+             $sec.SetSecurityDescriptorSddlForm($sddl); \
+             [System.IO.File]::SetAccessControl('{}', $sec)",
+        callback_dacl.display()
+    );
+    let status = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-Command", &ps_callback])
+        .status();
+    match status {
+        Ok(s) => assert!(
+            s.success(),
+            "powershell failed to configure callback allow: {s}"
+        ),
+        Err(e) => panic!("cannot execute powershell for callback allow test: {e}"),
+    }
+    let output = cmd(tmp.path())
+        .args(["verify-canary", "--session", "s", "--canary-key-file"])
+        .arg(&callback_dacl)
+        .write_stdin("x")
+        .output();
+    let Ok(output) = output else {
+        panic!("cannot run verify-canary");
+    };
+    assert!(
+        !output.status.success(),
+        "callback grant key file must fail"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("restrict it to the current user"),
+        "expected owner restriction error on callback allow, got: {stderr}"
+    );
+    assert!(!stderr.contains(canary), "key path leaked: {stderr}");
 }

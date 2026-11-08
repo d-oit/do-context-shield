@@ -397,25 +397,47 @@ fn windows_key_file_acl_validation() {
              [System.IO.File]::SetAccessControl('{}', $sec)",
             key_path.display()
         );
-        if let Ok(status) = std::process::Command::new("powershell")
+        let status = std::process::Command::new("powershell")
             .args(["-NoProfile", "-Command", &ps_null_dacl])
-            .status()
-        {
-            if status.success() {
-                let null_dacl_res = VaultKey::from_file(&key_path);
-                assert!(
-                    null_dacl_res.is_err(),
-                    "NULL DACL key file must be rejected"
-                );
-                let err_msg = match null_dacl_res {
-                    Err(e) => e.to_string(),
-                    Ok(_) => String::new(),
-                };
-                assert!(
-                    err_msg.contains("permissions"),
-                    "expected permissions error on NULL DACL, got: {err_msg}"
-                );
-            }
+            .status();
+        match status {
+            Ok(s) => assert!(s.success(), "powershell failed to configure NULL-DACL: {s}"),
+            Err(e) => panic!("cannot execute powershell for NULL-DACL test: {e}"),
+        }
+        let null_dacl_res = VaultKey::from_file(&key_path);
+        match null_dacl_res {
+            Ok(_) => panic!("NULL DACL key file must be rejected"),
+            Err(e) => assert!(
+                e.to_string().contains("permissions"),
+                "expected permissions error on NULL DACL, got: {e}"
+            ),
+        }
+
+        // Regression: owner allow + Everyone callback allow must fail closed.
+        let ps_callback = format!(
+            "$sddl = 'D:P(A;;FA;;;OW)(XA;;FR;;;WD)'; \
+             $sec = New-Object System.Security.AccessControl.FileSecurity; \
+             $sec.SetSecurityDescriptorSddlForm($sddl); \
+             [System.IO.File]::SetAccessControl('{}', $sec)",
+            key_path.display()
+        );
+        let status = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps_callback])
+            .status();
+        match status {
+            Ok(s) => assert!(
+                s.success(),
+                "powershell failed to configure callback allow: {s}"
+            ),
+            Err(e) => panic!("cannot execute powershell for callback allow test: {e}"),
+        }
+        let callback_res = VaultKey::from_file(&key_path);
+        match callback_res {
+            Ok(_) => panic!("callback grant key file must be rejected"),
+            Err(e) => assert!(
+                e.to_string().contains("permissions"),
+                "expected permissions error on callback allow, got: {e}"
+            ),
         }
     }
     cleanup(&key_path);
