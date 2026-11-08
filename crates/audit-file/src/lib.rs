@@ -69,6 +69,7 @@ impl Retention {
 
     /// Drop zero bounds: `Some(0)` cannot hold even one record, so it is
     /// treated as "unset" rather than rotating on every write.
+    #[cfg_attr(not(unix), allow(dead_code))]
     fn sanitized(self) -> Self {
         Self {
             max_records: self.max_records.filter(|max| *max > 0),

@@ -12,8 +12,10 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 mod encrypted;
+mod key_file;
 
 pub use encrypted::VaultKey;
+pub use key_file::create_key_file;
 
 /// How vault state is stored on disk.
 enum Format {
@@ -379,7 +381,7 @@ fn restricted_file(path: &std::path::Path) -> Result<File, VaultError> {
 // On non-Unix there is no fallible operation to run — the documented behavior
 // is a no-op — while the signature must stay `Result` on every platform, so
 // the lint is scoped off for the no-op compilation only.
-#[cfg_attr(not(unix), allow(clippy::unnecessary_wraps))]
+#[cfg_attr(not(any(unix, windows)), allow(clippy::unnecessary_wraps))]
 fn restrict_permissions(path: &std::path::Path) -> Result<(), VaultError> {
     #[cfg(unix)]
     {
@@ -387,7 +389,11 @@ fn restrict_permissions(path: &std::path::Path) -> Result<(), VaultError> {
         fs::set_permissions(path, fs::Permissions::from_mode(0o600))
             .map_err(|error| io_error(&error))?;
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        encrypted::check_key_file_permissions(path)?;
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = path;
     }

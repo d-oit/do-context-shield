@@ -2,9 +2,9 @@
 
 use clap::Parser;
 use cli::{
-    Cli, Command, ConfigArgs, ContextArgs, DetectorSelection, DoctorArgs, EncryptVaultArgs,
-    ForgetArgs, InspectArgs, InspectOutput, McpArgs, PipelineSelection, RestoreArgs, SanitizeArgs,
-    VaultArgs, VaultSelection, VerifyAuditArgs,
+    Cli, Command, ConfigArgs, ContextArgs, DetectorSelection, DoctorArgs, ForgetArgs, InspectArgs,
+    InspectOutput, McpArgs, PipelineSelection, RestoreArgs, SanitizeArgs, VaultArgs,
+    VaultSelection,
 };
 use do_context_shield_core::canary::{canary_marker, verify_canary};
 use do_context_shield_plugin_api::ScopeId;
@@ -13,6 +13,7 @@ use std::io::{self, Read, Write};
 mod canary_key;
 mod cli;
 mod config;
+mod file_commands;
 mod pipeline;
 
 use pipeline::{build_pipeline, inspect_pipeline, vault_pipeline};
@@ -33,9 +34,10 @@ fn run_simple(command: Command, config: &config::Config) -> Result<(), Box<dyn s
         Command::McpStdio(args) => run_mcp(args, config)?,
         Command::Doctor(args) => run_doctor(args, config)?,
         Command::Config(args) => run_config(args, config)?,
-        Command::EncryptVault(args) => run_encrypt_vault(&args)?,
+        Command::CreateKey(args) => file_commands::create_key(&args)?,
+        Command::EncryptVault(args) => file_commands::encrypt_vault(&args)?,
         Command::VerifyCanary(args) => run_verify_canary(&args)?,
-        Command::VerifyAudit(args) => run_verify_audit(&args)?,
+        Command::VerifyAudit(args) => file_commands::verify_audit(&args)?,
     }
     io::stdout().flush()?;
     Ok(())
@@ -234,40 +236,6 @@ fn run_mcp(args: McpArgs, config: &config::Config) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
-/// Verify a local audit chain (`verify-audit`).
-///
-/// Reports only safe metadata (format marker, record count, failing index and
-/// category). Exits 0 when no integrity failure was found — `verified`, `empty`,
-/// or a recognized legacy v1 file, which is never upgraded — and 1 on any
-/// verification failure.
-///
-/// # Errors
-///
-/// Returns an error when the report cannot be serialized, stdout cannot be
-/// flushed, or the file cannot be read.
-fn run_verify_audit(args: &VerifyAuditArgs) -> Result<(), Box<dyn std::error::Error>> {
-    let report = do_context_shield_audit_file::verify_file(&args.audit_file)?;
-    if args.format == "json" {
-        println!(
-            "{}",
-            serde_json::json!({
-                "format": report.format(),
-                "records": report.records(),
-                "record_index": report.record_index(),
-                "category": report.category(),
-                "ok": report.is_ok(),
-            })
-        );
-    } else {
-        println!("{report}");
-    }
-    io::stdout().flush()?;
-    if !report.is_ok() {
-        std::process::exit(1);
-    }
-    Ok(())
-}
-
 /// One `doctor` report: stable fields for scripts, fixed guidance only.
 #[derive(serde::Serialize)]
 struct DoctorReport {
@@ -448,26 +416,23 @@ fn run_config(args: ConfigArgs, config: &config::Config) -> Result<(), Box<dyn s
     Ok(())
 }
 
-/// Rewrite an existing plaintext JSON vault in the encrypted format.
-///
-/// Both paths come from the command line, not the configuration: a migration
-/// rewrites the vault in place, so an ambient file must not trigger it.
-fn run_encrypt_vault(args: &EncryptVaultArgs) -> Result<(), Box<dyn std::error::Error>> {
-    let key = do_context_shield_vault_json::VaultKey::from_file(&args.vault_key_file)?;
-    do_context_shield_vault_json::JsonVault::encrypt_in_place(&args.vault_file, key)?;
-    Ok(())
-}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    // `mcp-stdio` runs with the client's project as its working directory, so
-    // an ambient file there must not configure it: the MCP entry point reads
-    // only an explicit `--config` path. One-shot commands keep auto-discovery.
-    let config = if matches!(&cli.command, Command::McpStdio(_)) {
-        config::load_explicit(cli.config.as_deref())?
-    } else {
-        config::load(cli.config.as_deref())?
-    };
-    config::validate(&config)?;
-    run_simple(cli.command, &config)
+    let explicit_config = cli.config;
+    match cli.command {
+        Command::CreateKey(args) => file_commands::create_key(&args),
+        command => {
+            // `mcp-stdio` runs with the client's project as its working
+            // directory, so an ambient file there must not configure it.
+            // Key creation is configuration-independent and never discovers
+            // or reads a project config file.
+            let config = if matches!(&command, Command::McpStdio(_)) {
+                config::load_explicit(explicit_config.as_deref())?
+            } else {
+                config::load(explicit_config.as_deref())?
+            };
+            config::validate(&config)?;
+            run_simple(command, &config)
+        }
+    }
 }

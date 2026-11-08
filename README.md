@@ -57,7 +57,7 @@ Note: Operating system package managers (e.g. Homebrew formula, apt repositories
 - Process plugins: a local executable can implement detection, judging, policy, transformation, or storage over newline-delimited JSON (`--detector process --detector-command "<program> [args...]"`, likewise `--judge`, `--policy`, `--transformer`, and `--vault` with their own command flags; see `docs/process-plugin.md`).
 - Default policy: pseudonymize personal identifiers; redact secrets. An opt-in `matrix` policy (`--policy matrix`, config `[policy_matrix]`) adds jurisdiction-adequacy pair checks and purpose-conditional rules (`docs/configuration.md`); it is never the default, and secrets stay redacted under every rule.
 - Optional semantic judge (`--judge heuristics` or a local process judge) that labels candidates; secrets stay redacted regardless of judge output.
-- In-memory vault with session scoping, plus an opt-in JSON vault for cross-process workflows that can be encrypted at rest with a key file (`--vault-key-file`; `encrypt-vault` migrates an existing plaintext vault).
+- In-memory vault with session scoping, plus an opt-in JSON vault for cross-process workflows that can be encrypted at rest with a key file (`create-key` generates a restrictive key; `--vault-key-file` selects it; `encrypt-vault` migrates an existing plaintext vault).
 - CLI over stdin/stdout.
 - MCP-style JSON-RPC stdio adapter with `context.sanitize`, `context.restore`, `context.inspect`, and `context.forget` tools.
 - Agent skill instructions usable by coding clients that can execute shell tools.

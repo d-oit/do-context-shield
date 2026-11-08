@@ -1,6 +1,8 @@
 //! Black-box tests for chained audit records: `verify-audit` and opt-in
 //! rotation over the compiled binary.
 
+#![cfg(unix)]
+
 mod common;
 
 use common::{cmd, temp_dir};

@@ -75,6 +75,7 @@ impl Envelope {
     /// The `event` bytes hashed here are byte-identical to the bytes the
     /// verifier re-serializes during [`verify`], which keeps `record_hash`
     /// reproducible across writer and reader.
+    #[cfg_attr(not(unix), allow(dead_code))]
     pub(crate) fn encode_line(&self) -> Result<Vec<u8>, ()> {
         let mut line = serde_json::to_vec(self).map_err(|_| ())?;
         line.push(b'\n');
@@ -325,6 +326,7 @@ fn probe_version(line: &[u8]) -> Option<u32> {
 /// re-reads only the tail under the file lock, so the check here is the tail
 /// record's shape and its own hash. A malformed tail fails closed rather than
 /// writing a record that breaks the chain.
+#[cfg_attr(not(unix), allow(dead_code))]
 pub(crate) fn append_point(last_line: &[u8]) -> Result<ChainTail, VerificationReport> {
     let envelope: Envelope =
         serde_json::from_slice(last_line).map_err(|_| VerificationReport::Failure {

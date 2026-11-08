@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-08",
+  "event": "distill",
+  "guides": [
+    {
+      "kind": "reference",
+      "path": ".agents/skills/fail-closed-boundary/references/heuristics.md"
+    },
+    {
+      "kind": "skill",
+      "path": ".agents/skills/fail-closed-boundary/SKILL.md"
+    }
+  ],
+  "payload": {
+    "from_trace": 17,
+    "heuristic_id": 12,
+    "pattern": "When a crypto round-trip test must prove parsed key bytes match the original, generate the bytes with the OS CSPRNG and compare through encryption/decryption; never pin key material as a literal.",
+    "to_fixture": false,
+    "trigger": "resolved-trace"
+  }
+}

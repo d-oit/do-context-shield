@@ -179,7 +179,7 @@ fn open_with_key_file_selects_the_format() {
 
 #[test]
 fn key_files_are_read_and_permission_checked() {
-    // Hex with a trailing newline, as `openssl rand -hex 32` writes it.
+    // Hex with a trailing newline, as `create-key` writes it.
     let path = temp_path().with_extension("key");
     let hex = "ab".repeat(32);
     if let Err(error) = fs::write(&path, format!("{hex}\n")) {
@@ -365,6 +365,11 @@ fn error_diagnostics_omit_paths_keys_and_ciphertext() {
         assert_ne!(permission, wrong_key);
         assert!(!permission.contains(canary), "{permission}");
         assert!(!permission.contains(canary_hex.as_str()), "{permission}");
+    }
+    #[cfg(windows)]
+    {
+        assert_ne!(missing, invalid_hex);
+        assert_ne!(missing, wrong_key);
     }
 
     cleanup(&vault_path);
