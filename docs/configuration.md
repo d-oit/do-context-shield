@@ -134,7 +134,7 @@ section. `purpose` text is never reported by the `config` diagnostic.
 | `vault_file` | path | unset | required by `vault = "json"`; selects the JSON vault on its own |
 | `vault_command` | command line | unset | required with `vault = "process"` (requires explicit `--config <path>` or CLI flag) |
 | `vault_ttl_seconds` | seconds | unset | memory or JSON vault; a one-shot process exits before a memory-vault lifetime matters, while a persisted JSON mapping is bounded across processes |
-| `vault_key_file` | path | unset | 64-hex-character key that encrypts the JSON vault at rest; requires `vault_file`, and on Unix the key file must be owner-only |
+| `vault_key_file` | path | unset | 64-hex-character key that encrypts the JSON vault at rest; requires `vault_file`, and permissions must be owner-only (Unix mode `0600`; Windows ACLs restricted to the current user, SYSTEM, and Administrators) |
 
 A `vault_ttl_seconds` on the JSON vault bounds how long a persisted original
 stays resolvable: every mapping is written with its timestamp, `restore` (and

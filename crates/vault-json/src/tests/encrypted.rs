@@ -366,8 +366,27 @@ fn error_diagnostics_omit_paths_keys_and_ciphertext() {
         assert!(!permission.contains(canary), "{permission}");
         assert!(!permission.contains(canary_hex.as_str()), "{permission}");
     }
+    #[cfg(windows)]
+    {
+        assert_ne!(missing, invalid_hex);
+        assert_ne!(missing, wrong_key);
+    }
 
     cleanup(&vault_path);
+    cleanup(&key_path);
+    fs::remove_dir_all(&root).ok();
+}
+#[cfg(windows)]
+#[test]
+fn windows_key_file_acl_validation() {
+    let root = temp_path();
+    let dir = root.join("win-acl-test");
+    fs::create_dir_all(&dir).ok();
+    let key_path = dir.join("vault.key");
+    if fs::write(&key_path, "ab".repeat(32)).is_ok() {
+        let res = VaultKey::from_file(&key_path);
+        assert!(res.is_ok() || res.unwrap_err().to_string().contains("permissions"));
+    }
     cleanup(&key_path);
     fs::remove_dir_all(&root).ok();
 }

@@ -50,7 +50,12 @@ do-context-shield-plugin-registry.workspace = true
 do-context-shield-vault-json.workspace = true
 do-context-shield-mcp-server.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+windows-acl = "0.3"
+
 [dev-dependencies]
 assert_cmd = "2.2"
 predicates = "3"
 tempfile = "3"
+rmcp = { version = "3", default-features = false, features = ["client", "transport-child-process"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util"] }

@@ -21,16 +21,14 @@ pub(super) fn processing_context(
     let recipient = match args.get("recipient") {
         None | Some(Value::Null) => base.recipient,
         Some(Value::String(name)) => RecipientClass::parse(name).ok_or_else(|| {
-            format!("recipient must be one of local, trusted, external, unknown; got `{name}`")
+            "recipient must be one of local, trusted, external, unknown".to_owned()
         })?,
         Some(_) => return Err("recipient must be a string".to_owned()),
     };
     let data_category = match args.get("data_category") {
         None | Some(Value::Null) => base.data_category,
         Some(Value::String(name)) => DataCategory::parse(name).ok_or_else(|| {
-            format!(
-                "data_category must be one of non_personal, personal, special_category; got `{name}`"
-            )
+            "data_category must be one of non_personal, personal, special_category".to_owned()
         })?,
         Some(_) => return Err("data_category must be a string".to_owned()),
     };

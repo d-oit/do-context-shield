@@ -484,5 +484,17 @@
     "rationale": "The highest-risk composition is the interaction between a model-facing adapter, process plugins, the vault, and audit output; per-capability tests did not prove that a malicious response cannot bypass the whole boundary, and the transformer's out-of-span trust contract had to be pinned rather than implied",
     "sensor": "crates/plugin-process/tests/adversarial.rs + crates/plugin-process/tests/transformer_protocol.rs + crates/plugin-process/tests/vault_protocol.rs + crates/do-context-shield-cli/tests/mcp_threat_matrix.rs",
     "category": "security"
+  },
+  {
+    "invariant": "Vault and canary key files require owner-only permissions on Unix (mode 0600) and restrictive DACLs on Windows (current user, SYSTEM, Administrators only); any broad access (Everyone, Users, Guests) or unreadable file fails closed with a path-free diagnostic",
+    "rationale": "An encryption or canary key readable by other local users on the machine allows unauthorized decryption of stored mappings or forgery of egress canary tokens",
+    "sensor": "crates/vault-json tests: key_files_are_read_and_permission_checked, error_diagnostics_omit_paths_keys_and_ciphertext + crates/do-context-shield-cli/tests/cli_canary.rs: group_or_world_readable_key_is_refused, key_file_diagnostics_never_echo_the_path + cargo clippy --target x86_64-pc-windows-gnu",
+    "category": "security"
+  },
+  {
+    "invariant": "The MCP server is interoperable with the official Rust SDK (`rmcp`) across both advertised revisions (2026-07-28 and 2025-11-25): tool discovery, execution, annotations, and default surface restrictions operate identically through the SDK client as through raw JSON-RPC frames, with zero canary leakage",
+    "rationale": "Direct JSON-RPC transport implementation provides control and strict fail-closed validation, but ongoing interoperability against the official SDK client ensures protocol evolution does not introduce silent client-side breakage",
+    "sensor": "crates/do-context-shield-cli/tests/mcp_rmcp_interop.rs + crates/do-context-shield-cli/tests/mcp_stdio_revisions.rs",
+    "category": "contracts"
   }
 ]

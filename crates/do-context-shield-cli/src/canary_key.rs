@@ -24,7 +24,7 @@ use do_context_shield_core::canary::MIN_KEY_BYTES;
 /// (Unix), or does not hold exactly `MIN_KEY_BYTES * 2` hex characters. The
 /// message names the failure class, never the path, key text, or OS error text.
 pub(crate) fn read_canary_key(path: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     check_owner_only(path)?;
     let text = fs::read_to_string(path).map_err(|error| key_file_read_error(&error))?;
     let hex = text.trim_end_matches(['\r', '\n']);
@@ -70,6 +70,66 @@ fn check_owner_only(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         return Err(
             "canary key file is accessible beyond its owner; restrict it with `chmod 600`".into(),
         );
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn sid_bytes_to_string(bytes: &[u8]) -> Option<String> {
+    if bytes.len() < 8 {
+        return None;
+    }
+    let rev = bytes[0];
+    let sub_count = bytes[1] as usize;
+    if bytes.len() < 8 + sub_count * 4 {
+        return None;
+    }
+    let mut auth_bytes = [0u8; 8];
+    auth_bytes[2..8].copy_from_slice(&bytes[2..8]);
+    let auth = u64::from_be_bytes(auth_bytes);
+    let mut subs = Vec::with_capacity(sub_count);
+    for i in 0..sub_count {
+        let start = 8 + i * 4;
+        let sub_bytes: [u8; 4] = bytes[start..start + 4].try_into().ok()?;
+        subs.push(u32::from_le_bytes(sub_bytes));
+    }
+    let mut sid_string = format!("S-{rev}-{auth}");
+    for sub in subs {
+        use std::fmt::Write as _;
+        let _ = write!(sid_string, "-{sub}");
+    }
+    Some(sid_string)
+}
+
+#[cfg(windows)]
+fn check_owner_only(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let path_str = path
+        .to_str()
+        .ok_or("cannot read the canary key file (not valid UTF-8)")?;
+    let acl = windows_acl::acl::ACL::from_file_path(path_str, false).map_err(
+        |_| "cannot inspect the canary key file (inaccessible); check `--canary-key-file`",
+    )?;
+    let entries = acl.all().map_err(
+        |_| "cannot inspect the canary key file (inaccessible); check `--canary-key-file`",
+    )?;
+
+    let current_sid = windows_acl::helper::current_user()
+        .and_then(|user| windows_acl::helper::name_to_sid(&user, None).ok())
+        .and_then(|bytes| sid_bytes_to_string(&bytes));
+
+    for entry in entries {
+        if entry.entry_type == windows_acl::acl::AceType::AccessAllow {
+            let sid = &entry.string_sid;
+            let is_current_user = current_sid.as_deref().is_some_and(|cur| cur == sid);
+            let is_system = sid == "S-1-5-18";
+            let is_admin = sid == "S-1-5-32-544";
+            if !is_current_user && !is_system && !is_admin {
+                return Err(
+                    "canary key file is accessible beyond its owner; restrict it with `chmod 600`"
+                        .into(),
+                );
+            }
+        }
     }
     Ok(())
 }
