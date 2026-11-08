@@ -12,8 +12,10 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 mod encrypted;
+mod key_file;
 
 pub use encrypted::VaultKey;
+pub use key_file::create_key_file;
 
 /// How vault state is stored on disk.
 enum Format {

@@ -220,9 +220,11 @@ fn windows_canary_key_file_acl_validation() {
              $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value; \
              $sddl = \"D:P(A;;FA;;;$sid)(XA;;FR;;;WD;(Member_of {{SID(S-1-1-0)}}))\"; \
              $sec = New-Object System.Security.AccessControl.FileSecurity; \
-             $sec.SetSecurityDescriptorSddlForm($sddl); \
+             $sec.SetSecurityDescriptorSddlForm($sddl, [System.Security.AccessControl.AccessControlSections]::Access); \
              [System.IO.File]::SetAccessControl('{}', $sec); \
-             if ((Get-Acl -LiteralPath '{}').Sddl -notmatch 'XA') {{ throw 'callback ACE missing after ACL write' }} \
+             $acl = [System.IO.File]::GetAccessControl('{}'); \
+             $actual_sddl = $acl.GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access); \
+             if ($actual_sddl -notmatch 'XA') {{ throw 'callback ACE missing after ACL write' }} \
          }} catch {{ [Console]::Error.WriteLine($_.Exception.ToString()); exit 1 }}",
         callback_dacl.display(),
         callback_dacl.display()

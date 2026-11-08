@@ -14,11 +14,11 @@ use std::path::PathBuf;
     about = "Local privacy boundary for coding agents"
 )]
 pub(crate) struct Cli {
-    /// Path to a configuration file. The one-shot commands fall back to
+    /// Path to a configuration file. One-shot data commands fall back to
     /// `./do-context-shield.toml`, then
-    /// `$HOME/.config/do-context-shield/config.toml`; `mcp-stdio` reads a file
-    /// only when this flag names one, because a project directory must not
-    /// configure the server that runs in it.
+    /// `$HOME/.config/do-context-shield/config.toml`; `create-key` does not
+    /// read configuration, and `mcp-stdio` reads a file only when this flag
+    /// names one.
     #[arg(long, global = true)]
     pub(crate) config: Option<PathBuf>,
     #[command(subcommand)]
@@ -62,6 +62,11 @@ pub(crate) enum Command {
         long_about = "Report local detector readiness without scanning any text.\n\nChecks plugin availability, feature support, model layout, tokenizer/label metadata, ONNX Runtime loadability, and the effective token/thread limits. The probe is local-only: it never downloads a model or runtime, never prints model contents, and never falls back to regex. Exits 0 when the selected detector is ready and 1 when it is not; `--format json` emits one machine-readable object with a stable `reason_code`.\n\nAuto-discovers `./do-context-shield.toml` or `$HOME/.config/do-context-shield/config.toml` unless `--config` pins an explicit file."
     )]
     Doctor(DoctorArgs),
+    #[command(
+        about = "Create a new key file with restrictive permissions",
+        long_about = "Create a random 32-byte key file with restrictive platform permissions. The destination must not already exist. This command does not read or auto-discover configuration files."
+    )]
+    CreateKey(CreateKeyArgs),
     #[command(about = "Rewrite an existing plaintext JSON vault in the encrypted format")]
     EncryptVault(EncryptVaultArgs),
     #[command(
@@ -219,6 +224,14 @@ pub(crate) struct ConfigArgs {
     pub(crate) process: ProcessArgs,
     #[command(flatten)]
     pub(crate) audit: AuditArgs,
+}
+
+/// Create a new platform-restricted key file without replacing an existing path.
+#[derive(Args)]
+pub(crate) struct CreateKeyArgs {
+    /// Destination for the new 64-character hexadecimal key.
+    #[arg(long, value_name = "PATH")]
+    pub(crate) output: PathBuf,
 }
 
 /// Rewrite an existing plaintext JSON vault in the encrypted format.

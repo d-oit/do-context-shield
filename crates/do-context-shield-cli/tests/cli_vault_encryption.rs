@@ -217,3 +217,78 @@ fn a_key_readable_by_others_is_rejected() {
         .code(1)
         .stderr(predicates::str::contains("chmod 600"));
 }
+#[test]
+fn create_key_command_creates_a_private_usable_key_without_loading_config() {
+    let dir = temp_dir();
+    let key = dir.path().join("generated.key");
+    let config = dir.path().join("do-context-shield.toml");
+    if let Err(error) = std::fs::write(&config, "not = [valid toml") {
+        panic!("cannot write {}: {error}", config.display());
+    }
+
+    let output = cmd(dir.path())
+        .args(["create-key", "--output"])
+        .arg(&key)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let stdout = String::from_utf8_lossy(&output);
+    assert!(stdout.contains("restrictive permissions"), "{stdout}");
+    assert!(!stdout.contains(&key.display().to_string()), "{stdout}");
+
+    let contents = match std::fs::read_to_string(&key) {
+        Ok(contents) => contents,
+        Err(error) => panic!("cannot read generated key: {error}"),
+    };
+    let Some(hex) = contents.strip_suffix('\n') else {
+        panic!("generated key must end with a newline");
+    };
+    assert_eq!(hex.len(), 64);
+    assert!(hex.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    assert!(
+        !stdout.contains(hex),
+        "key material must not appear in output"
+    );
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = match std::fs::metadata(&key) {
+            Ok(metadata) => metadata.permissions().mode() & 0o777,
+            Err(error) => panic!("cannot inspect generated key: {error}"),
+        };
+        assert_eq!(mode, 0o600);
+    }
+
+    let original = match std::fs::read(&key) {
+        Ok(bytes) => bytes,
+        Err(error) => panic!("cannot read generated key: {error}"),
+    };
+    cmd(dir.path())
+        .args(["create-key", "--output"])
+        .arg(&key)
+        .assert()
+        .code(1);
+    let after = match std::fs::read(&key) {
+        Ok(bytes) => bytes,
+        Err(error) => panic!("cannot re-read generated key: {error}"),
+    };
+    assert_eq!(after, original, "existing key must not be overwritten");
+
+    if let Err(error) = std::fs::remove_file(config) {
+        panic!("cannot remove invalid config fixture: {error}");
+    }
+    let vault = dir.path().join("encrypted.json");
+    let sanitized = vault_command(dir.path(), "sanitize", &vault, Some(&key))
+        .write_stdin("alice@example.com")
+        .assert()
+        .success();
+    common::assert_contains_placeholder(
+        &String::from_utf8_lossy(&sanitized.get_output().stdout),
+        "EMAIL",
+        1,
+    );
+    assert!(vault_contents(&vault).contains("\"cipher\""));
+}

@@ -23,7 +23,7 @@ const CIPHER: &str = "xchacha20poly1305";
 /// Nonce size of XChaCha20-Poly1305.
 const NONCE_BYTES: usize = 24;
 /// Key size of XChaCha20-Poly1305.
-const KEY_BYTES: usize = 32;
+pub(super) const KEY_BYTES: usize = 32;
 /// Associated data binding a ciphertext to this format and version.
 const ASSOCIATED_DATA: &[u8] = b"do-context-shield-json-vault:v2";
 
@@ -71,7 +71,7 @@ impl VaultKey {
         let bytes = decode_hex(text)?;
         if bytes.len() != KEY_BYTES {
             return Err(VaultError::Message(
-                "invalid vault key format: the key must be exactly 32 bytes, encoded as 64 hex characters (`openssl rand -hex 32` writes one)"
+                "invalid vault key format: the key must be exactly 32 bytes, encoded as 64 hex characters (`do-context-shield create-key --output <path>` creates one)"
                     .to_owned(),
             ));
         }

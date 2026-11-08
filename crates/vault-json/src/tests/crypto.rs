@@ -28,11 +28,16 @@ fn envelope(plaintext: &[u8], key: &VaultKey) -> serde_json::Value {
 
 #[test]
 fn key_hex_round_trips_and_rejects_bad_input() {
-    let parsed = match VaultKey::from_hex(&"ab".repeat(KEY_BYTES)) {
+    let mut expected_bytes = [0_u8; KEY_BYTES];
+    if let Err(error) = getrandom::fill(&mut expected_bytes) {
+        panic!("unexpected error: {error}");
+    }
+    let encoded = encode_hex(&expected_bytes);
+    let parsed = match VaultKey::from_hex(&encoded) {
         Ok(parsed) => parsed,
         Err(error) => panic!("unexpected error: {error}"),
     };
-    let expected = VaultKey::new([0xab; KEY_BYTES]);
+    let expected = VaultKey::new(expected_bytes);
     let decrypted = match decrypt(envelope(b"hex key check", &expected), &parsed) {
         Ok(plaintext) => plaintext,
         Err(error) => panic!("parsed hex key did not match the expected bytes: {error}"),

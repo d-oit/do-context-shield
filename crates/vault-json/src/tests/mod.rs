@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 mod batch;
 mod crypto;
 mod encrypted;
+mod key_file;
 mod ttl;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);

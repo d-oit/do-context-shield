@@ -258,12 +258,20 @@ as associated data). The file becomes a small JSON envelope holding the format
 version, the cipher name, the nonce, and the ciphertext, so original values are
 never on disk in the clear.
 
-- The key file holds exactly 64 hex characters (`openssl rand -hex 32` writes
-  one). On Unix it must not be readable or writable by group or others
-  (`chmod 600`). On Windows, its DACL must restrict allow ACEs to the current
-  user, SYSTEM, and Built-in Administrators; broad allow ACEs, a NULL DACL, or
-  callback, object, and other unsupported ACE types fail closed. The canary
-  key file uses the same platform-specific permission checks.
+- `do-context-shield create-key --output <path>` generates a fresh 32-byte
+  key as 64 lowercase hex characters and a newline. It fails rather than
+  replacing an existing destination, never prints the key, and does not read
+  or auto-discover configuration. The parent directory must exist, and the
+  filesystem must support same-directory hard links for atomic publication;
+  the command fails closed if it does not. Unix files use mode `0600`; on
+  Windows, a protected DACL allowing only the current user, SYSTEM, and
+  Built-in Administrators is applied before key bytes are written.
+- Existing key files, including files created by other tools, are validated
+  but their permissions and ACLs are never changed. On Unix a key file must
+  not be readable or writable by group or others. On Windows, broad allow
+  ACEs, a NULL DACL, or callback, object, and other unsupported ACE types fail
+  closed. The canary key file uses the same platform-specific checks and can
+  be generated with the same command.
 - `--vault-key-file <path>`, `DO_CONTEXT_SHIELD_VAULT_KEY_FILE`, or
   `[vault] vault_key_file` select it; it requires a `vault_file`.
 - A plaintext vault with a key configured is **not** rewritten silently: the
@@ -324,7 +332,7 @@ vault_file = "/home/user/.local/share/do-context-shield/vault.json"
 vault_key_file = "/home/user/.config/do-context-shield/vault.key"
 ```
 
-`openssl rand -hex 32 > vault.key && chmod 600 vault.key` creates the key; an existing plaintext vault at `vault_file` must be migrated once with `do-context-shield encrypt-vault --vault-file … --vault-key-file …` (see "At-rest encryption").
+`do-context-shield create-key --output vault.key` creates a new key file; an existing plaintext vault at `vault_file` must be migrated once with `do-context-shield encrypt-vault --vault-file … --vault-key-file …` (see "At-rest encryption").
 
 MCP server with a local judge and a bounded memory vault:
 
