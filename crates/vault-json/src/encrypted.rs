@@ -31,7 +31,7 @@ const ASSOCIATED_DATA: &[u8] = b"do-context-shield-json-vault:v2";
 ///
 /// Deliberately has no `Debug` implementation, so a key cannot be formatted
 /// into a log line or an error by accident.
-pub struct VaultKey([u8; KEY_BYTES]);
+pub struct VaultKey(pub(crate) [u8; KEY_BYTES]);
 
 impl VaultKey {
     /// Wrap raw key bytes.
@@ -155,10 +155,18 @@ pub(super) fn check_key_file_permissions(path: &Path) -> Result<(), VaultError> 
     let entries = acl.all().map_err(|_| {
         key_file_read_error(&std::io::Error::from(std::io::ErrorKind::PermissionDenied))
     })?;
+    if entries.is_empty() {
+        return Err(VaultError::Message(
+            "vault key file permissions must be owner-only; in Windows, restrict ACLs to the current user (the path is passed as `--vault-key-file` or `DO_CONTEXT_SHIELD_VAULT_KEY_FILE`)"
+                .to_owned(),
+        ));
+    }
 
     let current_sid = windows_acl::helper::current_user()
         .and_then(|user| windows_acl::helper::name_to_sid(&user, None).ok())
         .and_then(|bytes| sid_bytes_to_string(&bytes));
+
+    let mut has_owner_allow = false;
 
     for entry in entries {
         if entry.entry_type == windows_acl::acl::AceType::AccessAllow {
@@ -166,13 +174,24 @@ pub(super) fn check_key_file_permissions(path: &Path) -> Result<(), VaultError> 
             let is_current_user = current_sid.as_deref().is_some_and(|cur| cur == sid);
             let is_system = sid == "S-1-5-18";
             let is_admin = sid == "S-1-5-32-544";
-            if !is_current_user && !is_system && !is_admin {
+            if is_current_user || is_system || is_admin {
+                if is_current_user || (current_sid.is_none() && (is_system || is_admin)) {
+                    has_owner_allow = true;
+                }
+            } else {
                 return Err(VaultError::Message(
                     "vault key file permissions must be owner-only; in Windows, restrict ACLs to the current user (the path is passed as `--vault-key-file` or `DO_CONTEXT_SHIELD_VAULT_KEY_FILE`)"
                         .to_owned(),
                 ));
             }
         }
+    }
+
+    if !has_owner_allow {
+        return Err(VaultError::Message(
+            "vault key file permissions must be owner-only; in Windows, restrict ACLs to the current user (the path is passed as `--vault-key-file` or `DO_CONTEXT_SHIELD_VAULT_KEY_FILE`)"
+                .to_owned(),
+        ));
     }
     Ok(())
 }
@@ -277,7 +296,7 @@ fn cipher(key: &VaultKey) -> Result<XChaCha20Poly1305, VaultError> {
 }
 
 /// Lowercase hex for `bytes`.
-fn encode_hex(bytes: &[u8]) -> String {
+pub(super) fn encode_hex(bytes: &[u8]) -> String {
     const DIGITS: &[u8; 16] = b"0123456789abcdef";
     let mut hex = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
@@ -294,7 +313,7 @@ fn encode_hex(bytes: &[u8]) -> String {
 /// Returns [`VaultError`] for an odd number of characters or a non-hex digit.
 /// The messages are fixed labels: the parsed text and the offending character
 /// are never echoed, so a key or ciphertext byte cannot leak through an error.
-fn decode_hex(text: &str) -> Result<Vec<u8>, VaultError> {
+pub(super) fn decode_hex(text: &str) -> Result<Vec<u8>, VaultError> {
     let text = text.trim();
     if text.len() % 2 != 0 {
         return Err(VaultError::Message(
@@ -317,176 +336,5 @@ fn hex_digit(byte: u8) -> Result<u8, VaultError> {
         _ => Err(VaultError::Message(
             "hex payload contains a non-hex character".to_owned(),
         )),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Random key from the OS entropy source.
-    ///
-    /// The tests assert properties that hold for any key (the round trip, and
-    /// that a different key cannot decrypt), so random material keeps literal
-    /// key bytes out of cryptographic call sites — static analysis flags
-    /// hard-coded cryptographic values even in tests.
-    fn random_key() -> VaultKey {
-        let mut bytes = [0u8; KEY_BYTES];
-        match getrandom::fill(&mut bytes) {
-            Ok(()) => VaultKey::new(bytes),
-            Err(error) => panic!("unexpected error: {error}"),
-        }
-    }
-
-    /// Encrypt `plaintext` and parse the envelope for decryption.
-    fn envelope(plaintext: &[u8], key: &VaultKey) -> serde_json::Value {
-        let bytes = match encrypt(plaintext, key) {
-            Ok(bytes) => bytes,
-            Err(error) => panic!("unexpected error: {error}"),
-        };
-        match serde_json::from_slice(&bytes) {
-            Ok(value) => value,
-            Err(error) => panic!("unexpected error: {error}"),
-        }
-    }
-
-    #[test]
-    fn key_hex_round_trips_and_rejects_bad_input() {
-        let parsed = match VaultKey::from_hex(&"ab".repeat(KEY_BYTES)) {
-            Ok(parsed) => parsed,
-            Err(error) => panic!("unexpected error: {error}"),
-        };
-        assert_eq!(parsed.0, [0xab; KEY_BYTES]);
-
-        // Surrounding whitespace is tolerated; a wrong length or character is not.
-        assert!(VaultKey::from_hex(&format!("  {}  \n", "0f".repeat(KEY_BYTES))).is_ok());
-        for bad in [
-            "",
-            "00",
-            &"00".repeat(KEY_BYTES - 1),
-            &"00".repeat(KEY_BYTES + 1),
-        ] {
-            assert!(VaultKey::from_hex(bad).is_err(), "{bad}");
-        }
-        assert!(VaultKey::from_hex(&"zz".repeat(KEY_BYTES)).is_err());
-    }
-
-    #[test]
-    fn encrypt_decrypt_round_trips_and_hides_the_payload() {
-        let plaintext = br#"{"mappings":[{"original":"alice@example.com"}]}"#;
-        let key = random_key();
-        let envelope = match encrypt(plaintext, &key) {
-            Ok(bytes) => bytes,
-            Err(error) => panic!("unexpected error: {error}"),
-        };
-        let text = String::from_utf8_lossy(&envelope).into_owned();
-        assert!(!text.contains("alice@example.com"), "{text}");
-        let value: serde_json::Value = match serde_json::from_slice(&envelope) {
-            Ok(value) => value,
-            Err(error) => panic!("unexpected error: {error}"),
-        };
-        assert!(is_envelope(&value));
-        let decrypted = match decrypt(value, &key) {
-            Ok(bytes) => bytes,
-            Err(error) => panic!("unexpected error: {error}"),
-        };
-        assert_eq!(decrypted, plaintext);
-    }
-
-    #[test]
-    fn each_write_uses_a_fresh_nonce() {
-        let key = random_key();
-        let first = match encrypt(b"state", &key) {
-            Ok(bytes) => bytes,
-            Err(error) => panic!("unexpected error: {error}"),
-        };
-        let second = match encrypt(b"state", &key) {
-            Ok(bytes) => bytes,
-            Err(error) => panic!("unexpected error: {error}"),
-        };
-        assert_ne!(first, second, "identical state must not reuse a nonce");
-        let nonce = |bytes: &[u8]| -> String {
-            let value: serde_json::Value = match serde_json::from_slice(bytes) {
-                Ok(value) => value,
-                Err(error) => panic!("unexpected error: {error}"),
-            };
-            value["nonce"].as_str().unwrap_or_default().to_owned()
-        };
-        assert_ne!(nonce(&first), nonce(&second));
-    }
-
-    #[test]
-    fn a_wrong_key_fails_closed() {
-        let right = random_key();
-        let wrong = random_key();
-        let error = match decrypt(envelope(b"state", &right), &wrong) {
-            Ok(bytes) => panic!("expected a failure, got {} bytes", bytes.len()),
-            Err(error) => error,
-        };
-        assert!(error.to_string().contains("wrong key"), "{error}");
-    }
-
-    #[test]
-    fn a_modified_payload_or_marker_fails_closed() {
-        let key = random_key();
-        for (field, replacement) in [("payload", "00"), ("nonce", "00"), ("version", "99")] {
-            let bytes = match encrypt(b"state", &key) {
-                Ok(bytes) => bytes,
-                Err(error) => panic!("unexpected error: {error}"),
-            };
-            let mut value: serde_json::Value = match serde_json::from_slice(&bytes) {
-                Ok(value) => value,
-                Err(error) => panic!("unexpected error: {error}"),
-            };
-            value[field] = serde_json::Value::String(replacement.to_owned());
-            assert!(decrypt(value, &key).is_err(), "{field}");
-        }
-    }
-
-    #[test]
-    fn unsupported_cipher_fails_closed() {
-        let key = random_key();
-        let bytes = match encrypt(b"state", &key) {
-            Ok(bytes) => bytes,
-            Err(error) => panic!("unexpected error: {error}"),
-        };
-        let mut value: serde_json::Value = match serde_json::from_slice(&bytes) {
-            Ok(value) => value,
-            Err(error) => panic!("unexpected error: {error}"),
-        };
-        value["cipher"] = serde_json::Value::String("aes-gcm".to_owned());
-        let error = match decrypt(value, &key) {
-            Ok(_) => panic!("expected an unsupported-cipher error"),
-            Err(error) => error,
-        };
-        assert!(
-            error.to_string().contains("unsupported vault cipher"),
-            "{error}"
-        );
-    }
-
-    #[test]
-    fn hex_codec_round_trips() {
-        for bytes in [vec![], vec![0x00, 0xff, 0x10], vec![0xab; 40]] {
-            let hex = encode_hex(&bytes);
-            assert_eq!(decode_hex(&hex).ok(), Some(bytes.clone()), "{hex}");
-            assert_eq!(decode_hex(&hex.to_uppercase()).ok(), Some(bytes), "{hex}");
-        }
-        assert!(decode_hex("0").is_err());
-        assert!(decode_hex("gg").is_err());
-    }
-
-    #[test]
-    fn envelope_detection_requires_both_markers() {
-        // A half-envelope is not an envelope: `is_envelope` must demand both
-        // marker fields, so each load path reports its own format error for
-        // the file it actually holds instead of guessing at the other format.
-        for text in [r#"{"version":1}"#, r#"{"cipher":"x"}"#] {
-            let value: serde_json::Value = match serde_json::from_str(text) {
-                Ok(value) => value,
-                Err(error) => panic!("unexpected error: {error}"),
-            };
-            assert!(!is_envelope(&value), "{text}");
-        }
     }
 }

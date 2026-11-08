@@ -388,6 +388,35 @@ fn windows_key_file_acl_validation() {
             Ok(_) => {}
             Err(error) => assert!(error.to_string().contains("permissions")),
         }
+
+        // Regression: a NULL DACL grants full access to everyone and must be rejected.
+        let ps_null_dacl = format!(
+            "$sec = New-Object System.Security.AccessControl.FileSecurity; \
+             $sec.SetSecurityDescriptorBinaryForm([byte[]]@(1,0,4,128,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0), \
+             [System.Security.AccessControl.AccessControlSections]::Access); \
+             [System.IO.File]::SetAccessControl('{}', $sec)",
+            key_path.display()
+        );
+        if let Ok(status) = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps_null_dacl])
+            .status()
+        {
+            if status.success() {
+                let null_dacl_res = VaultKey::from_file(&key_path);
+                assert!(
+                    null_dacl_res.is_err(),
+                    "NULL DACL key file must be rejected"
+                );
+                let err_msg = match null_dacl_res {
+                    Err(e) => e.to_string(),
+                    Ok(_) => String::new(),
+                };
+                assert!(
+                    err_msg.contains("permissions"),
+                    "expected permissions error on NULL DACL, got: {err_msg}"
+                );
+            }
+        }
     }
     cleanup(&key_path);
     fs::remove_dir_all(&root).ok();
