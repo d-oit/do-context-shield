@@ -246,27 +246,22 @@ work lands or the precondition expires.
 
 ## Blocked — external action
 
-### First crates.io publish of the v0.1.0 crates
+### Configure crates.io Trusted Publishing for future releases
 
-- **Status (2026-10-30)**: the GitHub release `v0.1.0` is published with all
-  four binary archives and `SHA256SUMS` (release run 41128480486). The 18
-  workspace crates are **not** on crates.io.
-- **Blocker A**: the first dispatch (41126181556) failed at the
-  trusted-publishing exchange with `No Trusted Publishing config found for
-  repository d-oit/do-context-shield`. A trusted publisher can only be
-  configured after the crate exists, so the first publish must use a token.
-- **Blocker B**: the local `scripts/publish-crates.sh` (credentials from
-  `cargo login`) authenticated, but crates.io rejected the upload with `A
-  verified email address is required to publish crates to crates.io` (status
-  400). No crate was created.
-- **Next (human)**: verify the crates.io account email at
-  <https://crates.io/settings/profile>, then run
-  `scripts/publish-crates.sh` locally (it uses `cargo login` credentials and
-  skips versions already published). Afterwards configure trusted publishing
-  per crate on crates.io for repository `d-oit/do-context-shield` and workflow
-  `release.yml`; later releases publish from CI. Until then, dispatch with
-  `-f publish_crates=false` (the workflow input added in #172) when only the
-  binary assets are needed.
+- **Published (2026-11-09)**: all 18 workspace crates at `0.1.0` are on
+  crates.io. `scripts/publish-crates.sh` skipped 13 existing versions and
+  published the remaining five: `do-context-shield-core`,
+  `do-context-shield-plugin-process`, `do-context-shield-plugin-registry`,
+  `do-context-shield-mcp-server`, and `do-context-shield`. A subsequent
+  `scripts/publish-crates.sh --dry-run` confirmed every workspace version.
+- **Remaining (owner action)**: add a Trusted Publisher on each crate's
+  crates.io settings page: GitHub Actions, owner `d-oit`, repository
+  `do-context-shield`, workflow file `release.yml`; omit the environment because
+  the current release job does not declare one. The workflow already grants
+  `id-token: write` and uses `rust-lang/crates-io-auth-action`.
+- **Until configured**: publish future crate versions locally with `cargo
+  login` / `CARGO_REGISTRY_TOKEN`, or set `publish_crates=false` on a manual
+  release dispatch when only binary assets are needed.
 
 ## Blocked — approval-gated
 
