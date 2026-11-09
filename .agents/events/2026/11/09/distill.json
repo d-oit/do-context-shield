@@ -4,17 +4,17 @@
   "guides": [
     {
       "kind": "reference",
-      "path": ".agents/skills/plugin-development/references/heuristics.md"
+      "path": ".agents/skills/harness/references/heuristics.md"
     },
     {
       "kind": "skill",
-      "path": ".agents/skills/plugin-development/SKILL.md"
+      "path": ".agents/skills/harness/SKILL.md"
     }
   ],
   "payload": {
-    "from_trace": 19,
-    "heuristic_id": 14,
-    "pattern": "Keep the child stdout read handle open through bounded exit settlement after consuming the first response line; parse no extra lines so host-side pipe closure cannot mask a natural non-zero exit.",
+    "from_trace": 21,
+    "heuristic_id": 16,
+    "pattern": "Skill-eval assertions should target the skill's own files; leave implementation behavior checks to the corresponding computational sensor. An assertion against an undeclared repository script failed in the pinned evaluator's sandbox while assertions against SKILL.md passed.",
     "to_fixture": false,
     "trigger": "resolved-trace"
   }

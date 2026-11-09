@@ -7,7 +7,8 @@ license.workspace = true
 description = "Local privacy boundary CLI for coding agents (sanitize, restore, inspect, mcp-stdio)"
 homepage.workspace = true
 repository.workspace = true
-include = ["src/**/*", "Cargo.toml"]
+readme = "README.md"
+include = ["README.md", "src/**/*", "Cargo.toml"]
 
 [[bin]]
 name = "do-context-shield"

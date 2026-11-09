@@ -7,7 +7,8 @@ license.workspace = true
 description = "Composable privacy pipeline (Detector -> Policy -> Transformer -> Vault) for do-context-shield"
 homepage.workspace = true
 repository.workspace = true
-include = ["src/**/*", "tests/**/*", "Cargo.toml"]
+readme = "README.md"
+include = ["README.md", "src/**/*", "tests/**/*", "Cargo.toml"]
 
 [lints]
 workspace = true

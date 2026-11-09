@@ -52,11 +52,10 @@ Agent = Model + Harness. Feedforward guides (this skill, `AGENTS.md`, `CONTRIBUT
 | deps | `bash scripts/check-deps.sh` | pre-push, CI | license allow-list, crates.io only, no wildcards, and the offline ban list (`Cargo.lock` must contain no network client, TLS stack, or hosted-model SDK); check feature-gated trees explicitly |
 | audit | `bash scripts/check-audit.sh` | CI | resolve or document the advisory in `deny.toml` / `.cargo/audit.toml` |
 | publish-order | `bash scripts/check-publish-order.sh` | pre-push, CI | add the missing crate to `ORDER` in `scripts/publish-crates.sh`, after its dependencies |
-| release-preflight | `bash scripts/check-release-preflight.sh` | verification, CI | verify tag version agreement, workspace member crate versions, metadata, package surface whitelist, and publish order |
+| release-preflight | `bash scripts/check-release-preflight.sh` | verification, CI | verify versions, metadata, package-root README metadata/file/archive inclusion, package surface whitelist, and publish order |
 | commitlint | `bash scripts/check-commitlint.sh` | commit-msg hook, `verification` set | conventional commit with a type prefix; PR titles are enforced separately by `commitlint.yml` |
 | structure | `python3 scripts/validate-structure.py` | CI | restore required files; remove unwrap/expect; shrink files |
 | deny | `cargo deny check` | CI | dependency policy (`deny.toml`) |
-| publish-check | `cargo package --list -p <crate>` | CI | fix the crate's include whitelist |
 | mcp-conformance | `bash scripts/check-mcp-conformance.sh` (MCP Inspector + stdio fixtures; pinned Node 22 / inspector 2.13.0) | CI | keep Node and the inspector version pinned; see `docs/client-integration.md` |
 | secret-scan | gitleaks (`.github/workflows/secret-scan.yml`) | CI | remove and rotate the secret |
 
@@ -87,6 +86,7 @@ A sensor firing more than twice in one task is a feedforward-guide defect. Updat
   `AGENTS.md` → "Pull-request merges"). Arm auto-merge (`--auto`) only while no review comment or
   review is unanswered: it waits for CI, never for comments.
 - Never weaken or delete the sensor that fired; fix the cause.
+- Every publishable crate needs a README inside its package root, `package.readme` set to it, and the README included when `package.include` is explicit. `release-preflight` checks the file and `cargo package --list`; a workspace-root README is outside each crate archive.
 - `.do-harness/` (state database, evidence) and `target/` are gitignored local state — never durable evidence, never committed.
 - `do-harness status` compares the *uncommitted* workspace and config fingerprints, not HEAD: after a pull, merge, rebase, or commit, re-run the sensor set before quoting `status` as current (observed in 0.1.1: evidence recorded at one commit stayed "current" after a source change was committed). CI is unaffected — `verify` and `status` run in the same checkout.
 - `do-harness eval` needs `.agents/skills/skill-creator/scripts/quick_validate.py` (dependency-free, no PyYAML) in its sandbox, and `--strict-fixtures` rejects thin datasets; grader drift requires an explicit `--bless`. A *failed graded assertion*, however, still exits 0 (only the per-skill `pass_rate` drops) and `--format json` produced no output in 0.1.1 — so the `skill-evals` sensor wraps the command (`scripts/check-skill-evals.sh`) and fails on any verdict that is not `structure=ok evals=<n>/<n> fixture=ok`; never `--bless` a failure. An attempt that prints no verdict line at all (the evaluation never ran) is retried once — that cannot be a graded failure, since graded and structural outcomes always carry `evals=…` — while a verdict with `evals=<n>/<m>`, `n<m` fails immediately.

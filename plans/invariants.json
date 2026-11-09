@@ -496,5 +496,11 @@
     "rationale": "Direct JSON-RPC transport implementation provides control and strict fail-closed validation, but ongoing interoperability against the official SDK client ensures protocol evolution does not introduce silent client-side breakage",
     "sensor": "crates/do-context-shield-cli/tests/mcp_rmcp_interop.rs + crates/do-context-shield-cli/tests/mcp_stdio_revisions.rs",
     "category": "contracts"
+  },
+  {
+    "invariant": "Every publishable workspace crate declares a package-root README with `package.readme`, and the README appears in `cargo package --list` output even when `package.include` is explicit",
+    "rationale": "Crates.io renders the README from the published archive, not from the workspace root. An explicit include allowlist can silently omit a README, so successful compilation or publish ordering alone does not guarantee a usable registry page.",
+    "sensor": "bash scripts/check-release-preflight.sh (release-preflight: requires a package-root README and asserts the declared file appears in cargo package --list)",
+    "category": "workflow"
   }
 ]

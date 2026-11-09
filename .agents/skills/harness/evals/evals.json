@@ -51,6 +51,19 @@
         "contains:harness_negative.txt|no workspace touched",
         "contains:.agents/skills/harness/SKILL.md|Never trust LLM self-assessment"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "A new crate can be published, but its crates.io page has no rendered README. What packaging contract and sensor should prevent this?",
+      "expected_output": "Give every publishable crate a README inside its package root, set package.readme, include it in an explicit package.include allowlist, and have release-preflight verify the README appears in cargo package --list.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "implicit",
+      "assertions": [
+        "contains:.agents/skills/harness/SKILL.md|package.readme",
+        "contains:.agents/skills/harness/SKILL.md|cargo package --list",
+        "contains:.agents/skills/harness/SKILL.md|package.include"
+      ]
     }
   ]
 }
