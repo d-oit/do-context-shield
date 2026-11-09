@@ -147,6 +147,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `WindowsIdentity.GetCurrent().User.Value` and check inherited broad DACLs
   immediately after creation.
 
+- Process-plugin stdout stays open through the bounded exit grace after the
+  first response line. This prevents a child writing a second line from racing
+  a closed pipe on Windows; extra lines are still not parsed, and natural
+  non-zero exits still fail closed.
+
 - Vault, canary, and configuration diagnostics no longer disclose filesystem
   paths or raw configured values (issue #184). `VaultKey::from_file`,
   `check_key_file_permissions`, the canary key loader, and the config loader

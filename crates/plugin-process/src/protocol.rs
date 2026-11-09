@@ -191,7 +191,9 @@ pub(crate) fn run_child(
     // Both directions run on helper threads so a pipe holder (a descendant
     // that inherited stdin/stdout) cannot block the caller past the timeout.
     // The writer reports a broken pipe instead of swallowing it, and closing
-    // its handle signals EOF to the child.
+    // its handle signals EOF to the child. Keep stdout open through `settle`:
+    // closing it after the first line can make a child fail while writing an
+    // extra line, before the host terminates it.
     let (write_tx, write_rx) = mpsc::channel();
     let writer = thread::spawn(move || {
         let result = stdin
@@ -202,14 +204,15 @@ pub(crate) fn run_child(
     });
     let (line_tx, line_rx) = mpsc::channel();
     let reader = thread::spawn(move || {
+        let mut stdout = BufReader::new(stdout.take(MAX_RESPONSE_BYTES + 1));
         let mut line = String::new();
-        let read = BufReader::new(stdout.take(MAX_RESPONSE_BYTES + 1)).read_line(&mut line);
-        let _ = line_tx.send(read.map(|_| line));
+        let read = stdout.read_line(&mut line);
+        let _ = line_tx.send((read.map(|_| line), stdout));
     });
 
     let outcome = line_rx.recv_timeout(timeout);
     let outcome = match outcome {
-        Ok(Ok(line)) => {
+        Ok((Ok(line), _stdout)) => {
             if line.len() as u64 > MAX_RESPONSE_BYTES {
                 containment.terminate(&mut child);
                 finish_threads(writer, reader, &write_rx);
@@ -227,7 +230,7 @@ pub(crate) fn run_child(
                 _ => Ok(line),
             }
         }
-        Ok(Err(error)) => {
+        Ok((Err(error), _stdout)) => {
             containment.terminate(&mut child);
             Err(format!(
                 "process {label} response could not be read: {error}"

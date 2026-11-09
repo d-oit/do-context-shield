@@ -28,6 +28,9 @@ case "$mode" in
     # child deterministically, instead of racing SIGPIPE on a closed pipe.
     sleep 30 ;;
   detect-clean)    printf '%s\n' '{"entities":[],"text":""}' ;;
+  detect-exit-after-response)
+    printf '%s\n' '{"entities":[],"text":""}'
+    exit 3 ;;
   # policy
   plan-ok)      printf '%s\n' '{"plan":[{"index":0,"action":"pseudonymize"}]}' ;;
   plan-keep)    printf '%s\n' '{"plan":[{"index":0,"action":"keep"}]}' ;;
