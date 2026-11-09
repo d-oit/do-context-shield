@@ -135,6 +135,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- crates.io first-time publishing now orders all workspace dependencies,
+  including development, build, and optional dependencies, before their
+  dependents; the publish-order check enforces the same graph.
+
 - Windows key files now receive their protected allow-list DACL in the initial
   `CREATE_NEW` call. Creation and both permission validators derive the owner
   SID from the effective access token, eliminating account-name ambiguity and
