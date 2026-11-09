@@ -122,6 +122,22 @@ work lands or the precondition expires.
   (same-session ok; wrong session, unmarked text, and loose key permissions
   fail), and the verification gate.
 
+### crates.io publication and Trusted Publishing completed
+
+- **Published (2026-11-09)**: all 18 workspace crates at `0.1.0` are on
+  crates.io. The initial publish skipped 13 existing versions and published
+  the remaining five: `do-context-shield-core`,
+  `do-context-shield-plugin-process`, `do-context-shield-plugin-registry`,
+  `do-context-shield-mcp-server`, and `do-context-shield`. A subsequent
+  `scripts/publish-crates.sh --dry-run` confirmed all 18 versions.
+- **Trusted Publishing configured (2026-11-09)**: all 18 crates have a GitHub
+  Actions publisher for owner `d-oit`, repository `do-context-shield`, workflow
+  file `release.yml`, with no environment. Each configuration was verified by
+  crates.io API read-back.
+- The release workflow grants `id-token: write` and uses
+  `rust-lang/crates-io-auth-action`. Trusted Publishing-only enforcement was
+  left disabled.
+
 ## Open
 
 ### Glued-only secret detection gap: verdict is hold, no slice
@@ -243,25 +259,6 @@ work lands or the precondition expires.
   31/2 baseline of dispatch 39012269650. The Unix-only permission mutants
   are covered by the existing Linux tests once the workspace scope is used.
   A raw mutation score is not proof of security.
-
-## Blocked — external action
-
-### Configure crates.io Trusted Publishing for future releases
-
-- **Published (2026-11-09)**: all 18 workspace crates at `0.1.0` are on
-  crates.io. `scripts/publish-crates.sh` skipped 13 existing versions and
-  published the remaining five: `do-context-shield-core`,
-  `do-context-shield-plugin-process`, `do-context-shield-plugin-registry`,
-  `do-context-shield-mcp-server`, and `do-context-shield`. A subsequent
-  `scripts/publish-crates.sh --dry-run` confirmed every workspace version.
-- **Remaining (owner action)**: add a Trusted Publisher on each crate's
-  crates.io settings page: GitHub Actions, owner `d-oit`, repository
-  `do-context-shield`, workflow file `release.yml`; omit the environment because
-  the current release job does not declare one. The workflow already grants
-  `id-token: write` and uses `rust-lang/crates-io-auth-action`.
-- **Until configured**: publish future crate versions locally with `cargo
-  login` / `CARGO_REGISTRY_TOKEN`, or set `publish_crates=false` on a manual
-  release dispatch when only binary assets are needed.
 
 ## Blocked — approval-gated
 
