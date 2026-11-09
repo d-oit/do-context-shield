@@ -62,7 +62,7 @@
       "assertions": [
         "contains:.agents/skills/harness/SKILL.md|package.readme",
         "contains:.agents/skills/harness/SKILL.md|cargo package --list",
-        "contains:scripts/check-release-preflight.sh|README"
+        "contains:.agents/skills/harness/SKILL.md|package.include"
       ]
     }
   ]

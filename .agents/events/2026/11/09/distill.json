@@ -12,9 +12,9 @@
     }
   ],
   "payload": {
-    "from_trace": 20,
-    "heuristic_id": 15,
-    "pattern": "Every publishable crate needs a package-root README declared with package.readme and included in any explicit package.include allowlist; release-preflight must verify both the file and its cargo package --list entry.",
+    "from_trace": 21,
+    "heuristic_id": 16,
+    "pattern": "Skill-eval assertions should target the skill's own files; leave implementation behavior checks to the corresponding computational sensor. An assertion against an undeclared repository script failed in the pinned evaluator's sandbox while assertions against SKILL.md passed.",
     "to_fixture": false,
     "trigger": "resolved-trace"
   }
