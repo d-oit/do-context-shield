@@ -4,11 +4,13 @@
 # Sensor: scripts/check-publish-order.sh
 # scripts/publish-crates.sh publishes bottom-up through a hardcoded ORDER
 # array, and `cargo publish` resolves sibling path deps via the crates.io
-# index — so a crate missing from ORDER, or listed before one of its normal
-# workspace dependencies, fails mid-release with crates.io as the oracle.
+# index — so a crate missing from ORDER, or listed before one of its workspace
+# dependencies, fails mid-release with crates.io as the oracle. Cargo requires
+# every workspace path dependency to be available from the registry, including
+# optional, build, and development dependencies.
 # This sensor uses `cargo metadata` as the single source of truth and asserts
 # completeness (every workspace crate is listed) and topological validity
-# (every normal, non-optional workspace dependency appears earlier).
+# (every workspace dependency appears earlier).
 # Missing python3 fails closed when CI=true or DO_HARNESS_REQUIRE_TOOLS=1 and
 # is a WARN skip otherwise — the same policy as check-shellcheck.sh.
 set -euo pipefail
@@ -82,15 +84,12 @@ missing = sorted(set(crates) - set(order))
 if missing:
     problems.append('workspace crates missing from ORDER: ' + ', '.join(missing))
 
-# Normal, non-optional dependencies are what `cargo publish` rewrites to
-# registry versions; dev-deps on workspace members are stripped from the
-# packaged manifest and build-deps do not gate the index lookup.
+# Cargo packaging resolves every workspace path dependency through the
+# registry, including development, build, and optional dependencies.
 for name in order:
     if name not in crates:
         continue
     for dep in crates[name]['dependencies']:
-        if dep.get('kind') is not None or dep.get('optional', False):
-            continue
         if dep['name'] not in crates or dep['name'] not in pos:
             continue
         if pos[dep['name']] > pos[name]:
