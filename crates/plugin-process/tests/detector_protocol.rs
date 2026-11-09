@@ -133,6 +133,12 @@ fn errors_on_non_zero_exit() {
 }
 
 #[test]
+fn errors_on_non_zero_exit_after_valid_response() {
+    let message = error_message(&detector("detect-exit-after-response"), "alice@example.com");
+    assert!(message.contains("exited with status"), "got: {message}");
+}
+
+#[test]
 fn errors_on_invalid_json() {
     let message = error_message(&detector("junk"), "alice@example.com");
     assert!(message.contains("invalid JSON"), "got: {message}");

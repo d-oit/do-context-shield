@@ -7,7 +7,18 @@ Transport: newline-delimited JSON on the child's stdin/stdout. One child process
 Every method shares the same driver:
 
 - One response line, capped at 8 MiB.
-- `--process-timeout-ms` (default 30 000) bounds the wait for that line. On timeout, on every other error path, and after the child has answered, the whole **process tree** is terminated: Unix launches each child as its own process-group leader and signals the group, Windows assigns it to a Job Object configured to kill its members when the host closes the job. Direct `Child::kill` is only a fallback when containment cannot be established. Reaping is bounded, and a helper thread still blocked on a pipe held by a surviving descendant is detached rather than awaited, so the call never exceeds `timeout + 500 ms` plus the 100 ms exit grace.
+- `--process-timeout-ms` (default 30 000) bounds the wait for that line. On
+  timeout, on every other error path, and after the child has answered, the
+  whole **process tree** is terminated: Unix launches each child as its own
+  process-group leader and signals the group, Windows assigns it to a Job
+  Object configured to kill its members when the host closes the job. Direct
+  `Child::kill` is only a fallback when containment cannot be established.
+  Reaping is bounded, and a helper thread still blocked on a pipe held by a
+  surviving descendant is detached rather than awaited, so the call never
+  exceeds `timeout + 500 ms` plus the 100 ms exit grace. After the first
+  response line, stdout remains open through the bounded exit decision, but no
+  further lines are parsed; this prevents extra output from racing a closed
+  pipe while preserving natural non-zero exit failures.
 - The writer reports a broken pipe or write failure instead of ignoring it; a call with no usable response line surfaces it as "request could not be delivered".
 - A non-zero exit fails even when a response line was printed.
 - stderr is discarded and never logged, and error messages never echo input values. The pipeline additionally scrubs the input and detected values from any stage error text before it reaches a caller, so a backend cannot leak a value through an error.

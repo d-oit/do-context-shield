@@ -13,6 +13,8 @@ metadata:
   tags: plugin detector policy transformer vault rust
 ---
 ## Guides
+See references/heuristics.md for distilled heuristics.
+## Guides
 
 See [references/heuristics.md](references/heuristics.md) for distilled heuristics.
 
