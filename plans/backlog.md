@@ -122,6 +122,22 @@ work lands or the precondition expires.
   (same-session ok; wrong session, unmarked text, and loose key permissions
   fail), and the verification gate.
 
+### crates.io publication and Trusted Publishing completed
+
+- **Published (2026-11-09)**: all 18 workspace crates at `0.1.0` are on
+  crates.io. The initial publish skipped 13 existing versions and published
+  the remaining five: `do-context-shield-core`,
+  `do-context-shield-plugin-process`, `do-context-shield-plugin-registry`,
+  `do-context-shield-mcp-server`, and `do-context-shield`. A subsequent
+  `scripts/publish-crates.sh --dry-run` confirmed all 18 versions.
+- **Trusted Publishing configured (2026-11-09)**: all 18 crates have a GitHub
+  Actions publisher for owner `d-oit`, repository `do-context-shield`, workflow
+  file `release.yml`, with no environment. Each configuration was verified by
+  crates.io API read-back.
+- The release workflow grants `id-token: write` and uses
+  `rust-lang/crates-io-auth-action`. Trusted Publishing-only enforcement was
+  left disabled.
+
 ## Open
 
 ### Glued-only secret detection gap: verdict is hold, no slice
@@ -243,30 +259,6 @@ work lands or the precondition expires.
   31/2 baseline of dispatch 39012269650. The Unix-only permission mutants
   are covered by the existing Linux tests once the workspace scope is used.
   A raw mutation score is not proof of security.
-
-## Blocked — external action
-
-### First crates.io publish of the v0.1.0 crates
-
-- **Status (2026-10-30)**: the GitHub release `v0.1.0` is published with all
-  four binary archives and `SHA256SUMS` (release run 41128480486). The 18
-  workspace crates are **not** on crates.io.
-- **Blocker A**: the first dispatch (41126181556) failed at the
-  trusted-publishing exchange with `No Trusted Publishing config found for
-  repository d-oit/do-context-shield`. A trusted publisher can only be
-  configured after the crate exists, so the first publish must use a token.
-- **Blocker B**: the local `scripts/publish-crates.sh` (credentials from
-  `cargo login`) authenticated, but crates.io rejected the upload with `A
-  verified email address is required to publish crates to crates.io` (status
-  400). No crate was created.
-- **Next (human)**: verify the crates.io account email at
-  <https://crates.io/settings/profile>, then run
-  `scripts/publish-crates.sh` locally (it uses `cargo login` credentials and
-  skips versions already published). Afterwards configure trusted publishing
-  per crate on crates.io for repository `d-oit/do-context-shield` and workflow
-  `release.yml`; later releases publish from CI. Until then, dispatch with
-  `-f publish_crates=false` (the workflow input added in #172) when only the
-  binary assets are needed.
 
 ## Blocked — approval-gated
 
