@@ -64,6 +64,20 @@
         "contains:.agents/skills/harness/SKILL.md|cargo package --list",
         "contains:.agents/skills/harness/SKILL.md|package.include"
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "The release binary smoke passes, but how do you verify the crates.io package itself and preserve binary-only releases when registry publishing is skipped?",
+      "expected_output": "Install the exact release version from crates.io into a fresh Cargo home and target directory, run --version and doctor, then run the regular zero-leak smoke against the installed executable. If registry publication is intentionally skipped, record it in the workflow summary and keep binary releases available.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "contextual",
+      "assertions": [
+        "contains:.agents/skills/harness/SKILL.md|`CARGO_HOME` and `CARGO_TARGET_DIR`",
+        "contains:.agents/skills/harness/SKILL.md|workspace-built",
+        "contains:.agents/skills/harness/SKILL.md|workflow summary",
+        "contains:.agents/skills/harness/SKILL.md|zero-leak smoke"
+      ]
     }
   ]
 }

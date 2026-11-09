@@ -12,10 +12,10 @@
     }
   ],
   "payload": {
-    "from_trace": 21,
-    "heuristic_id": 16,
-    "pattern": "Skill-eval assertions should target the skill's own files; leave implementation behavior checks to the corresponding computational sensor. An assertion against an undeclared repository script failed in the pinned evaluator's sandbox while assertions against SKILL.md passed.",
-    "to_fixture": false,
+    "from_trace": 22,
+    "heuristic_id": 17,
+    "pattern": "Smoke the exact published CLI version from crates.io in a fresh CARGO_HOME and CARGO_TARGET_DIR; run doctor and the normal zero-leak smoke against that installed binary, because a workspace binary does not verify the registry artifact. If registry publication is intentionally skipped, record it in the workflow summary and keep binary release independent.",
+    "to_fixture": true,
     "trigger": "resolved-trace"
   }
 }

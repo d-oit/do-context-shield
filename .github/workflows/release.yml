@@ -163,3 +163,38 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
         run: bash scripts/publish-crates.sh
+
+  crates-install-smoke:
+    name: crates.io Install Smoke
+    needs: [preflight, publish-crates-io]
+    if: ${{ always() && needs.preflight.result == 'success' && needs.publish-crates-io.result == 'success' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+      - name: Install and smoke-test the published CLI
+        env:
+          TAG_NAME: ${{ inputs.tag_name || github.ref_name }}
+        run: bash scripts/smoke-test-crates-install.sh "$TAG_NAME"
+
+  crates-publication-summary:
+    name: crates.io Publication Summary
+    needs: [preflight, publish-crates-io]
+    if: ${{ always() && needs.preflight.result == 'success' }}
+    permissions: {}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Summarize registry publication
+        env:
+          PUBLISH_REQUESTED: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_crates }}
+          PUBLISH_RESULT: ${{ needs.publish-crates-io.result }}
+        run: |
+          if [[ "$PUBLISH_REQUESTED" == "false" ]]; then
+            printf '%s\n' 'Crates.io publication intentionally skipped; registry-install smoke skipped. GitHub binary release remains enabled.' | tee -a "$GITHUB_STEP_SUMMARY"
+          elif [[ "$PUBLISH_RESULT" == "success" ]]; then
+            printf '%s\n' 'Crates.io publish job succeeded (new versions published or existing versions skipped).' | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            printf 'Crates.io publish job result: %s.\n' "$PUBLISH_RESULT" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
