@@ -7,7 +7,8 @@ license.workspace = true
 description = "In-memory session-scoped vault plugin for do-context-shield"
 homepage.workspace = true
 repository.workspace = true
-include = ["src/**/*", "Cargo.toml"]
+readme = "README.md"
+include = ["README.md", "src/**/*", "Cargo.toml"]
 
 [lints]
 workspace = true

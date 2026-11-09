@@ -80,7 +80,7 @@ when-changed = ["scripts/publish-crates.sh", "scripts/check-publish-order.sh", "
 [[sensors]]
 name = "release-preflight"
 argv = ["bash", "scripts/check-release-preflight.sh"]
-when-changed = ["scripts/check-release-preflight.sh", "scripts/publish-crates.sh", "scripts/check-publish-order.sh", "crates/*/Cargo.toml", "Cargo.toml", "Cargo.lock"]
+when-changed = ["scripts/check-release-preflight.sh", "scripts/publish-crates.sh", "scripts/check-publish-order.sh", "crates/*/Cargo.toml", "crates/*/README.md", "Cargo.toml", "Cargo.lock"]
 
 [[sensors]]
 name = "commitlint"

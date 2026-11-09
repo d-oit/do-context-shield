@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added a package-local README to every publishable crate, declared and included it in Cargo manifests, and extended release-preflight to reject missing or unarchived READMEs. Published versions remain immutable; these packaging changes apply to future releases.
+
 - Official MCP Rust SDK (`rmcp` 3.x) interoperability tests (`crates/do-context-shield-cli/tests/mcp_rmcp_interop.rs`, issue #191). Exercises `do-context-shield mcp-stdio` using the official SDK client over stdio for both modern (2026-07-28 discovery/per-request meta) and legacy (2025-11-25 initialize handshake) protocols, verifying tool enumeration, default model-facing surface restrictions, sanitize/restore/forget lifecycles, and error reporting without raw canary leakage.
 
 - Secure key-file generation (issue #190). `do-context-shield create-key --output <path>` writes a random 32-byte key in hex without printing it,

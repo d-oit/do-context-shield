@@ -7,7 +7,7 @@
 #   2. Tag agreement (if RELEASE_TAG or $1 is supplied, e.g. v0.1.0 or 0.1.0).
 #   3. Package metadata completeness (description, license, repository).
 #   4. Publish order array completeness and topological sorting (via check-publish-order.sh).
-#   5. Package surface hygiene (cargo package --list for every workspace crate).
+#   5. Package surface hygiene and README inclusion (cargo package --list for every workspace crate).
 set -euo pipefail
 
 require_tools() { [[ "${CI:-}" == "true" || "${DO_HARNESS_REQUIRE_TOOLS:-}" == "1" ]]; }
@@ -32,6 +32,7 @@ bash scripts/check-publish-order.sh
 echo "--- 2. Checking package versions, tag agreement, and metadata ---"
 TARGET_TAG="$TARGET_TAG" python3 - <<'PYEOF'
 import json, os, subprocess, sys
+from pathlib import Path
 
 target_tag = os.environ.get('TARGET_TAG', '').strip()
 if target_tag.startswith('v'):
@@ -76,24 +77,46 @@ for name, pkg in crates.items():
     if pkg['version'] != workspace_version:
         problems.append(f"Crate '{name}' version ({pkg['version']}) does not match workspace version ({workspace_version})")
 
-# 3. Package metadata check
+# 3. Package metadata and README archive check
 for name, pkg in sorted(crates.items()):
     for field in ('description', 'license', 'repository'):
         if not pkg.get(field):
             problems.append(f"Crate '{name}' missing required release metadata field '{field}'")
 
+    readme = pkg.get('readme')
+    if not readme:
+        problems.append(f"Crate '{name}' missing package README metadata ('readme')")
+        continue
+
+    package_root = Path(pkg['manifest_path']).resolve().parent
+    readme_path = Path(readme)
+    if not readme_path.is_absolute():
+        readme_path = package_root / readme_path
+    readme_path = readme_path.resolve()
+    try:
+        relative_readme = readme_path.relative_to(package_root).as_posix()
+    except ValueError:
+        problems.append(f"Crate '{name}' README must be inside its package root")
+        continue
+
+    if not readme_path.is_file():
+        problems.append(f"Crate '{name}' README does not exist: '{relative_readme}'")
+        continue
+
+    package_list = subprocess.run(
+        ['cargo', 'package', '--list', '--allow-dirty', '-p', name],
+        capture_output=True, text=True)
+    if package_list.returncode != 0:
+        problems.append(f"Crate '{name}' cargo package --list failed:\n{package_list.stderr.strip()}")
+    elif relative_readme not in package_list.stdout.splitlines():
+        problems.append(f"Crate '{name}' README '{relative_readme}' is not in the package archive (check package.include)")
+
 if problems:
     print('\n'.join('FAIL: ' + p for p in problems))
     sys.exit(1)
 
-print(f"release-preflight: {len(crates)} crates verified at version {workspace_version}.")
+print(f"release-preflight: {len(crates)} crates verified at version {workspace_version}; declared READMEs are included.")
 PYEOF
 
-echo "--- 3. Verifying include whitelists / package surfaces ---"
-for crate in $(cargo metadata --format-version 1 --no-deps \
-  | python3 -c "import json,sys; print(' '.join(sorted(p['name'] for p in json.load(sys.stdin)['packages'] if '/crates/' in p['manifest_path'])))"); do
-    cargo package --list -p "$crate" > /dev/null
-done
-echo "OK: All package surfaces listed successfully."
 
 echo "check-release-preflight OK."

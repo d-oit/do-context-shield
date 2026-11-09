@@ -7,7 +7,8 @@ license.workspace = true
 description = "Strict private append-only JSONL audit sink for do-context-shield"
 homepage.workspace = true
 repository.workspace = true
-include = ["src/**/*", "Cargo.toml"]
+readme = "README.md"
+include = ["README.md", "src/**/*", "Cargo.toml"]
 
 [lints]
 workspace = true

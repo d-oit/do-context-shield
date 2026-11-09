@@ -7,7 +7,8 @@ license.workspace = true
 description = "Hybrid detector plugin (runs two detectors, e.g. regex + local model) for do-context-shield"
 homepage.workspace = true
 repository.workspace = true
-include = ["src/**/*", "Cargo.toml"]
+readme = "README.md"
+include = ["README.md", "src/**/*", "Cargo.toml"]
 
 [lints]
 workspace = true
