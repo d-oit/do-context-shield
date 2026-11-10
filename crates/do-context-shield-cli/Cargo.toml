@@ -61,3 +61,5 @@ predicates = "3"
 tempfile = "3"
 rmcp = { version = "3", default-features = false, features = ["client", "transport-child-process"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util"] }
+do-context-shield-detector-regex.workspace = true
+sha2.workspace = true

@@ -1,0 +1,197 @@
+{
+  "schema_version": 1,
+  "revision": "dcs-detector-quality-v1",
+  "license": "CC0-1.0",
+  "provenance": "Maintainer-authored synthetic examples only; no external corpus, customer records, or production credentials. Email addresses use example.com, database hosts use example.test, and account-shaped tokens and identifiers are explicitly non-issued test strings.",
+  "span_unit": "unicode_scalar_values_zero_based_half_open",
+  "cases": [
+    {
+      "id": "email_german_unicode_context",
+      "category": "email",
+      "text": "Grüße — Kontakt: qa.person@example.com!",
+      "gate_modes": ["regex"],
+      "entities": [
+        {"kind": "email", "surface": "qa.person@example.com", "start_char": 17, "end_char": 38, "modes": ["regex", "gliner2", "hybrid"]}
+      ]
+    },
+    {
+      "id": "email_french_context",
+      "category": "email",
+      "text": "En français, contact a.person@example.com, merci.",
+      "gate_modes": ["regex"],
+      "entities": [
+        {"kind": "email", "surface": "a.person@example.com", "start_char": 21, "end_char": 41, "modes": ["regex", "gliner2", "hybrid"]}
+      ]
+    },
+    {
+      "id": "email_local_domain_negative",
+      "category": "email",
+      "text": "Mail user@localhost for a demo.",
+      "gate_modes": ["regex"],
+      "entities": []
+    },
+    {
+      "id": "name_german_synthetic",
+      "category": "name",
+      "text": "Bitte grüße Ada Example heute.",
+      "gate_modes": [],
+      "entities": [
+        {"kind": "full_name", "surface": "Ada Example", "start_char": 12, "end_char": 23, "modes": ["gliner2", "hybrid"]}
+      ]
+    },
+    {
+      "id": "postal_address_german_synthetic",
+      "category": "postal_address",
+      "text": "Lieferung an Musterweg 1, 00000 Musterstadt.",
+      "gate_modes": [],
+      "entities": [
+        {"kind": "street_address", "surface": "Musterweg 1", "start_char": 13, "end_char": 24, "modes": ["gliner2", "hybrid"]},
+        {"kind": "postal_code", "surface": "00000", "start_char": 26, "end_char": 31, "modes": ["gliner2", "hybrid"]},
+        {"kind": "city", "surface": "Musterstadt", "start_char": 32, "end_char": 43, "modes": ["gliner2", "hybrid"]}
+      ]
+    },
+    {
+      "id": "phone_german_placeholder",
+      "category": "phone",
+      "text": "Rufnummer: 000-00000000.",
+      "gate_modes": ["regex"],
+      "entities": [
+        {"kind": "phone", "surface": "000-00000000", "start_char": 11, "end_char": 23, "modes": ["regex", "hybrid"]},
+        {"kind": "phone_number", "surface": "000-00000000", "start_char": 11, "end_char": 23, "modes": ["gliner2"]}
+      ]
+    },
+    {
+      "id": "iban_synthetic_valid_checksum",
+      "category": "iban",
+      "text": "Prüfen: DE36 0000 0000 0000 0000 00 (synthetic).",
+      "gate_modes": ["regex"],
+      "entities": [
+        {"kind": "iban", "surface": "DE36 0000 0000 0000 0000 00", "start_char": 8, "end_char": 35, "modes": ["regex", "gliner2", "hybrid"]}
+      ]
+    },
+    {
+      "id": "iban_invalid_checksum_negative",
+      "category": "iban",
+      "text": "Prüfen: DE36 0000 0000 0000 0000 01 (synthetic).",
+      "gate_modes": [],
+      "manual_review_priority": "identity",
+      "entities": []
+    },
+    {
+      "id": "german_tax_identifier_placeholder",
+      "category": "german_identifier",
+      "text": "Steuer-ID (synthetic): 00000000000",
+      "gate_modes": [],
+      "manual_review_priority": "identity",
+      "entities": [
+        {"kind": "tax_id", "surface": "00000000000", "start_char": 23, "end_char": 34, "modes": ["gliner2", "hybrid"]}
+      ]
+    },
+    {
+      "id": "german_identity_document_placeholder",
+      "category": "german_identifier",
+      "text": "Personalausweisnummer (synthetic): X-TEST-0000",
+      "gate_modes": [],
+      "manual_review_priority": "identity",
+      "entities": [
+        {"kind": "national_id_number", "surface": "X-TEST-0000", "start_char": 35, "end_char": 46, "modes": ["gliner2", "hybrid"]}
+      ]
+    },
+    {
+      "id": "api_credential_nonissued_example",
+      "category": "api_credential",
+      "text": "Example only: sk-proj-TEST_ONLY_NOT_REAL_TEST_ONLY_NOT_REAL_TEST_ONLY_NOT_REAL!",
+      "gate_modes": ["regex"],
+      "manual_review_priority": "credential",
+      "entities": [
+        {"kind": "openai_project_key", "surface": "sk-proj-TEST_ONLY_NOT_REAL_TEST_ONLY_NOT_REAL_TEST_ONLY_NOT_REAL", "start_char": 14, "end_char": 78, "modes": ["regex", "hybrid"]},
+        {"kind": "api_key", "surface": "sk-proj-TEST_ONLY_NOT_REAL_TEST_ONLY_NOT_REAL_TEST_ONLY_NOT_REAL", "start_char": 14, "end_char": 78, "modes": ["gliner2"]}
+      ]
+    },
+    {
+      "id": "api_credential_short_negative",
+      "category": "api_credential",
+      "text": "Token sample: sk-proj-short.",
+      "gate_modes": ["regex"],
+      "entities": []
+    },
+    {
+      "id": "database_uri_fake_credentials",
+      "category": "database_uri",
+      "text": "DATABASE_URL=postgres://fake:fake@db.example.test/app",
+      "gate_modes": ["regex"],
+      "manual_review_priority": "credential",
+      "entities": [
+        {"kind": "db_credential", "surface": "postgres://fake:fake@db.example.test/app", "start_char": 13, "end_char": 53, "modes": ["regex", "hybrid"]}
+      ]
+    },
+    {
+      "id": "database_uri_without_credentials_negative",
+      "category": "database_uri",
+      "text": "postgres://localhost:5432/app",
+      "gate_modes": ["regex"],
+      "entities": []
+    },
+    {
+      "id": "source_code_secret_nonissued_example",
+      "category": "source_code_secret",
+      "text": "const token = \"TEST_ONLY_NOT_A_REAL_SECRET_0001\";",
+      "gate_modes": ["regex"],
+      "manual_review_priority": "credential",
+      "entities": [
+        {"kind": "generic_secret", "surface": "token = \"TEST_ONLY_NOT_A_REAL_SECRET_0001\"", "start_char": 6, "end_char": 48, "modes": ["regex", "hybrid"]},
+        {"kind": "secret", "surface": "TEST_ONLY_NOT_A_REAL_SECRET_0001", "start_char": 15, "end_char": 47, "modes": ["gliner2"]}
+      ]
+    },
+    {
+      "id": "credential_boundary_trailing_hyphen",
+      "category": "credential_boundary",
+      "text": "Header: sk-proj-TEST_ONLY_NOT_REAL_TEST_ONLY_NOT_REAL_TEST_ONLY_NOT_REAL-",
+      "gate_modes": ["regex"],
+      "manual_review_priority": "credential",
+      "entities": [
+        {"kind": "openai_project_key", "surface": "sk-proj-TEST_ONLY_NOT_REAL_TEST_ONLY_NOT_REAL_TEST_ONLY_NOT_REAL-", "start_char": 8, "end_char": 73, "modes": ["regex", "hybrid"]},
+        {"kind": "api_key", "surface": "sk-proj-TEST_ONLY_NOT_REAL_TEST_ONLY_NOT_REAL_TEST_ONLY_NOT_REAL-", "start_char": 8, "end_char": 73, "modes": ["gliner2"]}
+      ]
+    },
+    {
+      "id": "credential_glued_only_known_gap",
+      "category": "credential_boundary",
+      "text": "prefixsk-proj-TEST_ONLY_NOT_REAL_TEST_ONLY_NOT_REAL_TEST_ONLY_NOT_REALsuffix",
+      "gate_modes": [],
+      "manual_review_priority": "credential",
+      "entities": [
+        {"kind": "openai_project_key", "surface": "sk-proj-TEST_ONLY_NOT_REAL_TEST_ONLY_NOT_REAL_TEST_ONLY_NOT_REAL", "start_char": 6, "end_char": 70, "modes": ["regex", "hybrid"]},
+        {"kind": "api_key", "surface": "sk-proj-TEST_ONLY_NOT_REAL_TEST_ONLY_NOT_REAL_TEST_ONLY_NOT_REAL", "start_char": 6, "end_char": 70, "modes": ["gliner2"]}
+      ]
+    },
+    {
+      "id": "weak_prefix_ordinary_prose_negative",
+      "category": "negative_prose",
+      "text": "This disk-usage-of-the-container is ordinary prose.",
+      "gate_modes": ["regex"],
+      "entities": []
+    },
+    {
+      "id": "short_password_assignment_negative",
+      "category": "negative_code",
+      "text": "let password = \"abc\";",
+      "gate_modes": ["regex"],
+      "entities": []
+    },
+    {
+      "id": "short_token_assignment_negative",
+      "category": "negative_code",
+      "text": "let token = \"abc\";",
+      "gate_modes": ["regex"],
+      "entities": []
+    },
+    {
+      "id": "sensitive_field_names_without_values_negative",
+      "category": "negative_prose",
+      "text": "The words first_name and postal_code are schema labels, not records.",
+      "gate_modes": ["regex"],
+      "entities": []
+    }
+  ]
+}
