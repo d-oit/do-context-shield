@@ -123,3 +123,119 @@ fn model_identity_hashes_local_metadata_without_exposing_the_path() {
     let local_path = directory.path().to_string_lossy().into_owned();
     assert!(!serialized.contains(&local_path));
 }
+
+#[cfg(feature = "gliner2")]
+#[test]
+fn model_identity_uses_backend_selected_tokenizer_for_dual_layout_exports() {
+    use super::model_support::model_identity_with_backend_config;
+    use super::{Mode, ModelSetup, model_identity, sha256};
+    use gliner2_rs::{Precision, SpanConfig};
+
+    let directory = match tempfile::tempdir() {
+        Ok(value) => value,
+        Err(error) => panic!("temporary model directory creation failed: {error}"),
+    };
+    write_model_fixture_file(
+        directory.path(),
+        "fp32_v2/encoder_fp32.onnx",
+        b"fp32 encoder",
+    );
+    write_model_fixture_file(
+        directory.path(),
+        "fp16_v2/encoder_fp16.onnx",
+        b"fp16 encoder",
+    );
+    write_model_fixture_file(
+        directory.path(),
+        "fp16_v2/encoder_fp16_iobinding.onnx",
+        b"fp16 iobinding encoder",
+    );
+    write_model_fixture_file(
+        directory.path(),
+        "fp32_v2/tokenizer.json",
+        b"fp32 tokenizer metadata",
+    );
+    write_model_fixture_file(
+        directory.path(),
+        "fp16_v2/tokenizer.json",
+        b"fp16 tokenizer metadata",
+    );
+    write_model_fixture_file(
+        directory.path(),
+        "fp32_v2/config.json",
+        b"fp32 model config",
+    );
+    write_model_fixture_file(
+        directory.path(),
+        "fp16_v2/config.json",
+        b"fp16 model config",
+    );
+    let setup = ModelSetup {
+        model_dir: directory.path().to_path_buf(),
+        version: String::from("synthetic-dual-layout@v1"),
+    };
+    let backend_config = SpanConfig::new(setup.model_dir.clone()).with_intra_threads(1);
+    let Some(expected_tokenizer_path) = gliner2_rs::runtime::resolve_tokenizer(
+        &backend_config.models_dir,
+        backend_config.precision,
+    ) else {
+        panic!("synthetic backend tokenizer resolution failed");
+    };
+    let expected_tokenizer = match std::fs::read(expected_tokenizer_path) {
+        Ok(value) => value,
+        Err(error) => panic!("selected synthetic tokenizer read failed: {error}"),
+    };
+    let identity = match model_identity(Mode::Gliner2, &setup) {
+        Ok(value) => value,
+        Err(error) => panic!("synthetic model identity creation failed: {error}"),
+    };
+    let resolved_identity =
+        match model_identity_with_backend_config(Mode::Gliner2, &setup, &backend_config) {
+            Ok(value) => value,
+            Err(error) => panic!("resolved synthetic model identity creation failed: {error}"),
+        };
+    let alternate_precision = match backend_config.precision {
+        Precision::Fp32 => Precision::Fp16,
+        Precision::Fp16 | Precision::Fp16IoBinding => Precision::Fp32,
+    };
+    let alternate_config = SpanConfig::new(setup.model_dir.clone())
+        .with_precision(alternate_precision)
+        .with_intra_threads(1);
+    let alternate_identity =
+        match model_identity_with_backend_config(Mode::Gliner2, &setup, &alternate_config) {
+            Ok(value) => value,
+            Err(error) => panic!("alternate synthetic model identity creation failed: {error}"),
+        };
+
+    assert_eq!(identity, resolved_identity);
+    assert_eq!(
+        identity.model_config_source.as_deref(),
+        Some("built_in_defaults")
+    );
+    assert_ne!(
+        identity.runtime_config_sha256,
+        alternate_identity.runtime_config_sha256
+    );
+    assert_ne!(
+        identity.model_config_sha256,
+        alternate_identity.model_config_sha256
+    );
+
+    assert_eq!(
+        identity.tokenizer_sha256.as_deref(),
+        Some(sha256(&expected_tokenizer).as_str())
+    );
+}
+
+#[cfg(feature = "gliner2")]
+fn write_model_fixture_file(root: &std::path::Path, relative: &str, bytes: &[u8]) {
+    let path = root.join(relative);
+    if let Some(parent) = path.parent()
+        && let Err(error) = std::fs::create_dir_all(parent)
+    {
+        panic!("synthetic model directory creation failed: {error}");
+    }
+    if let Err(error) = std::fs::write(path, bytes) {
+        panic!("synthetic model fixture write failed: {error}");
+    }
+}

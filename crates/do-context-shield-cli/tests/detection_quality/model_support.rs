@@ -1,4 +1,5 @@
 use super::{DetectorIdentity, Mode, REGEX_PATTERNS, invalid_data, sha256};
+use gliner2_rs::{ExecutionMode, Precision, SpanConfig};
 use std::error::Error;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -10,19 +11,58 @@ pub struct ModelSetup {
 
 /// Build a reproducible model/config identity from an explicitly supplied local export.
 ///
+/// Fragment tokenizer and runtime settings follow the same resolved backend
+/// configuration used for inference; local paths are never included in the report.
+///
 /// # Errors
-/// Returns an error if the local tokenizer or configuration metadata is missing or unreadable.
+/// Returns an error if the selected tokenizer or configuration metadata is missing or unreadable.
 pub fn model_identity(mode: Mode, setup: &ModelSetup) -> Result<DetectorIdentity, Box<dyn Error>> {
-    let tokenizer_path = find_metadata_file(&setup.model_dir, "tokenizer.json")
-        .ok_or_else(|| invalid_data("local model has no tokenizer.json"))?;
+    let backend_config = SpanConfig::new(setup.model_dir.clone()).with_intra_threads(1);
+    model_identity_with_backend_config(mode, setup, &backend_config)
+}
+
+/// Build an identity from a backend configuration already resolved for inference.
+///
+/// # Errors
+/// Returns an error if the selected tokenizer or configuration metadata is missing or unreadable.
+pub(super) fn model_identity_with_backend_config(
+    mode: Mode,
+    setup: &ModelSetup,
+    backend_config: &SpanConfig,
+) -> Result<DetectorIdentity, Box<dyn Error>> {
+    let model_dir = &backend_config.models_dir;
+    let fragment_export = has_fragment_encoder(model_dir);
+    let tokenizer_path = if fragment_export {
+        gliner2_rs::runtime::resolve_tokenizer(model_dir, backend_config.precision)
+    } else {
+        let candidate = model_dir.join("tokenizer.json");
+        candidate.is_file().then_some(candidate)
+    };
+    let tokenizer_path =
+        tokenizer_path.ok_or_else(|| invalid_data("local model has no tokenizer.json"))?;
     let tokenizer_sha256 = sha256_file(&tokenizer_path)?;
+    let backend_selection = if fragment_export {
+        serde_json::json!({
+            "precision": precision_name(backend_config.precision),
+            "execution": execution_name(backend_config.execution)
+        })
+    } else {
+        serde_json::Value::Null
+    };
     let runtime_config = serde_json::to_vec(&serde_json::json!({
+        "backend": if fragment_export { "gliner2_fragments" } else { "single_file" },
         "labels": do_context_shield_detector_gliner2::PII_LABELS_42.as_slice(),
         "threshold": do_context_shield_detector_gliner2::DEFAULT_THRESHOLD,
         "max_tokens": do_context_shield_detector_gliner2::DEFAULT_MAX_TOKENS,
-        "intra_threads": 1
+        "intra_threads": backend_config.intra_threads,
+        "backend_selection": backend_selection
     }))?;
-    let config_path = find_metadata_file(&setup.model_dir, "config.json");
+    let config_path = if fragment_export {
+        None
+    } else {
+        let path = model_dir.join("config.json");
+        path.is_file().then_some(path)
+    };
     let (model_config_sha256, model_config_source) = if let Some(path) = config_path {
         (sha256_file(&path)?, String::from("config.json"))
     } else {
@@ -69,19 +109,28 @@ pub fn optional_model_setup() -> Result<Option<ModelSetup>, Box<dyn Error>> {
     Ok(Some(ModelSetup { model_dir, version }))
 }
 
-fn find_metadata_file(model_dir: &Path, name: &str) -> Option<PathBuf> {
-    for subdir in ["", "fp32_v2", "fp16_v2"] {
-        let directory = if subdir.is_empty() {
-            model_dir.to_path_buf()
-        } else {
-            model_dir.join(subdir)
-        };
-        let candidate = directory.join(name);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
+fn has_fragment_encoder(model_dir: &Path) -> bool {
+    [Precision::Fp32, Precision::Fp16, Precision::Fp16IoBinding]
+        .into_iter()
+        .any(|precision| {
+            gliner2_rs::runtime::resolve_fragment(model_dir, "encoder", precision).is_some()
+        })
+}
+
+const fn precision_name(precision: Precision) -> &'static str {
+    match precision {
+        Precision::Fp32 => "fp32",
+        Precision::Fp16 => "fp16",
+        Precision::Fp16IoBinding => "fp16_iobinding",
     }
-    None
+}
+
+const fn execution_name(execution: ExecutionMode) -> &'static str {
+    match execution {
+        ExecutionMode::Standard => "standard",
+        ExecutionMode::IoBinding => "iobinding",
+        ExecutionMode::Auto => "auto",
+    }
 }
 
 /// Hash one local model metadata file.
