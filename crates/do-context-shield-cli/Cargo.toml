@@ -18,7 +18,7 @@ path = "src/main.rs"
 # Build the CLI with the GLiNER2 ONNX backend enabled. The model-backed
 # end-to-end test target below additionally needs ORT_DYLIB_PATH and
 # DO_CONTEXT_SHIELD_E2E_MODEL_DIR at run time (see docs/plugins.md).
-gliner2 = ["do-context-shield-detector-gliner2/gliner2"]
+gliner2 = ["do-context-shield-detector-gliner2/gliner2", "dep:gliner2-rs"]
 
 [[test]]
 name = "cli_detector_gliner2"
@@ -43,6 +43,7 @@ serde_json.workspace = true
 toml.workspace = true
 do-context-shield-core.workspace = true
 do-context-shield-detector-gliner2.workspace = true
+gliner2-rs = { workspace = true, optional = true }
 do-context-shield-detector-hybrid.workspace = true
 do-context-shield-plugin-process.workspace = true
 do-context-shield-plugin-api.workspace = true
@@ -61,3 +62,5 @@ predicates = "3"
 tempfile = "3"
 rmcp = { version = "3", default-features = false, features = ["client", "transport-child-process"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util"] }
+do-context-shield-detector-regex.workspace = true
+sha2.workspace = true
