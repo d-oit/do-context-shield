@@ -14,6 +14,8 @@ metadata:
   tags: harness sensors feedback feedforward self-correction quality
 ---
 ## Guides
+See references/heuristics.md for distilled heuristics.
+## Guides
 
 See [references/heuristics.md](references/heuristics.md) for distilled repository heuristics.
 
@@ -87,6 +89,11 @@ A sensor firing more than twice in one task is a feedforward-guide defect. Updat
   review is unanswered: it waits for CI, never for comments.
 - Never weaken or delete the sensor that fired; fix the cause.
 - Every publishable crate needs a README inside its package root, `package.readme` set to it, and the README included when `package.include` is explicit. `release-preflight` checks the file and `cargo package --list`; a workspace-root README is outside each crate archive.
+- After publishing a CLI, install the exact crates.io version in a fresh
+  `CARGO_HOME` and `CARGO_TARGET_DIR`, then run `--version`, `doctor`, and the
+  normal zero-leak smoke against that installed binary; a workspace-built
+  binary does not verify the registry artifact. If publication is intentionally
+  skipped, state it in the workflow summary and keep binary release available.
 - `.do-harness/` (state database, evidence) and `target/` are gitignored local state — never durable evidence, never committed.
 - `do-harness status` compares the *uncommitted* workspace and config fingerprints, not HEAD: after a pull, merge, rebase, or commit, re-run the sensor set before quoting `status` as current (observed in 0.1.1: evidence recorded at one commit stayed "current" after a source change was committed). CI is unaffected — `verify` and `status` run in the same checkout.
 - `do-harness eval` needs `.agents/skills/skill-creator/scripts/quick_validate.py` (dependency-free, no PyYAML) in its sandbox, and `--strict-fixtures` rejects thin datasets; grader drift requires an explicit `--bless`. A *failed graded assertion*, however, still exits 0 (only the per-skill `pass_rate` drops) and `--format json` produced no output in 0.1.1 — so the `skill-evals` sensor wraps the command (`scripts/check-skill-evals.sh`) and fails on any verdict that is not `structure=ok evals=<n>/<n> fixture=ok`; never `--bless` a failure. An attempt that prints no verdict line at all (the evaluation never ran) is retried once — that cannot be a graded failure, since graded and structural outcomes always carry `evals=…` — while a verdict with `evals=<n>/<m>`, `n<m` fails immediately.

@@ -42,6 +42,8 @@ Release candidate binaries are tested before publishing assets (`scripts/smoke-t
 4. **Zero-Leak Assertion**: Verifies that raw sensitive input values are never written to stdout, stderr, or log outputs during sanitization.
 5. `restore` functionality from vault file.
 6. `mcp-stdio` JSON-RPC tool calls over stdio.
+7. After the registry publish job succeeds, a separate job installs the exact release version from crates.io in a temporary `CARGO_HOME`, checks `--version` and `doctor`, then runs the existing synthetic zero-leak sanitize/restore smoke against that installed executable. This verifies the published package rather than only the workspace binary.
+8. If a manual dispatch explicitly disables crate publication, the workflow summary records the skip and the registry-install smoke is skipped; GitHub binary releases remain enabled.
 
 ## Triggering a Release
 

@@ -137,6 +137,14 @@ work lands or the precondition expires.
 - The release workflow grants `id-token: write` and uses
   `rust-lang/crates-io-auth-action`. Trusted Publishing-only enforcement was
   left disabled.
+- **Published-artifact smoke added (2026-11-09)**: the release workflow now
+  installs the exact tag version from crates.io into temporary Cargo and target
+  directories, checks `--version` and `doctor`, then runs the existing
+  zero-leak smoke against that installed binary. The local `v0.1.0` install
+  smoke passed; `scripts/publish-crates.sh --dry-run` and `--needs-publish`
+  confirmed all 18 versions are already published. An actual workflow rerun
+  has not been dispatched because it would replace the existing GitHub release
+  assets.
 
 ## Open
 
