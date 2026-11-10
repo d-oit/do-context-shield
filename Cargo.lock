@@ -548,6 +548,7 @@ dependencies = [
  "do-context-shield-plugin-registry",
  "do-context-shield-policy-matrix",
  "do-context-shield-vault-json",
+ "gliner2-rs",
  "predicates",
  "rmcp",
  "serde",
