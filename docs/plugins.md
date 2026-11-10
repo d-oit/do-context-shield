@@ -23,11 +23,60 @@ Implementations are selected by logical plugin name. The JSON vault is the one i
 
 Every selection can also come from `do-context-shield.toml` (`docs/configuration.md`); an explicit CLI flag overrides the file value. For `mcp-stdio` the file applies only through `--config <path>`: a project directory cannot configure the server that runs in it.
 
-### Detector quality benchmark
+### Detector quality evaluation
 
-The default regex detector carries a repeatable benchmark
-(`crates/detector-regex/tests/quality.rs`), built in-process from a fixed seed
-— no fixture literals, no network, no model:
+The versioned, maintainer-authored synthetic corpus is
+[`quality/corpus/v1.json`](../quality/corpus/v1.json); its schema, provenance,
+span convention, and update rules are in [`quality/README.md`](../quality/README.md).
+It contains no real PII or issued credentials. Annotation offsets are
+zero-based, half-open Unicode scalar-value spans; the runner converts them to
+UTF-8 byte spans before exact `(kind, span)` scoring.
+
+Run the deterministic regex gate and print its structured JSON report:
+
+```bash
+cargo test -p do-context-shield --test detection_quality -- --nocapture
+```
+
+CI runs the same integration test with `cargo test --workspace --all-features`.
+Only cases that list `regex` in `gate_modes` fail CI on a false positive or
+false negative. The report still scores every corpus case and includes
+aggregate and per-kind precision, recall, F1, TP/FP/FN counts, finding case IDs
+and byte spans, corpus revision and SHA-256, detector version, and regex
+pattern identity. It never prints source text or detected values. Non-gated
+credential misses remain visible with `manual_review_priority: "credential"`.
+
+GLiNER2 and hybrid reports are opt-in and use only an already-local ONNX export;
+the runner never downloads a model. Set all three variables to run both model
+modes (the test skips when the model directory is unset and fails on a partial
+setup):
+
+```bash
+export ORT_DYLIB_PATH=/absolute/path/to/libonnxruntime.so
+export DO_CONTEXT_SHIELD_QUALITY_MODEL_DIR=/absolute/path/to/local-model
+export DO_CONTEXT_SHIELD_QUALITY_MODEL_VERSION='model-name@revision'
+cargo test -p do-context-shield --features gliner2 \
+  --test detection_quality -- --nocapture
+```
+
+Model reports include the supplied model version, tokenizer and model-config
+SHA-256 identities (or the built-in fragment-export config identity), and the
+effective runtime-config hash. The model path and corpus values are not
+included.
+
+Each configured model mode runs twice and must produce the same structured report for identical inputs.
+
+Metrics describe this synthetic corpus, not production guarantees. Aggregate
+scores can hide per-kind misses; inspect the per-kind counts and findings.
+Credential false negatives require manual review. A score alone is not a reason
+to change a detector pattern: review false positives and add a security
+regression before any boundary change.
+
+#### Seeded regex-pattern benchmark
+
+The regex crate also carries a repeatable generated benchmark
+(`crates/detector-regex/tests/quality`), built in-process from a fixed seed —
+no fixture literals, no network, no model:
 
 ```bash
 cargo test -p do-context-shield-detector-regex --test quality -- --nocapture

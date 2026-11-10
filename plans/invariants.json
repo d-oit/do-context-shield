@@ -498,6 +498,12 @@
     "category": "contracts"
   },
   {
+    "invariant": "Detection-quality examples are maintainer-authored synthetic values, reports contain only case IDs, kinds, byte spans, metrics, and content hashes (never corpus text or entity values), and credential false negatives carry manual-review priority",
+    "rationale": "Evaluation fixtures and reports must not become another source of PII or credentials; stable offsets and hashes preserve reviewability without echoing sensitive values, while credential misses remain visible for human review",
+    "sensor": "cargo test -p do-context-shield --test detection_quality (validates synthetic annotations, Unicode span conversion, value-free reports, and deterministic regex gate)",
+    "category": "security"
+  },
+  {
     "invariant": "Every publishable workspace crate declares a package-root README with `package.readme`, and the README appears in `cargo package --list` output even when `package.include` is explicit",
     "rationale": "Crates.io renders the README from the published archive, not from the workspace root. An explicit include allowlist can silently omit a README, so successful compilation or publish ordering alone does not guarantee a usable registry page.",
     "sensor": "bash scripts/check-release-preflight.sh (release-preflight: requires a package-root README and asserts the declared file appears in cargo package --list)",

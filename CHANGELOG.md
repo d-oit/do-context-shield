@@ -54,6 +54,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   limits are explicit on `sanitize`, `inspect`, and `mcp-stdio`:
   `--model-max-tokens` (default 512) and `--model-threads` (default 2).
 
+- Reproducible detection-quality corpus and report (issue #189). `quality/corpus/v1.json` is synthetic CC0 data with Unicode-scalar annotations and a deterministic regex CI gate. The runner reports aggregate/per-kind precision, recall, F1, and FP/FN spans without emitting input text or entity values; local GLiNER2/hybrid evaluation is explicit, versioned, and download-free. Credential misses remain marked for manual review; no detector patterns were changed to improve scores.
+
+
 - Single-file GLiNER2 engine reuse and bounded inference (issue #178). The
   tokenizer, label map, and ONNX session now load once per detector instance on
   a worker thread and are reused across calls (previously every detection
