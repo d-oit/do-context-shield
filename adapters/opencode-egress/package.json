@@ -1,0 +1,23 @@
+{
+  "name": "do-context-shield-opencode-egress",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "check": "bun run typecheck && bun test"
+  },
+  "dependencies": {
+    "@opencode/plugin": "2.2.7",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.3",
+    "@types/node": "24.12.2",
+    "typescript": "6.0.2"
+  }
+}

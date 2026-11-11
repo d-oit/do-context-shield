@@ -121,6 +121,20 @@
         "contains:.agents/skills/private-data/SKILL.md|auto-discover `./do-context-shield.toml` in the working directory",
         "contains:.agents/skills/private-data/SKILL.md|`mcp-stdio` disables working-directory auto-discovery"
       ]
+    },
+    {
+      "id": 10,
+      "prompt": "We added an automatic sanitizing hook to a coding client. How do we test it without risking a real provider call?",
+      "expected_output": "Use a fresh client HOME/session, verify the active session root and effective fake-provider endpoint, block non-loopback egress, and prove sanitizer failure produces zero provider requests.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "explicit",
+      "assertions": [
+        "contains:.agents/skills/private-data/references/heuristics.md|fresh client HOME/session",
+        "contains:.agents/skills/private-data/references/heuristics.md|verify the active session root",
+        "contains:.agents/skills/private-data/references/heuristics.md|block non-loopback network egress",
+        "contains:.agents/skills/private-data/references/heuristics.md|zero provider requests"
+      ]
     }
   ]
 }

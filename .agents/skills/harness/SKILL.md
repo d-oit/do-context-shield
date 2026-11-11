@@ -3,8 +3,8 @@ name: harness
 description: >
   Map this repository's feedforward guides and feedback sensors, and run the
   self-correction protocol when a computational sensor fires. Use when a sensor
-  fails (fmt, check, clippy, test, loc, shellcheck, hooks, skills, skill-evals,
-  backlog, deps, audit, commitlint),
+  fails (fmt, check, clippy, test, opencode-egress, loc, shellcheck, hooks, skills,
+  skill-evals, backlog, deps, audit, commitlint),
   before committing, or when setting up agent context for a task.
   Triggers: "harness", "sensor fire", "CI failure", "quality gates",
   "self-correction".
@@ -13,8 +13,6 @@ metadata:
   version: "2.0"
   tags: harness sensors feedback feedforward self-correction quality
 ---
-## Guides
-See references/heuristics.md for distilled heuristics.
 ## Guides
 
 See [references/heuristics.md](references/heuristics.md) for distilled repository heuristics.
@@ -47,6 +45,7 @@ Agent = Model + Harness. Feedforward guides (this skill, `AGENTS.md`, `CONTRIBUT
 | check | `cargo check --workspace` | pre-commit, CI | fix the compile error |
 | clippy | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | pre-push, CI | fix the lint; no `unwrap()`/`expect()`; document `Result` fns with `# Errors` |
 | test | `cargo test --workspace` (`--all-features` in CI) | pre-push, CI | fix the test; update it first when behavior changes intentionally |
+| opencode-egress | `bash scripts/check-opencode-egress.sh` | verification, CI | build the CLI, install pinned Bun dependencies, then typecheck and exercise the local adapter against the sanitizer and loopback fake provider |
 | loc | `bash scripts/check-loc.sh` | pre-commit, CI | decompose at 450 LOC; extract a module or a `<module>_tests.rs` |
 | shellcheck | `bash scripts/check-shellcheck.sh` | pre-push, CI | fix the finding (SC2059: keep `printf` format strings constant, values as arguments) |
 | hooks | `bash scripts/check-hooks.sh` | pre-push, CI | mirror the new sensor in the hand-written hook, make `.githooks/*` executable, or unpick the double hook mode (`core.hooksPath` vs `.git/hooks`) |

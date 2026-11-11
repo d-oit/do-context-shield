@@ -13,9 +13,9 @@ metadata:
   compatibility: Works with any coding client that can execute shell tools or MCP stdio servers. Requires the do-context-shield binary. No network access.
   tags: privacy sanitization pii secrets mcp local-first
 ---
-
 ## Guides
 
+See [references/heuristics.md](references/heuristics.md) for distilled repository heuristics.
 See [references/portable.md](references/portable.md) for the language-neutral portable safety checklist.
 
 # Private Data Skill
@@ -46,6 +46,7 @@ Use `do-context-shield` as a local privacy boundary when coding context may cont
 - Do not assume regex detection is complete. For names, addresses, source-code secrets, or domain-specific entities, install a stronger detector plugin (see `plugin-development` skill).
 - Direct one-shot CLI commands (`sanitize`, `restore`, `inspect`, `forget`) auto-discover `./do-context-shield.toml` in the working directory (and `$HOME/.config/do-context-shield/config.toml`) unless `--config <path>` pins an explicit file, so a configuration file in the working directory changes the tool's behavior. Conversely, `mcp-stdio` disables working-directory auto-discovery and reads a file only when `--config` is explicitly passed.
 - The skill does not choose an LLM provider. The coding client remains responsible for model selection.
+- OpenCode V2 users may opt into the [`context`-hook egress adapter](../../../adapters/opencode-egress/README.md), but it does not intercept title/compaction generation, direct provider calls, or unrelated network traffic; do not treat it as universal egress enforcement.
 
 ## GLiNER2 detector (optional, Rust-only)
 

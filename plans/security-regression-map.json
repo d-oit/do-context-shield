@@ -73,6 +73,12 @@
       "suffixes": [".rs"],
       "required_sensors": ["fmt", "check", "clippy", "test", "loc"],
       "rationale": "The test sensor runs the full workspace, so API consumers are checked with the changed contract."
+    },
+    {
+      "name": "opencode-egress-context",
+      "prefixes": ["adapters/opencode-egress/"],
+      "required_sensors": ["opencode-egress"],
+      "rationale": "The adapter sensor typechecks the plugin and tests the fail-closed MCP boundary against the compiled CLI and a loopback fake provider."
     }
   ],
   "path_rules": [

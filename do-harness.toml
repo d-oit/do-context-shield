@@ -6,13 +6,13 @@ pre-push = ["fmt", "check", "clippy", "test", "loc", "shellcheck", "hooks", "dep
 
 [signal-sets]
 feedback = ["fmt", "check", "clippy"]
-verification = ["fmt", "check", "clippy", "test", "loc", "shellcheck", "hooks", "skills", "skill-evals", "shared-skills", "deps", "audit", "publish-order", "release-preflight", "backlog", "fuzz-check", "security-regression", "commitlint"]
-release = ["fmt", "check", "clippy", "test", "loc", "shellcheck", "hooks", "skills", "skill-evals", "shared-skills", "deps", "audit", "publish-order", "release-preflight", "backlog", "fuzz-check", "security-regression", "commitlint"]
+verification = ["fmt", "check", "clippy", "test", "opencode-egress", "loc", "shellcheck", "hooks", "skills", "skill-evals", "shared-skills", "deps", "audit", "publish-order", "release-preflight", "backlog", "fuzz-check", "security-regression", "commitlint"]
+release = ["fmt", "check", "clippy", "test", "opencode-egress", "loc", "shellcheck", "hooks", "skills", "skill-evals", "shared-skills", "deps", "audit", "publish-order", "release-preflight", "backlog", "fuzz-check", "security-regression", "commitlint"]
 # CI runs the same set minus commitlint and fuzz-check: pull_request checkouts
 # are merge refs, so `git log --no-merges -n 1` lints the contributor's commit
 # subject, while this repository enforces conventional PR titles. The detached
 # fuzz workspace remains a separate CI job.
-ci = ["fmt", "check", "clippy", "test", "loc", "shellcheck", "hooks", "skills", "skill-evals", "shared-skills", "deps", "audit", "publish-order", "release-preflight", "backlog", "security-regression"]
+ci = ["fmt", "check", "clippy", "test", "opencode-egress", "loc", "shellcheck", "hooks", "skills", "skill-evals", "shared-skills", "deps", "audit", "publish-order", "release-preflight", "backlog", "security-regression"]
 
 [[sensors]]
 name = "fmt"
@@ -33,6 +33,11 @@ when-changed = ["**/*.rs", "Cargo.toml", "**/Cargo.toml", "Cargo.lock", "rust-to
 name = "test"
 argv = ["cargo", "test", "--workspace"]
 when-changed = ["**/*.rs", "Cargo.toml", "**/Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".cargo/config.toml", "quality/corpus/**", "crates/do-context-shield-cli/tests/fixtures/**", "crates/plugin-process/tests/fixtures/**"]
+
+[[sensors]]
+name = "opencode-egress"
+argv = ["bash", "scripts/check-opencode-egress.sh"]
+when-changed = ["adapters/opencode-egress/**", "scripts/check-opencode-egress.sh", "Cargo.toml", "Cargo.lock", "crates/**"]
 
 [[sensors]]
 name = "loc"

@@ -67,6 +67,30 @@ Shared notes for every client:
 - `opencode mcp list` reports `✓ do-context-shield connected` when the registration is healthy.
 - Tools surface as `<server>_<tool>` — `do-context-shield_context_inspect`, `do-context-shield_context_sanitize`, `do-context-shield_context_restore`. `opencode run "<prompt>"` drives them non-interactively; tool calls are printed to stderr and the final reply to stdout.
 
+#### OpenCode V2 egress plugin
+
+The optional `adapters/opencode-egress` package registers OpenCode's V2 `context` hook and sanitizes supported agent context before model dispatch. It complements the MCP server registration above; it is a separate local plugin, not an MCP tool. Install dependencies with `bun install --frozen-lockfile` from the package directory, build `do-context-shield`, then load the local package through `plugins` in `opencode.json`/`opencode.jsonc` (OpenCode supports local plugin paths):
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    {
+      "package": "/absolute/path/do-context-shield/adapters/opencode-egress",
+      "options": {
+        "command": "/absolute/path/do-context-shield/target/debug/do-context-shield",
+        "recipient": "external",
+        "dataCategory": "personal"
+      }
+    }
+  ]
+}
+```
+
+The plugin uses the OpenCode `sessionID` as the explicit MCP/vault scope, exposes only `context.sanitize` and `context.forget`, and calls `forget` after rejecting new hooks and draining in-flight context processing on `session.deleted`; unload also drains and forgets active sessions. Defaults are `recipient: external` and `dataCategory: personal`; `purpose` and a two-letter `jurisdiction` are optional. It removes inherited `DO_CONTEXT_SHIELD_*` variables from the sanitizer child so omitted fields cannot inherit ambient context values. Invalid options, unsupported message shapes/attachments, oversized context, a failed sanitizer, or failed lifecycle monitoring block the context hook with a generic error. See the [adapter README](../adapters/opencode-egress/README.md), [OpenCode plugin loading docs](https://opencode.ai/docs/build/plugins/), and [V2 server plugin API](https://opencode.ai/docs/build/plugins/server/).
+
+This registers only the `context` hook. It does not cover other OpenCode model calls such as title or compaction generation, direct provider/API calls, other clients, shell/subprocess traffic, or unrelated plugin network requests. Disabling or bypassing the plugin bypasses this boundary; it is not a network filter or universal egress enforcement.
+
 #### omp
 
 `.omp/mcp.json` in the repository root:
