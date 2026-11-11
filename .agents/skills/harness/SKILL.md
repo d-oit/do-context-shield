@@ -55,13 +55,15 @@ Agent = Model + Harness. Feedforward guides (this skill, `AGENTS.md`, `CONTRIBUT
 | audit | `bash scripts/check-audit.sh` | CI | resolve or document the advisory in `deny.toml` / `.cargo/audit.toml` |
 | publish-order | `bash scripts/check-publish-order.sh` | pre-push, CI | add the missing crate to `ORDER` in `scripts/publish-crates.sh`, after its dependencies |
 | release-preflight | `bash scripts/check-release-preflight.sh` | verification, CI | verify versions, metadata, package-root README metadata/file/archive inclusion, package surface whitelist, and publish order |
+| fuzz-check | `bash scripts/check-fuzz.sh` | verification | check the detached fuzz workspace through its manifest path; the same script backs the separate CI job |
+| security-regression | `bash scripts/check-security-regression.sh` | verification, CI | update the dependency map or run full verification on unknown/global paths |
 | commitlint | `bash scripts/check-commitlint.sh` | commit-msg hook, `verification` set | conventional commit with a type prefix; PR titles are enforced separately by `commitlint.yml` |
 | structure | `python3 scripts/validate-structure.py` | CI | restore required files; remove unwrap/expect; shrink files |
 | deny | `cargo deny check` | CI | dependency policy (`deny.toml`) |
 | mcp-conformance | `bash scripts/check-mcp-conformance.sh` (MCP Inspector + stdio fixtures; pinned Node 22 / inspector 2.13.0) | CI | keep Node and the inspector version pinned; see `docs/client-integration.md` |
 | secret-scan | gitleaks (`.github/workflows/secret-scan.yml`) | CI | remove and rotate the secret |
 
-Changed-only gate: `do-harness verify --changed --set verification`; preview the selection with `do-harness explain --set verification --changed`. Signal sets: `feedback` (edit loop), `verification` (full local gate), `release`, and `ci` — what the GitHub workflow runs: `verification` minus `commitlint`, because pull-request checkouts are merge refs and this repository enforces conventional PR titles rather than contributor commit subjects. A tool that is unavailable prints `SKIP:` and is reported as WARN, never as a silent pass; under `--strict` a warn is not a pass.
+Changed-only gate: `do-harness verify --changed --set verification`; preview with `do-harness explain --set verification --changed`. The always-on `security-regression` sensor checks `plans/security-regression-map.json` against the actual selected sensors; global, unknown, ambiguous, renamed-out, or under-selected paths run full verification. Signal sets: `feedback` (edit loop), `verification` (full local gate, including the detached fuzz workspace), `release`, and `ci` (verification minus `commitlint` and `fuzz-check`; the fuzz job runs separately). CI is unfiltered and appends `do-harness explain --set ci --format json` to the job summary so each harness sensor has a selection reason. A tool that is unavailable prints `SKIP:` and is reported as WARN, never as a silent pass; under `--strict` a warn is not a pass.
 
 ## Self-correction protocol
 

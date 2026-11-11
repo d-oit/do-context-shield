@@ -314,7 +314,7 @@
   {
     "invariant": "Audit logging is strictly opt-in and structure-only (`AuditEvent`): operation, session, outcome, enforcement context without free-form purpose, per-kind action counts, and resolution counts; raw values, minted tokens, vault mappings, and purpose text are never representable or recorded, and resolved originals are scrubbed from restore audit error messages",
     "rationale": "An audit log that recorded original text or reversible tokens would recreate the exact exposure the privacy boundary exists to prevent; scrubbing restore audit errors ensures failure diagnostics cannot leak resolved originals",
-    "sensor": "cargo test -p do-context-shield-core --test audit + cargo test -p do-context-shield --test cli_audit + cargo test -p do-context-shield --test mcp_stdio_audit",
+    "sensor": "cargo test -p do-context-shield-core + cargo test -p do-context-shield --test cli_audit + cargo test -p do-context-shield --test mcp_stdio_audit",
     "category": "security"
   },
   {
@@ -508,5 +508,11 @@
     "rationale": "Crates.io renders the README from the published archive, not from the workspace root. An explicit include allowlist can silently omit a README, so successful compilation or publish ordering alone does not guarantee a usable registry page.",
     "sensor": "bash scripts/check-release-preflight.sh (release-preflight: requires a package-root README and asserts the declared file appears in cargo package --list)",
     "category": "workflow"
+  },
+  {
+    "invariant": "Changed-only verification maps security-critical detector, policy, transformer, vault, placeholder, process-plugin, MCP, audit, configuration, shared-API, fixture, and fuzz paths to mandatory sensors; global, unknown, ambiguous, renamed-out, or under-selected paths run the full verification set, and CI reports each selected harness sensor with its reason",
+    "rationale": "do-harness change filtering is sensor-local and silently skips paths matching no configured pattern. The always-on gate owns the dependency map, verifies required sensors against explain output, includes both sides of renames, and runs full verification whenever coverage is not proven; CI remains unfiltered and exposes its selected set.",
+    "sensor": "security-regression sensor (scripts/check-security-regression.sh and tests/test_security_regression.py)",
+    "category": "security"
   }
 ]

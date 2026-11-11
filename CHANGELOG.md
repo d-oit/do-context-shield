@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added a post-publication crates.io install smoke that installs the exact release version into an isolated Cargo home, checks `--version` and `doctor`, and exercises the installed binary with the existing zero-leak sanitize/restore smoke. Manual registry skips are visible in the workflow summary without disabling binary releases.
 
+- Added a fail-closed changed-only security regression gate with a documented dependency map for detector, policy, transformer, vault, plugin, MCP, audit, configuration, shared-API, fixture, and fuzz changes. Unmapped or global inputs fall back to full verification; CI summarizes selected harness sensors and their reasons.
+
 - Official MCP Rust SDK (`rmcp` 3.x) interoperability tests (`crates/do-context-shield-cli/tests/mcp_rmcp_interop.rs`, issue #191). Exercises `do-context-shield mcp-stdio` using the official SDK client over stdio for both modern (2026-07-28 discovery/per-request meta) and legacy (2025-11-25 initialize handshake) protocols, verifying tool enumeration, default model-facing surface restrictions, sanitize/restore/forget lifecycles, and error reporting without raw canary leakage.
 
 - Secure key-file generation (issue #190). `do-context-shield create-key --output <path>` writes a random 32-byte key in hex without printing it,
