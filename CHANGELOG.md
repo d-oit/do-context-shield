@@ -153,6 +153,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Security-regression fallback fixtures keep their probe sentinel under the
+  temporary repository's `.git` directory, so nested strict verification does
+  not alter its untracked-input evidence.
+
 - crates.io first-time publishing now orders all workspace dependencies,
   including development, build, and optional dependencies, before their
   dependents; the publish-order check enforces the same graph.
