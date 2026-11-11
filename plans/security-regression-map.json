@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "signal_set": "verification",
+  "fallback_signal_set": "verification",
+  "security_sensor": "security-regression",
+  "components": [
+    {
+      "name": "detector-span-validation",
+      "prefixes": ["crates/detector-regex/", "crates/detector-gliner2/", "crates/privacy-core/"],
+      "suffixes": [".rs"],
+      "required_sensors": ["fmt", "check", "clippy", "test", "loc"],
+      "rationale": "Detector output and span validation feed the privacy pipeline; workspace tests cover downstream consumers."
+    },
+    {
+      "name": "policy-planning",
+      "prefixes": ["crates/policy-default/", "crates/policy-matrix/", "crates/privacy-core/"],
+      "suffixes": [".rs"],
+      "required_sensors": ["fmt", "check", "clippy", "test", "loc"],
+      "rationale": "Policy decisions and plan validation must remain fail closed across the workspace."
+    },
+    {
+      "name": "transformer-postconditions",
+      "prefixes": ["crates/transformer-generalize/", "crates/transformer-mask/", "crates/transformer-pseudonymize/", "crates/privacy-core/"],
+      "suffixes": [".rs"],
+      "required_sensors": ["fmt", "check", "clippy", "test", "loc"],
+      "rationale": "Workspace tests verify postconditions, mappings, and downstream pipeline behavior."
+    },
+    {
+      "name": "vault-persistence-and-key-handling",
+      "prefixes": ["crates/vault-json/", "crates/vault-memory/", "crates/privacy-core/"],
+      "suffixes": [".rs"],
+      "required_sensors": ["fmt", "check", "clippy", "test", "loc"],
+      "rationale": "Vault persistence, scope isolation, and key handling are exercised by crate and consumer tests."
+    },
+    {
+      "name": "placeholder-parsing",
+      "prefixes": ["crates/plugin-api/", "crates/plugin-process/", "crates/privacy-core/"],
+      "suffixes": [".rs"],
+      "required_sensors": ["fmt", "check", "clippy", "test", "loc"],
+      "rationale": "Placeholder parsing and resolution cross the shared API, process protocol, and pipeline."
+    },
+    {
+      "name": "process-plugin-lifecycle",
+      "prefixes": ["crates/plugin-process/"],
+      "suffixes": [".rs"],
+      "required_sensors": ["fmt", "check", "clippy", "test", "loc"],
+      "rationale": "Workspace tests cover process startup, protocol failures, lifecycle, and recovery."
+    },
+    {
+      "name": "mcp-framing-and-dispatch",
+      "prefixes": ["crates/mcp-server/", "crates/do-context-shield-cli/"],
+      "suffixes": [".rs"],
+      "required_sensors": ["fmt", "check", "clippy", "test", "loc"],
+      "rationale": "The workspace tests cover framing, dispatch, CLI configuration, and consumer behavior."
+    },
+    {
+      "name": "audit-integrity",
+      "prefixes": ["crates/audit-file/", "crates/privacy-core/", "crates/do-context-shield-cli/"],
+      "suffixes": [".rs"],
+      "required_sensors": ["fmt", "check", "clippy", "test", "loc"],
+      "rationale": "Audit chain, refusal, and adapter behavior are tested across the workspace."
+    },
+    {
+      "name": "configuration-loading",
+      "prefixes": ["crates/do-context-shield-cli/", "crates/plugin-registry/"],
+      "suffixes": [".rs"],
+      "required_sensors": ["fmt", "check", "clippy", "test", "loc"],
+      "rationale": "Config parsing and plugin registration affect the CLI and all configured consumers."
+    },
+    {
+      "name": "shared-plugin-api",
+      "prefixes": ["crates/plugin-api/"],
+      "suffixes": [".rs"],
+      "required_sensors": ["fmt", "check", "clippy", "test", "loc"],
+      "rationale": "The test sensor runs the full workspace, so API consumers are checked with the changed contract."
+    }
+  ],
+  "path_rules": [
+    {
+      "name": "detector-quality-corpus",
+      "prefixes": ["quality/corpus/"],
+      "required_sensors": ["test"],
+      "rationale": "The synthetic corpus is compiled into detector quality tests."
+    },
+    {
+      "name": "mcp-threat-fixtures",
+      "prefixes": ["crates/do-context-shield-cli/tests/fixtures/"],
+      "required_sensors": ["test"],
+      "rationale": "The MCP threat-case JSON is consumed by Rust integration tests."
+    },
+    {
+      "name": "process-plugin-fixtures",
+      "prefixes": ["crates/plugin-process/tests/fixtures/"],
+      "required_sensors": ["test", "shellcheck"],
+      "rationale": "Process fixtures are executed by Rust tests and shell fixtures also require ShellCheck."
+    },
+    {
+      "name": "fuzz-workspace",
+      "prefixes": ["fuzz/"],
+      "required_sensors": ["fuzz-check"],
+      "rationale": "The fuzz crate is excluded from the root Cargo workspace; fuzz-check runs its format, lint, compile, and seed-corpus checks."
+    },
+    {
+      "name": "shared-skill-integration-test",
+      "exact": ["tests/test_shared_skills.py"],
+      "required_sensors": ["skills"],
+      "rationale": "The skills sensor runs this integration suite through scripts/check-skills.sh."
+    },
+    {
+      "name": "shared-skill-test-fixtures",
+      "prefixes": ["tests/fixtures/shared-skills/"],
+      "required_sensors": ["skills"],
+      "rationale": "The skills sensor runs these adopter fixtures through scripts/check-skills.sh."
+    },
+    {
+      "name": "crate-readme-metadata",
+      "prefixes": ["crates/"],
+      "suffixes": ["/README.md"],
+      "required_sensors": ["release-preflight"],
+      "rationale": "Package README presence and archive inclusion are checked by release-preflight."
+    },
+    {
+      "name": "crate-manifests",
+      "prefixes": ["crates/"],
+      "suffixes": ["/Cargo.toml"],
+      "required_sensors": ["fmt", "check", "clippy", "test", "publish-order", "release-preflight"],
+      "rationale": "Crate manifests affect workspace builds and publication metadata."
+    }
+  ],
+  "global_paths": {
+    "exact": [
+      "AGENTS.md",
+      "CONTRIBUTING.md",
+      "Cargo.toml",
+      "Cargo.lock",
+      "rust-toolchain.toml",
+      "rustfmt.toml",
+      ".rustfmt.toml",
+      ".gitignore",
+      "do-harness.toml",
+      "deny.toml",
+      ".gitleaks.toml",
+      "plans/security-regression-map.json",
+      "scripts/security_regression.py",
+      "scripts/check-security-regression.sh"
+    ],
+    "prefixes": [
+      ".cargo/",
+      ".github/",
+      ".githooks/",
+      ".agents/",
+      "plans/",
+      "scripts/"
+    ]
+  },
+  "safe_paths": {
+    "exact": ["README.md", "CHANGELOG.md", "LICENSE"],
+    "prefixes": ["docs/"]
+  }
+}
