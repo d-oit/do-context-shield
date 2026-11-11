@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Official MCP Rust SDK (`rmcp` 3.x) interoperability tests (`crates/do-context-shield-cli/tests/mcp_rmcp_interop.rs`, issue #191). Exercises `do-context-shield mcp-stdio` using the official SDK client over stdio for both modern (2026-07-28 discovery/per-request meta) and legacy (2025-11-25 initialize handshake) protocols, verifying tool enumeration, default model-facing surface restrictions, sanitize/restore/forget lifecycles, and error reporting without raw canary leakage.
 
-- Added a fail-closed OpenCode V2 egress plugin (issue #192). The optional local adapter sanitizes supported model context through the existing MCP pipeline, scopes mappings by OpenCode session, and forgets them on session deletion/unload. Unsupported payloads and sanitizer failures stop dispatch; this is not a network proxy or universal egress control. See `adapters/opencode-egress/README.md`.
+- Added a fail-closed OpenCode V2 egress plugin (issue #192). The optional local adapter sanitizes supported model context through the existing MCP pipeline, scopes mappings by OpenCode session, and on deletion rejects new hooks, drains in-flight context processing, then forgets the scope; unload drains and forgets active scopes. Unsupported payloads and sanitizer failures stop dispatch; this is not a network proxy or universal egress control. See `adapters/opencode-egress/README.md`.
 
 - Secure key-file generation (issue #190). `do-context-shield create-key --output <path>` writes a random 32-byte key in hex without printing it,
   refuses existing destinations, and publishes atomically. Unix files use

@@ -253,8 +253,8 @@
   },
 
   {
-    "invariant": "The optional OpenCode V2 egress adapter sanitizes every supported context string before dispatch and locks structural strings only at schema-defined paths (generic property names such as `name` do not exempt their values), scopes vault mappings by OpenCode session ID, exposes no restore tool, ignores ambient `DO_CONTEXT_SHIELD_*` settings, forgets mappings on session deletion/unload, and fails closed on unsupported context, invalid options, sanitizer failure, or failed lifecycle monitoring; it is not a universal network proxy",
-    "rationale": "OpenCode plugins are optional and hook-scoped; broad key-name exemptions can leave sensitive values in model input, and an inherited jurisdiction can alter policy when the adapter omitted it, so the sensor covers both context boundaries and lifecycle behavior without claiming universal egress",
+    "invariant": "The optional OpenCode V2 egress adapter sanitizes every supported context string before dispatch and locks structural strings only at schema-defined paths (generic property names such as `name` do not exempt their values), scopes vault mappings by OpenCode session ID, exposes no restore tool, ignores ambient `DO_CONTEXT_SHIELD_*` settings, and on session deletion/unload blocks new hooks, drains in-flight context work, then forgets mappings; it fails closed on unsupported context, invalid options, sanitizer failure, or failed lifecycle monitoring and is not a universal network proxy",
+    "rationale": "OpenCode plugins are optional and hook-scoped; broad key-name exemptions can leave sensitive values in model input, an inherited jurisdiction can alter policy when the adapter omitted it, and forgetting before an in-flight sanitize drains can recreate mappings after deletion, so the sensor covers context, lifecycle ordering, and the stated limits",
     "sensor": "bash scripts/check-opencode-egress.sh (opencode-egress sensor: strict TypeScript check, adapter tests, compiled CLI and loopback fake-provider integration)",
     "category": "security"
   },

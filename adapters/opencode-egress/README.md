@@ -40,7 +40,7 @@ OpenCode's current plugin guide supports local package directories in `plugins`;
 - Uses the memory vault in its local MCP child. Mappings stay on the machine and are forgotten on session deletion/unload; they are lost if the child exits.
 - Sanitizes supported text in system context, messages, tool definitions, tool calls/results, and options before assigning the sanitized event fields. Sanitizer and validation errors throw from the hook before model dispatch.
 - Starts the local MCP server with only `context.sanitize` and `context.forget`; it never exposes `context.restore` to the model.
-- Calls `context.forget` on `session.deleted` and for active sessions during plugin unload. Failure of the lifecycle watcher or a forget call blocks later context processing.
+- Calls `context.forget` after rejecting new hooks and draining in-flight context work on `session.deleted`, and drains then forgets active sessions during plugin unload. Failure of the lifecycle watcher or a forget call blocks later context processing.
 - Fails closed on malformed/unknown context shapes, media or file attachments, oversized context, sanitizer errors/timeouts, invalid configuration, or an unavailable/misbehaving MCP child. Errors are generic and do not include submitted text.
 
 ## Limits
