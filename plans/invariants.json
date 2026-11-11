@@ -251,6 +251,13 @@
     "sensor": "cargo test -p do-context-shield (tests/cli_process_plugins.rs, tests/cli_context.rs, tests/cli_config.rs, tests/cli_errors.rs, tests/cli_sanitize.rs)",
     "category": "verification"
   },
+
+  {
+    "invariant": "The optional OpenCode V2 egress adapter sanitizes every supported context string before dispatch and locks structural strings only at schema-defined paths (generic property names such as `name` do not exempt their values), scopes vault mappings by OpenCode session ID, exposes no restore tool, ignores ambient `DO_CONTEXT_SHIELD_*` settings, forgets mappings on session deletion/unload, and fails closed on unsupported context, invalid options, sanitizer failure, or failed lifecycle monitoring; it is not a universal network proxy",
+    "rationale": "OpenCode plugins are optional and hook-scoped; broad key-name exemptions can leave sensitive values in model input, and an inherited jurisdiction can alter policy when the adapter omitted it, so the sensor covers both context boundaries and lifecycle behavior without claiming universal egress",
+    "sensor": "bash scripts/check-opencode-egress.sh (opencode-egress sensor: strict TypeScript check, adapter tests, compiled CLI and loopback fake-provider integration)",
+    "category": "security"
+  },
   {
     "invariant": "The pipeline validates the policy plan before transforming: exactly one decision per detected entity, on the same kind and span, and a secret-kind entity is `Redact` (or `Block`, which fails the call)",
     "rationale": "A plan that drops an entity leaves its raw value in the sanitized output, and a reversible action on a credential stores it in the vault instead of redacting it, so both defeat the boundary no matter how correct the policy was for the entities it did decide",

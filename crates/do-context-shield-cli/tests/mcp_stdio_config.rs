@@ -267,7 +267,31 @@ fn vault_ttl_expires_json_mappings_across_restarts() {
     common::assert_placeholder(&sanitized, "EMAIL", 1);
     session.close();
 
-    std::thread::sleep(std::time::Duration::from_millis(1_500));
+    // Use a deterministic expired timestamp instead of relying on wall-clock
+    // sleeps, while confirming the first server persisted its creation time.
+    let bytes = match std::fs::read(&vault) {
+        Ok(bytes) => bytes,
+        Err(error) => panic!("cannot read the JSON vault: {error}"),
+    };
+    let mut state: Value = match serde_json::from_slice(&bytes) {
+        Ok(state) => state,
+        Err(error) => panic!("JSON vault is not valid JSON: {error}"),
+    };
+    let Some(created_at) = state.pointer_mut("/mappings/0/created_at") else {
+        panic!("JSON vault did not persist the mapping timestamp");
+    };
+    assert!(
+        created_at.as_u64().is_some(),
+        "mapping timestamp was not numeric"
+    );
+    *created_at = json!(1);
+    let bytes = match serde_json::to_vec(&state) {
+        Ok(bytes) => bytes,
+        Err(error) => panic!("cannot serialize the JSON vault fixture: {error}"),
+    };
+    if let Err(error) = std::fs::write(&vault, bytes) {
+        panic!("cannot seed an expired JSON vault mapping: {error}");
+    }
     let mut restarted = McpSession::start_with(&flags);
     let restored = content_text(&restarted.send(&tool_call(
         "context.restore",
