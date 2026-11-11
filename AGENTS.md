@@ -5,10 +5,11 @@
 |Task|Command|
 |---|---|
 |Build|`cargo build`|
-|Full local gate|`do-harness verify --set verification` (fmt, check, clippy, test, loc, shellcheck, hooks, skills, deps, audit, commitlint)|
+|Full local gate|`do-harness verify --set verification` (all sensors in the `verification` signal set)|
 |Changed-only gate|`do-harness verify --changed --set verification`|
 |Selection preview|`do-harness explain --set verification --changed`|
 |Evidence freshness|`do-harness status --set verification`|
+|Backlog check|`bash scripts/check-backlog.sh` (active status metadata and local Markdown links)|
 |Skill structure gate|`bash scripts/check-skills.sh`|
 |Hook wiring gate|`bash scripts/check-hooks.sh` (hook files, sensor parity, single hook mode)|
 |Skill evals|`bash scripts/check-skill-evals.sh` (wraps `do-harness eval --strict-fixtures`; narrow with `--skill <name>`)|
@@ -30,7 +31,7 @@ Agent = Model + Harness: feedforward guides prevent errors before coding, feedba
 ## Workflow
 
 1. **Recon** — read `crates/plugin-api/src/lib.rs` (trait contract) and the matching skill (`plugin-development`, `fail-closed-boundary`, `private-data`, `harness`) before touching code. Preview the sensor selection with `do-harness explain --set verification --changed`.
-2. **Plan** — decompose compound work with the HTN methods in `plans/methods.json` (`vertical-plugin-slice`, `spike-and-resolve`, `decision`) and record it: `do-harness task add "<title>" --method <name>`. Advance the pointer only when the named sensor is green.
+2. **Plan** — start from `plans/backlog.md`, which contains only active work, external blockers, and residual risks; completed decisions and evidence live in `docs/decisions/` and `docs/test-evidence/`. Decompose compound work with the HTN methods in `plans/methods.json` (`vertical-plugin-slice`, `spike-and-resolve`, `decision`, `workflow-improvement`) and record it: `do-harness task add "<title>" --method <name>`. Advance the pointer only when the named sensor is green.
 3. **Spike (only when uncertain)** — third-party APIs, model artifacts, wire protocols, coding-client integrations, and performance boundaries go to `target/spikes/<name>/` first (gitignored, throwaway). Record findings with `do-harness trace add`, then delete the spike. Never advance production code through a spike.
 4. **Contract and failing tests first** — define the typed contract (trait implementation, error enum, request/response shape) and a test that fails for the expected reason before implementing. Privacy invariants get explicit assertions: no raw value in output, scope isolation, secrets stay redacted, plugin failures fail closed.
 5. **Implement, then sensors (green)** — minimal implementation; run the changed gate; on fire apply the minimal fix and re-run that sensor only. Commit only when green (see `harness` skill).

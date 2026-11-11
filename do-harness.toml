@@ -6,13 +6,13 @@ pre-push = ["fmt", "check", "clippy", "test", "loc", "shellcheck", "hooks", "dep
 
 [signal-sets]
 feedback = ["fmt", "check", "clippy"]
-verification = ["fmt", "check", "clippy", "test", "loc", "shellcheck", "hooks", "skills", "skill-evals", "shared-skills", "deps", "audit", "publish-order", "release-preflight", "fuzz-check", "security-regression", "commitlint"]
-release = ["fmt", "check", "clippy", "test", "loc", "shellcheck", "hooks", "skills", "skill-evals", "shared-skills", "deps", "audit", "publish-order", "release-preflight", "fuzz-check", "security-regression", "commitlint"]
+verification = ["fmt", "check", "clippy", "test", "loc", "shellcheck", "hooks", "skills", "skill-evals", "shared-skills", "deps", "audit", "publish-order", "release-preflight", "backlog", "fuzz-check", "security-regression", "commitlint"]
+release = ["fmt", "check", "clippy", "test", "loc", "shellcheck", "hooks", "skills", "skill-evals", "shared-skills", "deps", "audit", "publish-order", "release-preflight", "backlog", "fuzz-check", "security-regression", "commitlint"]
 # CI runs the same set minus commitlint and fuzz-check: pull_request checkouts
 # are merge refs, so `git log --no-merges -n 1` lints the contributor's commit
 # subject, while this repository enforces conventional PR titles. The detached
 # fuzz workspace remains a separate CI job.
-ci = ["fmt", "check", "clippy", "test", "loc", "shellcheck", "hooks", "skills", "skill-evals", "shared-skills", "deps", "audit", "publish-order", "release-preflight", "security-regression"]
+ci = ["fmt", "check", "clippy", "test", "loc", "shellcheck", "hooks", "skills", "skill-evals", "shared-skills", "deps", "audit", "publish-order", "release-preflight", "backlog", "security-regression"]
 
 [[sensors]]
 name = "fmt"
@@ -81,6 +81,11 @@ when-changed = ["Cargo.toml", "scripts/publish-crates.sh", "scripts/check-publis
 name = "release-preflight"
 argv = ["bash", "scripts/check-release-preflight.sh"]
 when-changed = ["scripts/check-release-preflight.sh", "scripts/publish-crates.sh", "scripts/check-publish-order.sh", "crates/*/Cargo.toml", "crates/*/README.md", "Cargo.toml", "Cargo.lock"]
+
+[[sensors]]
+name = "backlog"
+argv = ["bash", "scripts/check-backlog.sh"]
+when-changed = ["plans/backlog.md", "docs/decisions/**", "docs/test-evidence/**", "scripts/backlog_validation.py", "scripts/check-backlog.sh", "tests/test_backlog_validation.py"]
 
 [[sensors]]
 name = "fuzz-check"

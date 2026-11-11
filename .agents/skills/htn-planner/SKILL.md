@@ -2,8 +2,8 @@
 name: htn-planner
 description: >
   Decompose compound coding objectives into hierarchical task networks using the
-  methods in plans/methods.json (vertical-plugin-slice, spike-and-resolve,
-  decision), with sensor-gated subtasks tracked through the do-harness task
+  methods in `plans/methods.json` (vertical-plugin-slice, spike-and-resolve,
+  decision, workflow-improvement), with sensor-gated subtasks tracked through the do-harness
   workflow. Use when planning a multi-step change, choosing between a slice and
   a de-risking spike, or persisting task state for a long task. Triggers:
   "plan", "decompose", "subtasks", "task state", "HTN".
@@ -42,10 +42,20 @@ header; feature-gated surfaces get an explicit feature build. Subtasks:
 `record-decision-header` -> `verify-decision-evidence` (sensor: test) ->
 `confirm-feature-boundary` (sensor: check).
 
+### `workflow-improvement`
+
+Preconditions: a harness workflow, sensor, or skill change needs a measured
+baseline. Subtasks: `measure-baseline` -> `implement-workflow-change`
+(sensor: check) -> `verify-sensor-parity` (sensor: test) ->
+`distill-learning` (sensor: clippy).
+
 ## Execution rules
 
 - Check preconditions before selecting a method; if they are unmet, pick the
   alternative or defer — recon first (`AGENTS.md` phase 1).
+- Select implementation work from `plans/backlog.md`; completed decisions in
+  `docs/decisions/` and measurements in `docs/test-evidence/` are reference
+  material, not open tasks.
 - Persist state with the harness CLI: `do-harness task add "<title>" --method <name>`,
   `do-harness task advance <id>`, `do-harness task done <id>`,
   `do-harness task list`, `do-harness task export` (writes `plans/tasks.json`).
