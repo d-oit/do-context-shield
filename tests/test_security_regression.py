@@ -222,7 +222,8 @@ class SecurityRegressionSelectionTests(unittest.TestCase):
     def _run_fallback_fixture(self, changed_path: str) -> None:
         with tempfile.TemporaryDirectory(prefix="security-fallback-") as directory:
             root = Path(directory)
-            marker = root / "full-verification.marker"
+            # Keep the probe sentinel out of the untracked input manifest.
+            marker = root / ".git" / "full-verification.marker"
             gate = str(ROOT / "scripts" / "security_regression.py").replace("\\", "\\\\").replace('"', '\\"')
             config_text = (
                 'language = "rust"\n\n'
@@ -233,7 +234,7 @@ class SecurityRegressionSelectionTests(unittest.TestCase):
                 f'argv = ["python3", "{gate}"]\n\n'
                 '[[sensors]]\n'
                 'name = "probe"\n'
-                'argv = ["python3", "-c", "from pathlib import Path; Path(\'full-verification.marker\').write_text(\'ran\')"]\n'
+                'argv = ["python3", "-c", "from pathlib import Path; Path(\'.git/full-verification.marker\').write_text(\'ran\')"]\n'
                 'when-changed = ["known/**"]\n'
             )
             (root / "do-harness.toml").write_text(config_text, encoding="utf-8")
