@@ -4,7 +4,7 @@ description: >
   Map this repository's feedforward guides and feedback sensors, and run the
   self-correction protocol when a computational sensor fires. Use when a sensor
   fails (fmt, check, clippy, test, loc, shellcheck, hooks, skills, skill-evals,
-  deps, audit, commitlint),
+  backlog, deps, audit, commitlint),
   before committing, or when setting up agent context for a task.
   Triggers: "harness", "sensor fire", "CI failure", "quality gates",
   "self-correction".
@@ -36,6 +36,8 @@ Agent = Model + Harness. Feedforward guides (this skill, `AGENTS.md`, `CONTRIBUT
 | Skill authoring | `.agents/skills/skill-creator/SKILL.md` | Structure gate and eval fixtures |
 | Product skills | `.agents/skills/private-data/SKILL.md`, `.agents/skills/plugin-development/SKILL.md` | Agent-facing usage and plugin development |
 | Privacy boundary | `.agents/skills/fail-closed-boundary/SKILL.md` | Stage ownership, validation, and fail-closed tests |
+| Active backlog | `plans/backlog.md` | Actionable work, external blockers, and residual risks only |
+| Historical records | `docs/decisions/`, `docs/test-evidence/` | Dated decisions and detailed run evidence, outside the active list |
 
 ## Feedback sensors
 
@@ -57,6 +59,7 @@ Agent = Model + Harness. Feedforward guides (this skill, `AGENTS.md`, `CONTRIBUT
 | release-preflight | `bash scripts/check-release-preflight.sh` | verification, CI | verify versions, metadata, package-root README metadata/file/archive inclusion, package surface whitelist, and publish order |
 | fuzz-check | `bash scripts/check-fuzz.sh` | verification | check the detached fuzz workspace through its manifest path; the same script backs the separate CI job |
 | security-regression | `bash scripts/check-security-regression.sh` | verification, CI | update the dependency map or run full verification on unknown/global paths |
+| backlog | `bash scripts/check-backlog.sh` | verification, CI | keep only active work, blockers, and residual risks; preserve local links |
 | commitlint | `bash scripts/check-commitlint.sh` | commit-msg hook, `verification` set | conventional commit with a type prefix; PR titles are enforced separately by `commitlint.yml` |
 | structure | `python3 scripts/validate-structure.py` | CI | restore required files; remove unwrap/expect; shrink files |
 | deny | `cargo deny check` | CI | dependency policy (`deny.toml`) |

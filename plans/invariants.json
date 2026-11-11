@@ -514,5 +514,11 @@
     "rationale": "do-harness change filtering is sensor-local and silently skips paths matching no configured pattern. The always-on gate owns the dependency map, verifies required sensors against explain output, includes both sides of renames, and runs full verification whenever coverage is not proven; CI remains unfiltered and exposes its selected set.",
     "sensor": "security-regression sensor (scripts/check-security-regression.sh and tests/test_security_regression.py)",
     "category": "security"
+  },
+  {
+    "invariant": "The active backlog contains only actionable work, explicit external blockers, and documented residual risks with one validated status per item; completed investigations and decisions and detailed mutation/fuzz measurements remain in linked historical records.",
+    "rationale": "Separating current work from completed history keeps blockers and unresolved privacy limitations visible. Machine-checked statuses and local links prevent completed entries from being mistaken for open work or historical evidence from disappearing.",
+    "sensor": "backlog sensor (scripts/check-backlog.sh and tests/test_backlog_validation.py)",
+    "category": "workflow"
   }
 ]
