@@ -100,7 +100,11 @@ fn rejects_unknown_label() {
 fn errors_without_command() {
     let entities = entities();
     let message = error_message(&ProcessJudge::default(), &entities);
-    assert!(message.contains("no command configured"), "got: {message}");
+    assert!(
+        message.contains("no executable configured"),
+        "got: {message}"
+    );
+    assert!(message.contains("--judge-program"), "got: {message}");
 }
 
 #[test]

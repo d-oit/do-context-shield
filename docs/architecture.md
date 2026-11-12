@@ -117,7 +117,7 @@ the model provider, or the coding client's tool-authorization decisions.
 | MCP stdio server | model-facing sanitize/inspect inside a coding client | leave the default `--tools` surface; restore harness-side; pin `--config` and use an absolute binary path; do not let a project directory configure the server |
 | Encrypted JSON vault (`--vault-file` + `--vault-key-file`) | restoration across process restarts | key file mode `0600`; exclude the vault, key, backups, and snapshots from anything that leaves the machine; treat encryption as at-rest only |
 | Audit logging (`--audit-file`) | operator review of operations | keep it owner-private; use `verify-audit` to detect tampering; set `--audit-max-records`/`--audit-max-bytes` to rotate (otherwise it grows without bound); a same-account attacker can rebuild the whole chain, so integrity is tamper-evident, not tamper-proof |
-| Process plugins (`--*-command`) | non-Rust or custom stages | install only trusted executables from paths only you can write; process isolation is not sandboxing; a process transformer may edit text outside planned spans |
+| Process plugins (`--*-program`/`--*-arg`) | non-Rust or custom stages | install only trusted executables from paths only you can write; process isolation is not sandboxing; a process transformer may edit text outside planned spans |
 | `gliner2`/`hybrid` detector | local semantic NER | provide a local model export and ONNX Runtime; run the readiness probe before routing private content; a missing model fails closed, it does not fall back to regex |
 
 ### Additional trust notes

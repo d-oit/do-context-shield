@@ -130,5 +130,9 @@ fn errors_without_command() {
         Ok(mapping) => panic!("expected an error, got mapping: {mapping:?}"),
         Err(error) => error.to_string(),
     };
-    assert!(message.contains("no command configured"), "got: {message}");
+    assert!(
+        message.contains("no executable configured"),
+        "got: {message}"
+    );
+    assert!(message.contains("--vault-program"), "got: {message}");
 }

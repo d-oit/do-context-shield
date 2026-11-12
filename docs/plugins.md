@@ -19,9 +19,32 @@ replaces every value of a kind with one kind-only token
 their output cannot be restored and equal values of one kind become
 indistinguishable. Secrets are redacted under all three.
 
-Implementations are selected by logical plugin name. The JSON vault is the one implementation whose name is not enough: it is file-backed, so it is built with `plugin_registry::json_vault(path, key_file)` from the resolved `vault_file`/`--vault-file` and the optional `vault_key_file`/`--vault-key-file` (calling `vault("json")` reports that argument requirement instead of an unknown plugin). Every capability can also run behind a process boundary: `crates/plugin-process` speaks newline-delimited JSON to a user-configured local executable (`docs/process-plugin.md`), so an implementation written in another language needs no Rust dynamic-library ABI. Compiled-in plugins remain the default; the process boundary is opt-in per capability (`--detector`/`--judge`/`--policy`/`--transformer`/`--vault process` with the matching `--*-command` flag, on the subcommands that expose that capability: `sanitize` and `mcp-stdio` carry the pipeline selection, `inspect` the detector, `restore`/`forget` the vault — `--process-timeout-ms` is available on all five). Semantic judging is optional and off by default: the judge is selected with `--judge heuristics` or `--judge process --judge-command <program>`, and the pipeline composes as `Detector -> SemanticJudge (optional) -> Policy -> Transformer -> Vault`.
+Implementations are selected by logical plugin name. The JSON vault is the one implementation whose name is not enough: it is file-backed, so it is built with `plugin_registry::json_vault(path, key_file)` from the resolved `vault_file`/`--vault-file` and the optional `vault_key_file`/`--vault-key-file` (calling `vault("json")` reports that argument requirement instead of an unknown plugin).
+
+Every capability can also run behind a process boundary: `crates/plugin-process` speaks newline-delimited JSON to a user-configured local executable (`docs/process-plugin.md`), so an implementation written in another language needs no Rust dynamic-library ABI. Compiled-in plugins remain the default; the process boundary is opt-in per capability. Select `process` and pass one `--<capability>-program <PATH>` plus repeatable `--<capability>-arg <ARG>` on commands that expose that capability: `sanitize`/`mcp-stdio` carry the pipeline selections, `explain-policy` detector/judge/policy selections, `inspect` the detector, and `restore`/`forget` the vault. The timeout is set with `--process-timeout-ms`.
+
+Semantic judging is optional and off by default: select `--judge heuristics` or `--judge process --judge-program <PATH>`. The pipeline composes as `Detector -> SemanticJudge (optional) -> Policy -> Transformer -> Vault`.
 
 Every selection can also come from `do-context-shield.toml` (`docs/configuration.md`); an explicit CLI flag overrides the file value. For `mcp-stdio` the file applies only through `--config <path>`: a project directory cannot configure the server that runs in it.
+
+### Policy simulation reasons
+
+`Policy::explain` returns one value-free reason per entity and defaults to the
+generic `custom_policy_plan` code for policies that expose no rule metadata.
+Built-in default and matrix policies report stable reason codes; matrix
+`purpose_rules` identify the first matched configured rule by its zero-based
+index. `used_default` is true for the built-in fallback hierarchy and false
+for a configured purpose-rule match or custom policy result. Reason codes and
+rule indices never include purpose, jurisdiction, or matched text values.
+The current stable codes are `secret_kind`, `judge_secret`,
+`special_category_blocked`, `unknown_recipient_blocked`,
+`jurisdiction_required_blocked`, `jurisdiction_adequacy_blocked`,
+`purpose_rule_match`, `judge_keep`, `local_recipient_keep`,
+`default_pseudonymize`, and `custom_policy_plan`.
+
+The CLI's `explain-policy` command uses the selected detector, optional judge,
+and policy only. It does not instantiate a transformer, vault, or audit sink;
+its output is a simulation, not evidence that model egress is intercepted.
 
 ### Detector quality evaluation
 
@@ -154,7 +177,7 @@ recognized layout, the effective `max_tokens`/`intra_threads`, and one stable
 | --- | --- |
 | `ready` | configured and loadable |
 | `feature_disabled` | valid export, but the binary lacks the `gliner2` feature |
-| `not_configured` | no `--model-dir` (or no `--detector-command` for a process detector) |
+| `not_configured` | no `--model-dir` (or no `--detector-program` for a process detector) |
 | `missing_model_dir` | the directory does not exist |
 | `missing_model_file` | neither `model.onnx` nor an `encoder*.onnx` fragment set |
 | `missing_tokenizer` | single-file export without `tokenizer.json` |

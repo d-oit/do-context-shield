@@ -73,18 +73,20 @@ pub fn cmd(dir: &Path) -> assert_cmd::Command {
     command
 }
 
-/// Command line invoking the process-protocol fixture in `mode`.
-///
-/// The fixture belongs to the protocol implementation
-/// (`crates/plugin-process/tests/fixtures/plugin.sh`), which asserts the wire
-/// format itself; the CLI tests reuse it to drive the documented
-/// `--detector`/`--policy`/`--transformer`/`--vault process` selections through
-/// the compiled binary.
-pub fn process_command(mode: &str) -> String {
-    format!(
-        "sh {}/../plugin-process/tests/fixtures/plugin.sh {mode}",
-        env!("CARGO_MANIFEST_DIR")
-    )
+/// CLI flags invoking the process-protocol fixture in `mode`.
+pub fn process_plugin_args(capability: &str, mode: &str) -> Vec<String> {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../plugin-process/tests/fixtures/plugin.sh")
+        .to_string_lossy()
+        .into_owned();
+    vec![
+        format!("--{capability}-program"),
+        "sh".to_owned(),
+        format!("--{capability}-arg"),
+        fixture,
+        format!("--{capability}-arg"),
+        mode.to_owned(),
+    ]
 }
 
 /// Fresh temporary directory, removed when the returned handle is dropped.

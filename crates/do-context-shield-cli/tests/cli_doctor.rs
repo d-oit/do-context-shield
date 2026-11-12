@@ -5,6 +5,7 @@
 
 mod common;
 
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use common::{cmd, temp_dir};
@@ -27,7 +28,11 @@ fn temp_dir_with(names: &[&str]) -> tempfile::TempDir {
 }
 
 /// Run `doctor` with `args`; return (stdout, stderr, success).
-fn doctor(dir: &Path, args: &[&str]) -> (String, String, bool) {
+fn doctor<I, S>(dir: &Path, args: I) -> (String, String, bool)
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     let assert = cmd(dir).arg("doctor").args(args).assert();
     let output = assert.get_output().clone();
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
@@ -35,7 +40,11 @@ fn doctor(dir: &Path, args: &[&str]) -> (String, String, bool) {
     (stdout, stderr, output.status.success())
 }
 
-fn json_report(dir: &Path, args: &[&str]) -> (Value, bool) {
+fn json_report<I, S>(dir: &Path, args: I) -> (Value, bool)
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     let (stdout, stderr, success) = doctor(dir, args);
     let report: Value = match serde_json::from_str(stdout.trim()) {
         Ok(report) => report,
@@ -47,7 +56,7 @@ fn json_report(dir: &Path, args: &[&str]) -> (Value, bool) {
 #[test]
 fn regex_is_ready_and_reports_no_model_limits() {
     let dir = temp_dir();
-    let (report, success) = json_report(dir.path(), &["--detector", "regex", "--format", "json"]);
+    let (report, success) = json_report(dir.path(), ["--detector", "regex", "--format", "json"]);
     assert!(success, "{report}");
     assert_eq!(report["detector"], "regex");
     assert_eq!(report["available"], true);
@@ -59,14 +68,14 @@ fn regex_is_ready_and_reports_no_model_limits() {
 #[test]
 fn unconfigured_and_missing_directories_are_distinct() {
     let dir = temp_dir();
-    let (report, success) = json_report(dir.path(), &["--detector", "gliner2", "--format", "json"]);
+    let (report, success) = json_report(dir.path(), ["--detector", "gliner2", "--format", "json"]);
     assert!(!success);
     assert_eq!(report["reason_code"], "not_configured");
 
     let missing = dir.path().join("no-such-model-dir");
     let (report, success) = json_report(
         dir.path(),
-        &[
+        [
             "--detector",
             "gliner2",
             "--model-dir",
@@ -86,7 +95,7 @@ fn unsupported_and_incomplete_exports_are_distinct() {
     let boundary = temp_dir_with(&["boundary_manifest.json"]);
     let (report, success) = json_report(
         dir.path(),
-        &[
+        [
             "--detector",
             "gliner2",
             "--model-dir",
@@ -101,7 +110,7 @@ fn unsupported_and_incomplete_exports_are_distinct() {
     let incomplete = temp_dir_with(&["encoder.onnx", "span_rep.onnx"]);
     let (report, success) = json_report(
         dir.path(),
-        &[
+        [
             "--detector",
             "gliner2",
             "--model-dir",
@@ -121,7 +130,7 @@ fn single_file_layout_failures_name_the_missing_piece() {
     let missing_tokenizer = temp_dir_with(&["model.onnx", "config.json"]);
     let (report, _) = json_report(
         dir.path(),
-        &[
+        [
             "--detector",
             "gliner2",
             "--model-dir",
@@ -136,7 +145,7 @@ fn single_file_layout_failures_name_the_missing_piece() {
     let unusable_labels = temp_dir_with(&["model.onnx", "tokenizer.json", "config.json"]);
     let (report, _) = json_report(
         dir.path(),
-        &[
+        [
             "--detector",
             "gliner2",
             "--model-dir",
@@ -163,7 +172,7 @@ fn complete_export_reports_limits_and_never_looks_ready_without_a_backend() {
     }
     let (report, success) = json_report(
         dir.path(),
-        &[
+        [
             "--detector",
             "gliner2",
             "--model-dir",
@@ -190,7 +199,7 @@ fn complete_export_reports_limits_and_never_looks_ready_without_a_backend() {
 #[test]
 fn hybrid_never_degrades_to_a_regex_only_success() {
     let dir = temp_dir();
-    let (report, success) = json_report(dir.path(), &["--detector", "hybrid", "--format", "json"]);
+    let (report, success) = json_report(dir.path(), ["--detector", "hybrid", "--format", "json"]);
     assert!(!success);
     assert_eq!(report["available"], false);
     let guidance = report["guidance"].as_str().unwrap_or_default();
@@ -200,21 +209,14 @@ fn hybrid_never_degrades_to_a_regex_only_success() {
 #[test]
 fn process_detector_reports_configuration_only() {
     let dir = temp_dir();
-    let (report, success) = json_report(dir.path(), &["--detector", "process", "--format", "json"]);
+    let (report, success) = json_report(dir.path(), ["--detector", "process", "--format", "json"]);
     assert!(!success);
     assert_eq!(report["reason_code"], "not_configured");
 
-    let (report, success) = json_report(
-        dir.path(),
-        &[
-            "--detector",
-            "process",
-            "--detector-command",
-            "python3 /nonexistent/plugin.py",
-            "--format",
-            "json",
-        ],
-    );
+    let mut args = vec!["--detector".to_owned(), "process".to_owned()];
+    args.extend(common::process_plugin_args("detector", "detect-clean"));
+    args.extend(["--format", "json"].into_iter().map(str::to_owned));
+    let (report, success) = json_report(dir.path(), args);
     assert!(success, "{report}");
     assert_eq!(report["reason_code"], "ready");
     assert_eq!(report["available"], true);
@@ -230,7 +232,7 @@ fn diagnostics_never_echo_the_model_path_and_text_mode_is_human_readable() {
     }
     let (report, success) = json_report(
         dir.path(),
-        &[
+        [
             "--detector",
             "gliner2",
             "--model-dir",
@@ -244,7 +246,7 @@ fn diagnostics_never_echo_the_model_path_and_text_mode_is_human_readable() {
     let rendered = report.to_string();
     assert!(!rendered.contains(canary), "path leaked: {rendered}");
 
-    let (stdout, stderr, success) = doctor(dir.path(), &["--detector", "regex"]);
+    let (stdout, stderr, success) = doctor(dir.path(), ["--detector", "regex"]);
     assert!(success, "{stderr}");
     assert!(stdout.contains("detector: regex"), "{stdout}");
     assert!(stdout.contains("available: true"), "{stdout}");
@@ -261,7 +263,7 @@ fn model_dir_with_spaces_is_accepted() {
     }
     let (report, _) = json_report(
         dir.path(),
-        &[
+        [
             "--detector",
             "gliner2",
             "--model-dir",

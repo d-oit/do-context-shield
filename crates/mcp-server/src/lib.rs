@@ -3,7 +3,8 @@
 use do_context_shield_core::PrivacyPipeline;
 use do_context_shield_plugin_api::ProcessingContext;
 use do_context_shield_plugin_process::{
-    DEFAULT_TIMEOUT_MS, ProcessDetector, ProcessJudge, ProcessPolicy, ProcessTransformer,
+    DEFAULT_TIMEOUT_MS, ProcessCommand, ProcessDetector, ProcessJudge, ProcessPolicy,
+    ProcessTransformer,
 };
 use std::io;
 use std::path::PathBuf;
@@ -176,9 +177,8 @@ pub struct ServerConfig {
     pub audit_max_bytes: Option<u64>,
     /// Vault plugin: `memory` (default without `vault_file`), `json`, or `process`.
     pub vault: Option<String>,
-    /// Command line of a local vault executable; required with `process`.
-    /// Split on whitespace; quoting and shell expansion are not supported.
-    pub vault_command: Option<String>,
+    /// Executable and ordered arguments for the process vault.
+    pub vault_process: Option<ProcessCommand>,
     /// Detector plugin name: `regex` (built-in), `gliner2` (local ONNX NER), or `process`
     /// (local executable over newline-delimited JSON).
     pub detector: String,
@@ -190,27 +190,23 @@ pub struct ServerConfig {
     /// ONNX Runtime intra-op threads for `GLiNER2`. `None` keeps the detector
     /// default.
     pub model_threads: Option<usize>,
-    /// Command line of a local detector executable; required with `process`.
-    /// Split on whitespace; quoting and shell expansion are not supported.
-    pub detector_command: Option<String>,
+    /// Executable and ordered arguments for the process detector.
+    pub detector_process: Option<ProcessCommand>,
     /// Policy plugin name: `default` or `process`.
     pub policy: String,
-    /// Command line of a local policy executable; required with `process`.
-    /// Split on whitespace; quoting and shell expansion are not supported.
-    pub policy_command: Option<String>,
+    /// Executable and ordered arguments for the process policy.
+    pub policy_process: Option<ProcessCommand>,
     /// Optional policy matrix configuration; used when `policy` is `matrix`.
     pub policy_matrix: do_context_shield_policy_matrix::MatrixConfig,
     /// Optional semantic judge: `heuristics` (built-in rules) or `process` (local executable
     /// over newline-delimited JSON).
     pub judge: Option<String>,
-    /// Command line of a local judge executable; required with `judge` set to `process`.
-    /// Split on whitespace; quoting and shell expansion are not supported.
-    pub judge_command: Option<String>,
+    /// Executable and ordered arguments for the process judge.
+    pub judge_process: Option<ProcessCommand>,
     /// Transformer plugin name: `pseudonymize`, `generalize`, `mask`, or `process`.
     pub transformer: String,
-    /// Command line of a local transformer executable; required with `process`.
-    /// Split on whitespace; quoting and shell expansion are not supported.
-    pub transformer_command: Option<String>,
+    /// Executable and ordered arguments for the process transformer.
+    pub transformer_process: Option<ProcessCommand>,
     /// Milliseconds to wait for one process-plugin response (detector, policy, transformer, vault).
     pub process_timeout_ms: u64,
     /// Lifetime in seconds after which in-process memory-vault mappings stop
@@ -237,19 +233,19 @@ impl Default for ServerConfig {
             audit_max_records: None,
             audit_max_bytes: None,
             vault: None,
-            vault_command: None,
+            vault_process: None,
             detector: "regex".to_owned(),
             model_dir: None,
             model_max_tokens: None,
             model_threads: None,
-            detector_command: None,
+            detector_process: None,
             policy: "default".to_owned(),
-            policy_command: None,
+            policy_process: None,
             judge: None,
             policy_matrix: do_context_shield_policy_matrix::MatrixConfig::default(),
-            judge_command: None,
+            judge_process: None,
             transformer: "pseudonymize".to_owned(),
-            transformer_command: None,
+            transformer_process: None,
             process_timeout_ms: DEFAULT_TIMEOUT_MS,
             vault_ttl_seconds: None,
             tools: ToolSet::model_facing(),
@@ -309,7 +305,7 @@ pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Err
             }
         }
         "process" => Box::new(ProcessDetector::from_selection(
-            config.detector_command.as_deref(),
+            config.detector_process.as_ref(),
             timeout,
         )?),
         name => do_context_shield_plugin_registry::detector(name)?,
@@ -317,7 +313,7 @@ pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Err
     let policy: Box<dyn do_context_shield_plugin_api::Policy> = match config.policy.as_str() {
         "matrix" => do_context_shield_plugin_registry::matrix_policy(config.policy_matrix),
         "process" => Box::new(ProcessPolicy::from_selection(
-            config.policy_command.as_deref(),
+            config.policy_process.as_ref(),
             timeout,
         )?),
         name => do_context_shield_plugin_registry::policy(name)?,
@@ -325,7 +321,7 @@ pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Err
     let transformer: Box<dyn do_context_shield_plugin_api::Transformer> =
         match config.transformer.as_str() {
             "process" => Box::new(ProcessTransformer::from_selection(
-                config.transformer_command.as_deref(),
+                config.transformer_process.as_ref(),
                 timeout,
             )?),
             name => do_context_shield_plugin_registry::transformer(name)?,
@@ -333,7 +329,7 @@ pub fn run_stdio(mut config: ServerConfig) -> Result<(), Box<dyn std::error::Err
     let judge: Option<Box<dyn do_context_shield_plugin_api::SemanticJudge>> =
         match config.judge.as_deref() {
             Some("process") => Some(Box::new(ProcessJudge::from_selection(
-                config.judge_command.as_deref(),
+                config.judge_process.as_ref(),
                 timeout,
             )?)),
             Some(name) => Some(do_context_shield_plugin_registry::judge(name)?),

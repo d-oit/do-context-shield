@@ -12,8 +12,9 @@
 //! - **Purpose rules**: Matched in sequence for non-secret entities.
 
 use do_context_shield_plugin_api::{
-    Action, DataCategory, Entity, Judgment, PlannedEntity, Policy, PolicyError, ProcessingContext,
-    RecipientClass, SemanticLabel, is_secret_kind, is_valid_jurisdiction,
+    Action, DataCategory, DecisionReason, Entity, Judgment, PlannedEntity, Policy, PolicyError,
+    ProcessingContext, ReasonCode, RecipientClass, SemanticLabel, is_secret_kind,
+    is_valid_jurisdiction,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -154,87 +155,121 @@ impl Policy for MatrixPolicy {
         judgments: &[Judgment],
         context: &ProcessingContext,
     ) -> Result<Vec<PlannedEntity>, PolicyError> {
-        entities
+        Ok(entities
             .iter()
             .cloned()
             .enumerate()
             .map(|(index, entity)| {
                 let decision = judgments.iter().find(|judgment| judgment.index() == index);
-                let action = self.decide(&entity.kind, decision, context);
-                Ok(PlannedEntity { entity, action })
+                PlannedEntity {
+                    action: self.decide(&entity, decision, context).action,
+                    entity,
+                }
             })
-            .collect()
+            .collect())
+    }
+
+    fn explain(
+        &self,
+        plan: &[PlannedEntity],
+        judgments: &[Judgment],
+        context: &ProcessingContext,
+    ) -> Result<Vec<DecisionReason>, PolicyError> {
+        Ok(plan
+            .iter()
+            .enumerate()
+            .map(|(index, planned)| {
+                let decision = judgments.iter().find(|judgment| judgment.index() == index);
+                self.decide(&planned.entity, decision, context)
+            })
+            .collect())
     }
 }
 
 impl MatrixPolicy {
     fn decide(
         &self,
-        kind: &str,
+        entity: &Entity,
         decision: Option<&Judgment>,
         context: &ProcessingContext,
-    ) -> Action {
-        // 1. Secrets are strictly redacted regardless of any purpose, adequacy, or recipient.
-        if is_secret_kind(kind) {
-            return Action::Redact;
+    ) -> DecisionReason {
+        let result = |action, reason_code, matched_rule, used_default| DecisionReason {
+            kind: entity.kind.clone(),
+            start: entity.start,
+            end: entity.end,
+            action,
+            reason_code,
+            matched_rule,
+            used_default,
+        };
+        if is_secret_kind(&entity.kind) {
+            return result(Action::Redact, ReasonCode::SecretKind, None, true);
         }
-        if let Some(Judgment::Labeled {
-            label: SemanticLabel::Secret,
-            ..
-        }) = decision
-        {
-            return Action::Redact;
+        if matches!(
+            decision,
+            Some(Judgment::Labeled {
+                label: SemanticLabel::Secret,
+                ..
+            })
+        ) {
+            return result(Action::Redact, ReasonCode::JudgeSecret, None, true);
         }
 
-        // 2. An unknown recipient blocks every non-secret entity unless explicitly non-personal.
         if context.recipient == RecipientClass::Unknown
             && context.data_category != DataCategory::NonPersonal
         {
-            return Action::Block;
+            return result(
+                Action::Block,
+                ReasonCode::UnknownRecipientBlocked,
+                None,
+                true,
+            );
         }
-
-        // 3. Adequacy check for SpecialCategory data.
         if context.data_category == DataCategory::SpecialCategory {
             match context.recipient {
-                RecipientClass::Local => {
-                    // Local recipient is on-device; transfer check not applicable.
-                }
                 RecipientClass::External | RecipientClass::Unknown => {
-                    return Action::Block;
+                    return result(
+                        Action::Block,
+                        ReasonCode::SpecialCategoryBlocked,
+                        None,
+                        true,
+                    );
                 }
-                RecipientClass::Trusted => {
-                    if self.config.enforce_adequacy_for_trusted {
-                        // The destination must be declared and adequate for the
-                        // declared origin: domestic (the origin itself) or a
-                        // configured member. Unset, malformed, and undeclared
-                        // origins all fail closed.
-                        let adequate = context
-                            .jurisdiction
-                            .as_deref()
-                            .filter(|destination| is_valid_jurisdiction(destination))
-                            .map(str::to_ascii_uppercase)
-                            .is_some_and(|destination| {
-                                self.config.origin.as_deref().is_some_and(|origin| {
-                                    origin == destination
-                                        || self.config.adequate_jurisdictions.contains(&destination)
-                                })
-                            });
-                        if !adequate {
-                            return Action::Block;
-                        }
+                RecipientClass::Trusted if self.config.enforce_adequacy_for_trusted => {
+                    let adequate = context
+                        .jurisdiction
+                        .as_deref()
+                        .filter(|destination| is_valid_jurisdiction(destination))
+                        .map(str::to_ascii_uppercase)
+                        .is_some_and(|destination| {
+                            self.config.origin.as_deref().is_some_and(|origin| {
+                                origin == destination
+                                    || self.config.adequate_jurisdictions.contains(&destination)
+                            })
+                        });
+                    if !adequate {
+                        return result(
+                            Action::Block,
+                            ReasonCode::JurisdictionAdequacyBlocked,
+                            None,
+                            true,
+                        );
                     }
                 }
+                RecipientClass::Local | RecipientClass::Trusted => {}
             }
         }
 
-        // 4. Purpose-conditional rules (evaluated in declared order).
-        for rule in &self.config.purpose_rules {
+        for (index, rule) in self.config.purpose_rules.iter().enumerate() {
             if rule.matches(context) {
-                return rule.action.into();
+                return result(
+                    rule.action.into(),
+                    ReasonCode::PurposeRuleMatch,
+                    Some(index),
+                    false,
+                );
             }
         }
-
-        // 5. Fallback to default hierarchy: high-confidence test/business -> keep.
         if let Some(Judgment::Labeled {
             label: SemanticLabel::Test | SemanticLabel::Business,
             confidence,
@@ -242,16 +277,17 @@ impl MatrixPolicy {
         }) = decision
             && *confidence >= KEEP_CONFIDENCE
         {
-            return Action::Keep;
+            return result(Action::Keep, ReasonCode::JudgeKeep, None, true);
         }
-
-        // 6. Local recipient keeps remaining values.
         if context.recipient == RecipientClass::Local {
-            return Action::Keep;
+            return result(Action::Keep, ReasonCode::LocalRecipientKeep, None, true);
         }
-
-        // 7. Everything else pseudonymizes.
-        Action::Pseudonymize
+        result(
+            Action::Pseudonymize,
+            ReasonCode::DefaultPseudonymize,
+            None,
+            true,
+        )
     }
 }
 

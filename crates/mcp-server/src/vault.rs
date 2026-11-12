@@ -35,7 +35,7 @@ pub(crate) fn build_vault(
             }
             reject_ttl(ttl, "process")?;
             Box::new(ProcessVault::from_selection(
-                config.vault_command.as_deref(),
+                config.vault_process.as_ref(),
                 timeout,
             )?)
         }
@@ -131,7 +131,6 @@ mod tests {
     fn vault_ttl_is_rejected_only_for_the_process_vault() {
         let mut config = ServerConfig {
             vault: Some("process".to_owned()),
-            vault_command: Some("does-not-matter".to_owned()),
             vault_ttl_seconds: Some(60),
             ..ServerConfig::default()
         };

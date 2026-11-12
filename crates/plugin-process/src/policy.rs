@@ -10,17 +10,18 @@
 //! judge is configured. An abstention serializes as `{"index":0,"label":null}`,
 //! and `confidence` is omitted for abstentions.
 
-use crate::ProcessConfig;
 use crate::protocol;
 use crate::wire::WireEntity;
+use crate::{ProcessCommand, ProcessConfig};
 use do_context_shield_plugin_api::{
     Action, Entity, Judgment, PlannedEntity, Policy, PolicyError, ProcessingContext,
 };
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-/// Guidance returned when no policy command is configured.
-const NO_COMMAND: &str = "process policy unavailable (no command configured); pass `--policy-command <program> [args...]`";
+/// Guidance returned when no policy executable is configured.
+const NO_COMMAND: &str =
+    "process policy unavailable (no executable configured); pass `--policy-program <path>`";
 
 /// Policy that delegates to a local executable over the NDJSON protocol.
 pub struct ProcessPolicy {
@@ -44,14 +45,17 @@ impl ProcessPolicy {
     ///
     /// # Errors
     ///
-    /// Returns [`PolicyError`] when no usable command is configured, so a
-    /// missing `--policy-command` fails at startup instead of on the first call.
-    pub fn from_selection(command: Option<&str>, timeout: Duration) -> Result<Self, PolicyError> {
+    /// Returns [`PolicyError`] when no executable is configured, so a missing
+    /// selection fails at startup instead of on the first call.
+    pub fn from_selection(
+        command: Option<&ProcessCommand>,
+        timeout: Duration,
+    ) -> Result<Self, PolicyError> {
         let command = command
-            .filter(|command| !command.trim().is_empty())
+            .filter(|command| !command.program.is_empty())
             .ok_or_else(|| PolicyError::Message(NO_COMMAND.to_owned()))?;
         Ok(Self::new(
-            ProcessConfig::with_command(command.to_owned()).with_timeout(timeout),
+            ProcessConfig::with_command(command.clone()).with_timeout(timeout),
         ))
     }
 }
@@ -76,7 +80,12 @@ impl Policy for ProcessPolicy {
         judgments: &[Judgment],
         context: &ProcessingContext,
     ) -> Result<Vec<PlannedEntity>, PolicyError> {
-        let Some((program, args)) = protocol::split_command(self.config.command.as_deref()) else {
+        let Some(command) = self
+            .config
+            .command
+            .as_ref()
+            .filter(|command| !command.program.is_empty())
+        else {
             return Err(PolicyError::Message(NO_COMMAND.to_owned()));
         };
         let wire_entities = entities
@@ -102,8 +111,14 @@ impl Policy for ProcessPolicy {
             },
         )
         .map_err(PolicyError::Message)?;
-        let line = protocol::run_child("policy", program, &args, request, self.config.timeout)
-            .map_err(PolicyError::Message)?;
+        let line = protocol::run_child(
+            "policy",
+            &command.program,
+            &command.args,
+            request,
+            self.config.timeout,
+        )
+        .map_err(PolicyError::Message)?;
         let response: Response = protocol::decode("policy", &line).map_err(PolicyError::Message)?;
         validate_plan(entities, &response.plan)
     }

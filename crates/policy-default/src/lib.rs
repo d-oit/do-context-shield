@@ -16,8 +16,9 @@
 //! A judge can therefore never turn a secret into a keep or a pseudonym.
 
 use do_context_shield_plugin_api::{
-    Action, DataCategory, Entity, Judgment, PlannedEntity, Policy, PolicyError, ProcessingContext,
-    RecipientClass, SemanticLabel, is_secret_kind, is_valid_jurisdiction,
+    Action, DataCategory, DecisionReason, Entity, Judgment, PlannedEntity, Policy, PolicyError,
+    ProcessingContext, ReasonCode, RecipientClass, SemanticLabel, is_secret_kind,
+    is_valid_jurisdiction,
 };
 
 /// Minimum judge confidence required to trust a `test` or `business` label.
@@ -34,61 +35,87 @@ impl Policy for DefaultPolicy {
         judgments: &[Judgment],
         context: &ProcessingContext,
     ) -> Result<Vec<PlannedEntity>, PolicyError> {
-        entities
+        Ok(entities
             .iter()
             .cloned()
             .enumerate()
             .map(|(index, entity)| {
                 let decision = judgments.iter().find(|judgment| judgment.index() == index);
-                let action = decide(&entity.kind, decision, context);
-                Ok(PlannedEntity { entity, action })
+                PlannedEntity {
+                    action: decide(&entity, decision, context).action,
+                    entity,
+                }
             })
-            .collect()
+            .collect())
+    }
+
+    fn explain(
+        &self,
+        plan: &[PlannedEntity],
+        judgments: &[Judgment],
+        context: &ProcessingContext,
+    ) -> Result<Vec<DecisionReason>, PolicyError> {
+        Ok(plan
+            .iter()
+            .enumerate()
+            .map(|(index, planned)| {
+                let decision = judgments.iter().find(|judgment| judgment.index() == index);
+                decide(&planned.entity, decision, context)
+            })
+            .collect())
     }
 }
 
-/// Decide one action from the entity kind, an optional judge decision, and the
-/// enforcement context.
-fn decide(kind: &str, decision: Option<&Judgment>, context: &ProcessingContext) -> Action {
-    // Secrets are always redacted regardless of context.
-    if is_secret_kind(kind) {
-        return Action::Redact;
+/// Decide one action and its value-free explanation from policy inputs.
+fn decide(
+    entity: &Entity,
+    decision: Option<&Judgment>,
+    context: &ProcessingContext,
+) -> DecisionReason {
+    let result = |action, reason_code| DecisionReason {
+        kind: entity.kind.clone(),
+        start: entity.start,
+        end: entity.end,
+        action,
+        reason_code,
+        matched_rule: None,
+        used_default: true,
+    };
+    if is_secret_kind(&entity.kind) {
+        return result(Action::Redact, ReasonCode::SecretKind);
     }
-    if let Some(Judgment::Labeled {
-        label: SemanticLabel::Secret,
-        ..
-    }) = decision
-    {
-        return Action::Redact;
+    if matches!(
+        decision,
+        Some(Judgment::Labeled {
+            label: SemanticLabel::Secret,
+            ..
+        })
+    ) {
+        return result(Action::Redact, ReasonCode::JudgeSecret);
     }
 
-    // Special-category data never reaches a non-local recipient without a
-    // declared jurisdiction: external and unknown recipients always block,
-    // and a trusted recipient blocks while the jurisdiction is missing or
-    // malformed — the shape predicate is the declaration, so a direct library
-    // caller cannot bypass the check with a malformed code.
-    if context.data_category == DataCategory::SpecialCategory
-        && (matches!(
+    if context.data_category == DataCategory::SpecialCategory {
+        if matches!(
             context.recipient,
             RecipientClass::External | RecipientClass::Unknown
-        ) || (context.recipient != RecipientClass::Local
+        ) {
+            return result(Action::Block, ReasonCode::SpecialCategoryBlocked);
+        }
+        if context.recipient == RecipientClass::Trusted
             && !context
                 .jurisdiction
                 .as_deref()
-                .is_some_and(is_valid_jurisdiction)))
-    {
-        return Action::Block;
+                .is_some_and(is_valid_jurisdiction)
+        {
+            return result(Action::Block, ReasonCode::JurisdictionRequiredBlocked);
+        }
     }
 
-    // An unknown recipient blocks every non-secret entity that is not
-    // explicitly non-personal.
     if context.recipient == RecipientClass::Unknown
         && context.data_category != DataCategory::NonPersonal
     {
-        return Action::Block;
+        return result(Action::Block, ReasonCode::UnknownRecipientBlocked);
     }
-
-    // High-confidence test/business labels keep the value.
     if let Some(Judgment::Labeled {
         label: SemanticLabel::Test | SemanticLabel::Business,
         confidence,
@@ -96,16 +123,12 @@ fn decide(kind: &str, decision: Option<&Judgment>, context: &ProcessingContext) 
     }) = decision
         && *confidence >= KEEP_CONFIDENCE
     {
-        return Action::Keep;
+        return result(Action::Keep, ReasonCode::JudgeKeep);
     }
-
-    // A local recipient keeps every remaining value.
     if context.recipient == RecipientClass::Local {
-        return Action::Keep;
+        return result(Action::Keep, ReasonCode::LocalRecipientKeep);
     }
-
-    // Everything else pseudonymizes.
-    Action::Pseudonymize
+    result(Action::Pseudonymize, ReasonCode::DefaultPseudonymize)
 }
 
 #[cfg(test)]
@@ -320,5 +343,27 @@ mod tests {
             ..ProcessingContext::default()
         };
         assert_eq!(action_with("email", &[], &context), Action::Pseudonymize);
+    }
+    #[test]
+    fn explanations_share_decision_logic_and_report_stable_reasons() {
+        let entities = [entity("api_key"), entity("email")];
+        let context = ProcessingContext::default();
+        let judgments: [Judgment; 0] = [];
+        let plan = match DefaultPolicy.plan(&entities, &judgments, &context) {
+            Ok(plan) => plan,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        let reasons = match DefaultPolicy.explain(&plan, &judgments, &context) {
+            Ok(reasons) => reasons,
+            Err(error) => panic!("unexpected error: {error}"),
+        };
+        assert_eq!(
+            plan.iter().map(|item| item.action).collect::<Vec<_>>(),
+            reasons.iter().map(|item| item.action).collect::<Vec<_>>()
+        );
+        assert_eq!(reasons[0].reason_code, ReasonCode::SecretKind);
+        assert_eq!(reasons[1].reason_code, ReasonCode::DefaultPseudonymize);
+        assert!(reasons.iter().all(|reason| reason.used_default));
+        assert!(reasons.iter().all(|reason| reason.matched_rule.is_none()));
     }
 }

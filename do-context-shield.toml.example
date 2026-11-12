@@ -8,15 +8,29 @@ transformer = "pseudonymize"        # pseudonymize | generalize | mask | process
 # judge = "heuristics"             # heuristics | process (optional)
 # tools = "sanitize,inspect"       # mcp-stdio only: sanitize | restore | inspect | forget | all
 # model_dir = "path/to/gliner2"    # GLiNER2 ONNX export directory
-# detector_command = "my-detector"  # process plugin command
-# policy_command = "my-policy"
-# transformer_command = "my-transformer"
-# judge_command = "my-judge"
+# Process selections are enabled by setting the matching [plugins] value to "process".
+# [process_plugins.detector]
+# program = "/path/to/my detector"
+# args = ["--mode", "strict"]
+#
+# [process_plugins.policy]
+# program = "my-policy"
+# args = []
+#
+# [process_plugins.judge]
+# program = "python3"
+# args = ["judge.py"]
+#
+# [process_plugins.transformer]
+# program = "my-transformer"
+# args = []
 
 [vault]
 # vault = "memory"                 # memory | json | process
 # vault_file = "vault.json"        # required with vault = "json"
-# vault_command = "my-vault"       # process plugin command
+# [process_plugins.vault]
+# program = "my-vault"
+# args = ["--state", "vault.json"]
 # vault_ttl_seconds = 3600         # memory or JSON vault mapping lifetime
 # vault_key_file = "vault.key"     # 64-hex key file that encrypts the JSON vault at rest
 

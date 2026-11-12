@@ -1,4 +1,5 @@
 use crate::config;
+use do_context_shield_core::PolicyPlanner;
 use do_context_shield_core::PrivacyPipeline;
 use do_context_shield_plugin_api::AuditSink;
 use do_context_shield_plugin_process::{
@@ -33,7 +34,7 @@ fn gliner2_detector(
 ///
 /// # Errors
 ///
-/// Returns an error for a process detector without a command or an unknown
+/// Returns an error for a process detector without an executable or an unknown
 /// detector name.
 fn build_detector(
     resolved: &config::Resolved,
@@ -54,7 +55,7 @@ fn build_detector(
             )),
         )),
         "process" => Box::new(ProcessDetector::from_selection(
-            resolved.detector_command.as_deref(),
+            resolved.detector_process.as_ref(),
             timeout,
         )?),
         name => do_context_shield_plugin_registry::detector(name)?,
@@ -66,7 +67,7 @@ fn build_detector(
 /// # Errors
 ///
 /// Returns an error for contradictory vault selections, a process vault
-/// without a command, a JSON vault without a file, or an unknown vault name.
+/// without an executable, a JSON vault without a file, or an unknown vault name.
 fn build_vault(
     resolved: &config::Resolved,
 ) -> Result<Box<dyn do_context_shield_plugin_api::Vault>, Box<dyn std::error::Error>> {
@@ -75,7 +76,7 @@ fn build_vault(
     let vault_key_file = resolved.vault_key_file.as_deref();
     Ok(match config::vault_kind(resolved)? {
         config::VaultKind::Process => Box::new(ProcessVault::from_selection(
-            resolved.vault_command.as_deref(),
+            resolved.vault_process.as_ref(),
             timeout,
         )?),
         config::VaultKind::Json => do_context_shield_plugin_registry::json_vault(
@@ -91,7 +92,7 @@ fn build_vault(
 ///
 /// # Errors
 ///
-/// Returns an error for a process policy without a command or an unknown name.
+/// Returns an error for a process policy without an executable or an unknown name.
 fn build_policy(
     resolved: &config::Resolved,
 ) -> Result<Box<dyn do_context_shield_plugin_api::Policy>, Box<dyn std::error::Error>> {
@@ -101,7 +102,7 @@ fn build_policy(
             do_context_shield_plugin_registry::matrix_policy(resolved.policy_matrix.clone())
         }
         "process" => Box::new(ProcessPolicy::from_selection(
-            resolved.policy_command.as_deref(),
+            resolved.policy_process.as_ref(),
             timeout,
         )?),
         name => do_context_shield_plugin_registry::policy(name)?,
@@ -112,7 +113,7 @@ fn build_policy(
 ///
 /// # Errors
 ///
-/// Returns an error for a process transformer without a command or an unknown
+/// Returns an error for a process transformer without an executable or an unknown
 /// name.
 fn build_transformer(
     resolved: &config::Resolved,
@@ -120,7 +121,7 @@ fn build_transformer(
     let timeout = Duration::from_millis(resolved.process_timeout_ms);
     Ok(match resolved.transformer.as_str() {
         "process" => Box::new(ProcessTransformer::from_selection(
-            resolved.transformer_command.as_deref(),
+            resolved.transformer_process.as_ref(),
             timeout,
         )?),
         name => do_context_shield_plugin_registry::transformer(name)?,
@@ -131,7 +132,7 @@ fn build_transformer(
 ///
 /// # Errors
 ///
-/// Returns an error for a process judge without a command or an unknown name.
+/// Returns an error for a process judge without an executable or an unknown name.
 fn build_judge(
     resolved: &config::Resolved,
 ) -> Result<Option<Box<dyn do_context_shield_plugin_api::SemanticJudge>>, Box<dyn std::error::Error>>
@@ -139,11 +140,25 @@ fn build_judge(
     let timeout = Duration::from_millis(resolved.process_timeout_ms);
     Ok(match resolved.judge.as_deref() {
         Some("process") => Some(Box::new(ProcessJudge::from_selection(
-            resolved.judge_command.as_deref(),
+            resolved.judge_process.as_ref(),
             timeout,
         )?)),
         Some(name) => Some(do_context_shield_plugin_registry::judge(name)?),
         None => None,
+    })
+}
+/// Build the simulation planner without constructing transform, storage, or audit stages.
+///
+/// # Errors
+///
+/// Returns an error when detection, judge, or policy selection cannot be built.
+pub(crate) fn build_policy_planner(
+    resolved: &config::Resolved,
+) -> Result<PolicyPlanner, Box<dyn std::error::Error>> {
+    let planner = PolicyPlanner::new(build_detector(resolved)?, build_policy(resolved)?);
+    Ok(match build_judge(resolved)? {
+        Some(judge) => planner.with_judge(judge),
+        None => planner,
     })
 }
 

@@ -2,6 +2,7 @@
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -21,17 +22,6 @@ const TREE_WAIT: Duration = Duration::from_millis(500);
 
 /// Poll interval used while waiting for an exit status or a thread.
 const EXIT_POLL_INTERVAL: Duration = Duration::from_millis(2);
-
-/// Split a configured command line into program and arguments.
-///
-/// Returns `None` when the command is missing or blank.
-pub(crate) fn split_command(command: Option<&str>) -> Option<(&str, Vec<&str>)> {
-    command.and_then(|command| {
-        let mut tokens = command.split_whitespace();
-        let program = tokens.next()?;
-        Some((program, tokens.collect::<Vec<&str>>()))
-    })
-}
 
 /// Encode a request as one JSON line (without the trailing newline).
 pub(crate) fn encode<T: Serialize>(label: &str, request: &T) -> Result<Vec<u8>, String> {
@@ -154,8 +144,8 @@ fn join_bounded(handle: JoinHandle<()>, deadline: Instant) {
 /// the pipe level.
 pub(crate) fn run_child(
     label: &str,
-    program: &str,
-    args: &[&str],
+    program: &OsStr,
+    args: &[OsString],
     request: Vec<u8>,
     timeout: Duration,
 ) -> Result<String, String> {
@@ -176,7 +166,7 @@ pub(crate) fn run_child(
     }
     let mut child = command
         .spawn()
-        .map_err(|error| format!("process {label} failed to start `{program}`: {error}"))?;
+        .map_err(|error| format!("process {label} failed to start: {error}"))?;
     let mut containment = Containment::new(&child);
 
     let Some(mut stdin) = child.stdin.take() else {

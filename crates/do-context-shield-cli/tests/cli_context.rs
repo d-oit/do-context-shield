@@ -6,11 +6,16 @@
 
 mod common;
 
-use common::{cmd, process_command, temp_dir};
+use common::{cmd, temp_dir};
+use std::ffi::OsStr;
 use std::path::Path;
 
 /// `sanitize --session ctx <extra…>`, `input` on stdin; stdout on success.
-fn sanitize(dir: &Path, extra: &[&str], input: &str) -> String {
+fn sanitize<I, S>(dir: &Path, extra: I, input: &str) -> String
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     let assert = cmd(dir)
         .args(["sanitize", "--session", "ctx"])
         .args(extra)
@@ -23,10 +28,10 @@ fn sanitize(dir: &Path, extra: &[&str], input: &str) -> String {
 #[test]
 fn local_recipient_keeps_personal_values() {
     let dir = temp_dir();
-    let kept = sanitize(dir.path(), &["--recipient", "local"], "alice@example.com");
+    let kept = sanitize(dir.path(), ["--recipient", "local"], "alice@example.com");
     assert_eq!(kept, "alice@example.com");
     // Control: the default `external` recipient pseudonymizes the same value.
-    let defaulted = sanitize(dir.path(), &[], "alice@example.com");
+    let defaulted = sanitize(dir.path(), std::iter::empty::<&str>(), "alice@example.com");
     common::assert_placeholder(&defaulted, "EMAIL", 1);
 }
 
@@ -74,8 +79,8 @@ fn unknown_context_values_exit_2() {
 #[test]
 fn context_flags_reach_the_process_policy() {
     let dir = temp_dir();
-    let command = process_command("plan-context");
-    let base = ["--policy", "process", "--policy-command", command.as_str()];
+    let mut base = vec!["--policy".to_owned(), "process".to_owned()];
+    base.extend(common::process_plugin_args("policy", "plan-context"));
     // The child keeps for `local`, `legal-hold`, and `DE` and redacts anything
     // else, so a kept value proves that field crossed the child boundary.
     for extra in [
@@ -83,13 +88,13 @@ fn context_flags_reach_the_process_policy() {
         ["--purpose", "legal-hold"],
         ["--jurisdiction", "DE"],
     ] {
-        let mut flags = base.to_vec();
-        flags.extend_from_slice(&extra);
+        let mut flags = base.clone();
+        flags.extend(extra.into_iter().map(str::to_owned));
         let kept = sanitize(dir.path(), &flags, "alice@example.com");
         assert_eq!(kept, "alice@example.com", "flags: {flags:?}");
     }
     // Control: without a context flag the same child redacts.
-    let redacted = sanitize(dir.path(), &base, "alice@example.com");
+    let redacted = sanitize(dir.path(), base, "alice@example.com");
     assert_eq!(redacted, "__DO_PRIVATE_REDACTED__");
 }
 
@@ -120,7 +125,7 @@ fn special_category_to_trusted_with_a_jurisdiction_pseudonymizes() {
     for jurisdiction in ["DE", "de"] {
         let pseudonymized = sanitize(
             dir.path(),
-            &[
+            [
                 "--recipient",
                 "trusted",
                 "--data-category",
@@ -174,7 +179,7 @@ fn purpose_alone_never_loosens() {
     let dir = temp_dir();
     let pseudonymized = sanitize(
         dir.path(),
-        &["--purpose", "support", "--recipient", "external"],
+        ["--purpose", "support", "--recipient", "external"],
         "alice@example.com",
     );
     common::assert_placeholder(&pseudonymized, "EMAIL", 1);

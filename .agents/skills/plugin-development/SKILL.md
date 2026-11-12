@@ -38,7 +38,7 @@ Follow this skill to add a new implementation without breaking the privacy bound
 1. Read the trait contract in `crates/plugin-api/src/lib.rs` first. Do not change the trait unless the change is genuinely cross-plugin.
 2. Create `crates/<name>/` with `Cargo.toml` (workspace inheritance: `version.workspace`, `edition.workspace`, `license.workspace`, `[lints] workspace = true`) and `src/lib.rs`.
 3. Register the plugin by logical name in `crates/plugin-registry/src/lib.rs` (`detector()`, `judge()`, `policy()`, `transformer()`, or `vault()`).
-4. Select it at the CLI: `--detector`, `--judge`, `--policy`, `--transformer`, or `--vault` with the logical name. Process plugins need their command flag (`--detector-command`, `--judge-command`, `--policy-command`, `--transformer-command`, `--vault-command`) and share `--process-timeout-ms`; `gliner2` needs `--model-dir <dir>` and `--vault json` needs `--vault-file <path>`. The pipeline composes as `Detector -> SemanticJudge (optional) -> Policy -> Transformer -> Vault`.
+4. Select it at the CLI: `--detector`, `--judge`, `--policy`, `--transformer`, or `--vault` with the logical name. Process plugins use `--<capability>-program` plus repeatable `--<capability>-arg` and share `--process-timeout-ms`; file-backed argv lives in `[process_plugins.<capability>]` (`docs/configuration.md`). `gliner2` needs `--model-dir <dir>` and `--vault json` needs `--vault-file <path>`. The pipeline composes as `Detector -> SemanticJudge (optional) -> Policy -> Transformer -> Vault`.
 5. Add unit tests in the new crate and extend `crates/privacy-core/tests/` invariants if behavior changes.
 6. Run `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets`, `cargo test --workspace`. If the crate has an opt-in feature, also run `cargo check -p <crate> --features <feature>` and `cargo clippy -p <crate> --all-targets --features <feature> -- -D warnings`.
 
@@ -59,7 +59,7 @@ Follow this skill to add a new implementation without breaking the privacy bound
 
 ## Cross-language plugins
 
-For non-Rust replacements, do not use a dynamic-library ABI. Implement the process protocol in `docs/process-plugin.md` (newline-delimited JSON on stdin/stdout); `crates/plugin-process` already drives detectors, policies, transformers, and vaults that way (`--detector`/`--policy`/`--transformer`/`--vault process` with the matching `--*-command` flag). A process transformer stays reversible only when the configured vault resolves the placeholders it emits.
+For non-Rust replacements, do not use a dynamic-library ABI. Implement the process protocol in `docs/process-plugin.md` (newline-delimited JSON on stdin/stdout); `crates/plugin-process` already drives detectors, policies, transformers, and vaults that way (`--detector`/`--policy`/`--transformer`/`--vault process` with `--<capability>-program` and repeated `--<capability>-arg` options). A process transformer stays reversible only when the configured vault resolves the placeholders it emits.
 
 ## Red flags
 

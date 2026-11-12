@@ -9,13 +9,11 @@
 |Changed-only gate|`do-harness verify --changed --set verification`|
 |Selection preview|`do-harness explain --set verification --changed`|
 |Evidence freshness|`do-harness status --set verification`|
-|Backlog check|`bash scripts/check-backlog.sh` (active status metadata and local Markdown links)|
-|Skill structure gate|`bash scripts/check-skills.sh`|
-|Hook wiring gate|`bash scripts/check-hooks.sh` (hook files, sensor parity, single hook mode)|
-|Skill evals|`bash scripts/check-skill-evals.sh` (wraps `do-harness eval --strict-fixtures`; narrow with `--skill <name>`)|
+|Single sensor|`do-harness verify --only <name>` (sensor names live in `do-harness.toml`)|
 |Feature build|`cargo check -p <crate> --features <feature>` (e.g. `do-context-shield-detector-gliner2 --features gliner2`)|
 |Setup|`git config core.hooksPath .githooks` after cloning|
-|Sensors|Declared in `do-harness.toml`; procedures in `.agents/skills/harness/SKILL.md`|
+|Canonical sensor commands + signal sets|`do-harness.toml` — the only executable definition; docs mirror it, never fork it|
+|Sensor stages, fix hints, procedures|`.agents/skills/harness/SKILL.md`|
 
 ## Harness model
 
@@ -76,7 +74,14 @@ forever on a `BEHIND` PR instead of draining a batch.
 
 ## Machine-readable decisions
 
-Every durable rule is recorded in `plans/invariants.json` as `{invariant, rationale, sensor, category}` and seeded into the state database (`do-harness seed --prune`). A rule whose `sensor` is review-only is not machine-enforced — prefer adding the sensor.
+Every durable rule is recorded in `plans/invariants.json` as `{invariant, rationale, sensor, category}` and seeded into the state database (`do-harness seed --prune`). `category` is exactly one of four concepts:
+
+- `security-contract` — an executable privacy/behavior guarantee; its `sensor` must cite executable test/sensor evidence and may never be `review-only`.
+- `architecture-constraint` — a constraint on the structure of the codebase and its interfaces.
+- `workflow-rule` — a process rule (commits, PRs, hooks, gates, evidence).
+- `historical-decisions` — dated rationale preserved in `docs/decisions/` or `plans/backlog.md`.
+
+These rules are enforced by `tests/test_invariants_validation.py` (run inside the `skills` sensor). Only `security-contract` forbids a `review-only` sensor; any other category may document a human-enforced rule that way, but a review-only rule is not machine-enforced — prefer adding the sensor.
 
 ## Project rules
 

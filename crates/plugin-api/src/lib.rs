@@ -80,9 +80,11 @@ pub struct Mapping {
 mod audit;
 mod context;
 mod placeholder;
+mod reason;
 mod secret;
 mod spans;
 mod traits;
+pub use reason::{DecisionReason, ReasonCode};
 
 pub use audit::{
     ActionCount, AuditContext, AuditError, AuditEvent, AuditOperation, AuditOutcome, AuditSink,

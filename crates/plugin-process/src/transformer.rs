@@ -10,8 +10,8 @@
 //! replaced. A transform that violates this fails closed instead of producing
 //! output whose placeholders `restore` cannot reverse.
 
-use crate::ProcessConfig;
 use crate::protocol;
+use crate::{ProcessCommand, ProcessConfig};
 use do_context_shield_plugin_api::{
     Action, Mapping, PlannedEntity, ScopeId, TransformError, TransformResult, Transformer, Vault,
     is_placeholder_token,
@@ -20,8 +20,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::time::Duration;
 
-/// Guidance returned when no transformer command is configured.
-const NO_COMMAND: &str = "process transformer unavailable (no command configured); pass `--transformer-command <program> [args...]`";
+/// Guidance returned when no transformer executable is configured.
+const NO_COMMAND: &str = "process transformer unavailable (no executable configured); pass `--transformer-program <path>`";
 
 /// Transformer that delegates to a local executable over the NDJSON protocol.
 pub struct ProcessTransformer {
@@ -45,17 +45,17 @@ impl ProcessTransformer {
     ///
     /// # Errors
     ///
-    /// Returns [`TransformError`] when no usable command is configured, so a
-    /// missing `--transformer-command` fails at startup instead of on the first call.
+    /// Returns [`TransformError`] when no executable is configured, so a
+    /// missing selection fails at startup instead of on the first call.
     pub fn from_selection(
-        command: Option<&str>,
+        command: Option<&ProcessCommand>,
         timeout: Duration,
     ) -> Result<Self, TransformError> {
         let command = command
-            .filter(|command| !command.trim().is_empty())
+            .filter(|command| !command.program.is_empty())
             .ok_or_else(|| TransformError::Message(NO_COMMAND.to_owned()))?;
         Ok(Self::new(
-            ProcessConfig::with_command(command.to_owned()).with_timeout(timeout),
+            ProcessConfig::with_command(command.clone()).with_timeout(timeout),
         ))
     }
 }
@@ -81,7 +81,12 @@ impl Transformer for ProcessTransformer {
         scope: &ScopeId,
         vault: &mut dyn Vault,
     ) -> Result<TransformResult, TransformError> {
-        let Some((program, args)) = protocol::split_command(self.config.command.as_deref()) else {
+        let Some(command) = self
+            .config
+            .command
+            .as_ref()
+            .filter(|command| !command.program.is_empty())
+        else {
             return Err(TransformError::Message(NO_COMMAND.to_owned()));
         };
         let wire_plan = plan
@@ -106,8 +111,14 @@ impl Transformer for ProcessTransformer {
             },
         )
         .map_err(TransformError::Message)?;
-        let line = protocol::run_child("transformer", program, &args, request, self.config.timeout)
-            .map_err(TransformError::Message)?;
+        let line = protocol::run_child(
+            "transformer",
+            &command.program,
+            &command.args,
+            request,
+            self.config.timeout,
+        )
+        .map_err(TransformError::Message)?;
         let response: Response =
             protocol::decode("transformer", &line).map_err(TransformError::Message)?;
         validate(plan, scope, response, vault)

@@ -4,7 +4,7 @@ mod common;
 
 use common::command;
 use do_context_shield_plugin_api::Detector;
-use do_context_shield_plugin_process::{ProcessConfig, ProcessDetector};
+use do_context_shield_plugin_process::{ProcessCommand, ProcessConfig, ProcessDetector};
 use std::time::{Duration, Instant};
 
 fn detector(mode: &str) -> ProcessDetector {
@@ -114,16 +114,25 @@ fn succeeds_when_zero_entities_returned_with_explicit_text_signal() {
 #[test]
 fn errors_without_command() {
     let message = error_message(&ProcessDetector::default(), "x");
-    assert!(message.contains("no command configured"), "got: {message}");
+    assert!(
+        message.contains("no executable configured"),
+        "got: {message}"
+    );
+    assert!(message.contains("--detector-program"), "got: {message}");
 }
 
 #[test]
 fn errors_on_spawn_failure() {
-    let detector = ProcessDetector::new(ProcessConfig::with_command(
-        "definitely-not-a-real-binary-xyz".to_owned(),
-    ));
-    let message = error_message(&detector, "x");
-    assert!(message.contains("failed to start"), "got: {message}");
+    let detector = ProcessDetector::new(ProcessConfig::with_command(ProcessCommand::new(
+        "definitely-not-a-real-binary-xyz",
+        Vec::<std::ffi::OsString>::new(),
+    )));
+    let input = "synthetic@example.invalid";
+    let message = error_message(&detector, input);
+    assert!(
+        !message.contains(input),
+        "spawn failure must not echo request text"
+    );
 }
 
 #[test]

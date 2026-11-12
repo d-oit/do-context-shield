@@ -22,7 +22,7 @@ Every method shares the same driver:
 - The writer reports a broken pipe or write failure instead of ignoring it; a call with no usable response line surfaces it as "request could not be delivered".
 - A non-zero exit fails even when a response line was printed.
 - stderr is discarded and never logged, and error messages never echo input values. The pipeline additionally scrubs the input and detected values from any stage error text before it reaches a caller, so a backend cannot leak a value through an error.
-- A command line is split on whitespace; quoting and shell expansion are not supported. Point the flag at a wrapper script for anything more elaborate. A missing or blank command fails at startup, not on the first call.
+- Process executable selection is structured: pass one `--<capability>-program <PATH>` and repeat `--<capability>-arg <ARG>` once per argument, or configure `program` and an ordered `args` array under `[process_plugins.<capability>]`. Values are passed directly to the executable with no shell, whitespace splitting, quoting rules, or expansion; paths with spaces and empty arguments remain distinct. A missing or blank program fails before input is processed.
 
 ## Adversarial-response regression matrix
 
@@ -185,18 +185,26 @@ A miss is `{"mapping":null}`.
 ## Selection
 
 ```bash
-FIX="python3 detector.py"
 printf '%s' 'email alice@example.com' \
   | do-context-shield sanitize --session s1 \
-      --detector process --detector-command "$FIX" \
-      --judge process --judge-command "python3 judge.py" \
-      --policy process --policy-command "python3 policy.py" \
-      --transformer process --transformer-command "python3 transformer.py" \
-      --vault process --vault-command "python3 vault.py" \
+      --detector process --detector-program python3 --detector-arg detector.py \
+      --judge process --judge-program python3 --judge-arg judge.py \
+      --policy process --policy-program python3 --policy-arg policy.py \
+      --transformer process --transformer-program python3 --transformer-arg transformer.py \
+      --vault process --vault-program python3 --vault-arg vault.py \
       --process-timeout-ms 60000
 ```
 
-`mcp-stdio` takes the same flags. Each capability is selected independently, so a process detector can run next to the built-in policy, transformer, and vault, and `restore` accepts the same `--vault`/`--vault-command` flags as `sanitize`.
+`mcp-stdio` takes the same program/argument options. Each capability is
+selected independently, so a process detector can run next to the built-in
+policy, transformer, and vault. `restore` accepts the same `--vault-program`
+and repeatable `--vault-arg` options as `sanitize`.
+
+The removed `--*-command` options and `*_command` config keys are rejected
+with a migration hint rather than split ambiguously. Move the executable to
+`program`/`--<capability>-program` and each argument, in order, to `args` or a
+repeated `--<capability>-arg`; shell quoting and expansion are not part of the
+plugin contract.
 
 The same contract can carry future capabilities. A Python CPU model, a Rust model, or another executable can therefore replace an implementation without changing `do-context-shield-core`.
 
@@ -211,18 +219,18 @@ Setup: `pip install laya` (torch/transformers; no TensorFlow). Environment: `LAY
 ```bash
 do-context-shield sanitize --session work-1 \
     --detector gliner2 --model-dir <dir> \
-    --judge process --judge-command "python3 examples/laya-judge.py" \
+    --judge process --judge-program python3 --judge-arg examples/laya-judge.py \
     --process-timeout-ms 120000
 ```
 
-The `gliner2` pairing needs a binary built with the `gliner2` Cargo feature (`docs/plugins.md`); `--detector regex --judge process --judge-command "python3 examples/laya-judge.py"` works in every build.
+The `gliner2` pairing needs a binary built with the `gliner2` Cargo feature (`docs/plugins.md`); `--detector regex --judge process --judge-program python3 --judge-arg examples/laya-judge.py` works in every build.
 
 Offline checks need no model: `python3 examples/laya-judge.py --self-test` runs canned assertions, and `--stub` swaps in a deterministic agent (reserved domains → `test`, role addresses → `business`, otherwise abstain) for local smoke tests and CI:
 
 ```bash
 printf '%s' 'meet alice@personalmail.net' \
   | do-context-shield sanitize --session s1 \
-      --judge process --judge-command "python3 examples/laya-judge.py --stub"
+      --judge process --judge-program python3 --judge-arg examples/laya-judge.py --judge-arg=--stub
 # -> meet __DO_PRIVATE_EMAIL_1_9F3A2C7B5D1E4F08__
 ```
 

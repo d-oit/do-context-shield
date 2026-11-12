@@ -1,9 +1,9 @@
 //! Tests for the configuration loader, validation, and CLI merge.
 
 use super::{CliSelection, Config, ConfigSource, resolve, resolve_tools, validate};
-use crate::cli::{ContextArgs, DetectorSelection};
+use crate::cli::{ContextArgs, DetectorSelection, ProcessArgs};
 use do_context_shield_mcp_server::ToolSet;
-use do_context_shield_plugin_process::DEFAULT_TIMEOUT_MS;
+use do_context_shield_plugin_process::{DEFAULT_TIMEOUT_MS, ProcessCommand};
 
 #[test]
 fn empty_config_is_default() -> Result<(), Box<dyn std::error::Error>> {
@@ -103,13 +103,61 @@ fn vault_combinations_checked() -> Result<(), Box<dyn std::error::Error>> {
         "[vault]\nvault = \"json\"\nvault_file = \"v.json\"\nvault_ttl_seconds = 60\n",
         "[vault]\nvault_file = \"v.json\"\nvault_ttl_seconds = 60\n",
         "[vault]\nvault_file = \"v.json\"\n",
-        "[vault]\nvault = \"process\"\nvault_command = \"vault-cmd\"\n",
+        "[vault]\nvault = \"process\"\n\n[process_plugins.vault]\nprogram = \"vault-cmd\"\nargs = [\"--local\"]\n",
         "[vault]\nvault = \"json\"\nvault_file = \"v.json\"\nvault_key_file = \"k.key\"\n",
         "[vault]\nvault_file = \"v.json\"\nvault_key_file = \"k.key\"\n",
     ] {
         let config: Config = toml::from_str(text)?;
         assert!(validate(&config).is_ok(), "expected acceptance: {text}");
     }
+    Ok(())
+}
+
+#[test]
+fn process_plugin_argv_requires_a_program() -> Result<(), Box<dyn std::error::Error>> {
+    for text in [
+        "[process_plugins.detector]\nargs = [\"--mode\"]\n",
+        "[process_plugins.detector]\nprogram = \"\"\n",
+    ] {
+        let config: Config = toml::from_str(text)?;
+        assert!(validate(&config).is_err(), "expected rejection: {text}");
+    }
+    let valid: Config = toml::from_str(
+        "[process_plugins.detector]\nprogram = \"local plugin\"\nargs = [\"\", \"λ\"]\n",
+    )?;
+    assert!(validate(&valid).is_ok());
+    Ok(())
+}
+
+#[test]
+fn process_cli_argv_overrides_the_configured_tuple() -> Result<(), Box<dyn std::error::Error>> {
+    let mut config: Config = toml::from_str(
+        "[plugins]\ndetector = \"process\"\n\n\
+         [process_plugins.detector]\nprogram = \"file plugin\"\nargs = [\"file arg\", \"file-two\"]\n",
+    )?;
+    config.source = ConfigSource::Explicit;
+    let mut process = ProcessArgs::default();
+    process.detector_program = Some("cli plugin".to_owned());
+    process.detector_args = vec!["first arg".to_owned(), String::new(), "λ".to_owned()];
+    let cli = CliSelection {
+        process,
+        ..CliSelection::default()
+    };
+    assert_eq!(
+        resolve(&cli, &config).detector_process,
+        Some(ProcessCommand::new("cli plugin", ["first arg", "", "λ"]))
+    );
+
+    config.source = ConfigSource::WorkingDir;
+    assert_eq!(
+        resolve(&CliSelection::default(), &config).detector_process,
+        None
+    );
+    config.source = ConfigSource::Explicit;
+    assert_eq!(
+        resolve(&CliSelection::default(), &config).detector_process,
+        Some(ProcessCommand::new("file plugin", ["file arg", "file-two"]))
+    );
     Ok(())
 }
 

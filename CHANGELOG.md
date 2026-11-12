@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added a fail-closed OpenCode V2 egress plugin (issue #192). The optional local adapter sanitizes supported model context through the existing MCP pipeline, scopes mappings by OpenCode session, and on deletion rejects new hooks, drains in-flight context processing, then forgets the scope; unload drains and forgets active scopes. Unsupported payloads and sanitizer failures stop dispatch; this is not a network proxy or universal egress control. See `adapters/opencode-egress/README.md`.
 
+- Structured process-plugin argv configuration (issue #193). Replaced whitespace-split command strings with separate executable paths and ordered argument vectors for all five process stages. CLI options and `[process_plugins.<capability>]` config preserve spaces, Unicode, empty arguments, and shell metacharacters literally; obsolete combined command settings fail with a safe migration hint.
+
+- Added `explain-policy` for value-free policy simulation (issue #194). It uses the configured detector, optional judge, and actual default or matrix policy; reports byte spans, actions, stable reason codes, and rule/default metadata without matched text; and never opens a transformer, vault, or audit sink.
+
+- Added reproducible Criterion benchmarks for synthetic regex/hybrid detection, policy, transformation, vault, and process-plugin stages (issue #195), plus optional local GLiNER2 cold/warm runs that require a caller-supplied model identity and a manual baseline-comparison workflow using explicit Bash `pipefail` so benchmark failures cannot publish baselines. Reports include environment and corpus metadata; no network downloads or flaky CI thresholds.
+
 - Secure key-file generation (issue #190). `do-context-shield create-key --output <path>` writes a random 32-byte key in hex without printing it,
   refuses existing destinations, and publishes atomically. Unix files use
   mode `0600`; Windows supplies a protected allow-list DACL through
@@ -35,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (Everyone, Users, Guests), NULL DACLs, callback/object ACEs, and unsupported
   ACE types fail closed with a path-free, non-sensitive diagnostic.
 
+- Added deterministic `quick-fix`, `feature`, and `security-critical` workflow profiles (issue #196). Classification uses fixed low-risk allowlists and escalates unknown, ambiguous, shared, workspace, and security-sensitive changes to full verification.
+
 - MCP stdio conformance gate (`scripts/check-mcp-conformance.sh`, `mcp-conformance`
   CI job, issue #181). The pinned MCP Inspector CLI (2.13.0, Node 22) runs over
   stdio for both advertised revisions — `--protocol-era modern` exercises the
@@ -47,6 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   server runner is *not* scored: it accepts only an HTTP `--url` (stdio
   support is upstream issue #258), so HTTP-only scenarios are neither run nor
   marked as passed. No network transport was added to the product.
+
+- Consolidated contributor and harness guidance around `do-harness.toml` (issue #197), with a validator for canonical sensor commands and normalized invariant categories/evidence. Existing enforcement remains intact.
 
 - Local detector preflight: `do-context-shield doctor` (issue #182). It checks
   plugin availability, feature support, model layout, tokenizer/`id2label`

@@ -76,14 +76,11 @@ fn vault_ttl_with_a_process_vault_exits_1() {
     // Memory and JSON vaults both have a lifetime policy; the process vault
     // keeps retention on the child's side, so a TTL is rejected.
     let dir = temp_dir();
-    let process_vault = format!("sh {}", common::process_command("vault-ok"));
     cmd(dir.path())
         .args([
             "mcp-stdio",
             "--vault",
             "process",
-            "--vault-command",
-            process_vault.as_str(),
             "--vault-ttl-seconds",
             "5",
         ])

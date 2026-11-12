@@ -359,3 +359,35 @@ fn local_recipient_keeps_remaining_values() {
         Action::Keep
     );
 }
+
+#[test]
+fn explanation_identifies_configured_purpose_rule_and_action() {
+    let policy = MatrixPolicy::new(MatrixConfig {
+        purpose_rules: vec![PurposeRule {
+            purpose: "support".to_owned(),
+            data_category: None,
+            recipients: Vec::new(),
+            action: RuleAction::Keep,
+        }],
+        ..MatrixConfig::default()
+    });
+    let entities = [entity("email")];
+    let context = context(
+        Some("support"),
+        RecipientClass::Trusted,
+        None,
+        DataCategory::Personal,
+    );
+    let plan = match policy.plan(&entities, &[], &context) {
+        Ok(plan) => plan,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    let reasons = match policy.explain(&plan, &[], &context) {
+        Ok(reasons) => reasons,
+        Err(error) => panic!("unexpected error: {error}"),
+    };
+    assert_eq!(reasons[0].action, plan[0].action);
+    assert_eq!(reasons[0].reason_code, ReasonCode::PurposeRuleMatch);
+    assert_eq!(reasons[0].matched_rule, Some(0));
+    assert!(!reasons[0].used_default);
+}

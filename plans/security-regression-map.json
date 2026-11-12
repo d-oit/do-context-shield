@@ -162,5 +162,44 @@
   "safe_paths": {
     "exact": ["README.md", "CHANGELOG.md", "LICENSE"],
     "prefixes": ["docs/"]
-  }
+  },
+  "profiles": {
+    "quick-fix": {
+      "signal_set": "quick-fix",
+      "invocation": "do-harness verify --changed --set quick-fix --strict",
+      "recon": "Read the changed files and relevant project guidance; use the matching skill when behavior or a focused subsystem is involved.",
+      "planning": "Use one direct, low-risk task; split work only if its scope grows beyond the explicit low-risk path.",
+      "tests": "The quick-fix set includes formatting, lint, tests, and the always-on security-regression gate; changed-only selection runs applicable sensors.",
+      "evidence": "Retain the strict verification result and inspect do-harness status for the quick-fix set.",
+      "rationale": "Only paths explicitly listed in safe_paths may select quick-fix."
+    },
+    "feature": {
+      "signal_set": "feature",
+      "invocation": "do-harness verify --changed --set feature --strict",
+      "recon": "Read the relevant existing path rule, its consumers, and matching focused guidance before changing behavior.",
+      "planning": "Decompose multi-step work with the repository method catalog and record the task and sensor gate.",
+      "tests": "Run the changed-only dependent sensors selected by the feature signal set, including the always-on security-regression gate.",
+      "evidence": "Retain strict sensor results and verify evidence freshness for the feature signal set.",
+      "rationale": "Only explicitly mapped non-component path rules that are not workspace or security-critical paths may select feature."
+    },
+    "security-critical": {
+      "signal_set": "security-critical",
+      "invocation": "do-harness verify --set security-critical --strict",
+      "recon": "Read the plugin/API contract, relevant subsystem skill, current invariants, and all affected consumers.",
+      "planning": "Define the contract and failing regression tests first; decompose cross-boundary work and preserve fail-closed behavior.",
+      "tests": "Run the strict, unfiltered full verification signal set and the always-on security-regression gate.",
+      "evidence": "Retain strict full-verification results and confirm evidence freshness for the security-critical signal set.",
+      "rationale": "Default profile for security components, shared APIs, workspace/harness/global changes, and every unsafe, ambiguous, unmapped, or unknown path. Manually escalate whenever classification is uncertain or a change may affect a security boundary."
+    }
+  },
+  "security_critical_paths": [
+    { "prefixes": ["fuzz/"] },
+    { "prefixes": ["crates/"], "suffixes": ["/Cargo.toml", "/Cargo.lock"] }
+  ],
+  "feature_path_rules": [
+    "detector-quality-corpus",
+    "shared-skill-integration-test",
+    "shared-skill-test-fixtures",
+    "crate-readme-metadata"
+  ]
 }

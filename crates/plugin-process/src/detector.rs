@@ -3,14 +3,15 @@
 //! Request: `{"method":"detect","input":"..."}`. Response:
 //! `{"entities":[{"kind","start","end","value?","confidence?"}]}`.
 
-use crate::ProcessConfig;
 use crate::protocol;
+use crate::{ProcessCommand, ProcessConfig};
 use do_context_shield_plugin_api::{Detector, DetectorError, Entity, resolve_overlaps};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-/// Guidance returned when no detector command is configured.
-const NO_COMMAND: &str = "process detector unavailable (no command configured); pass `--detector-command <program> [args...]`";
+/// Guidance returned when no detector executable is configured.
+const NO_COMMAND: &str =
+    "process detector unavailable (no executable configured); pass `--detector-program <path>`";
 
 /// Detector that delegates to a local executable over the NDJSON protocol.
 pub struct ProcessDetector {
@@ -34,14 +35,17 @@ impl ProcessDetector {
     ///
     /// # Errors
     ///
-    /// Returns [`DetectorError`] when no usable command is configured, so a
-    /// missing `--detector-command` fails at startup instead of on the first call.
-    pub fn from_selection(command: Option<&str>, timeout: Duration) -> Result<Self, DetectorError> {
+    /// Returns [`DetectorError`] when no executable is configured, so a
+    /// missing selection fails at startup instead of on the first call.
+    pub fn from_selection(
+        command: Option<&ProcessCommand>,
+        timeout: Duration,
+    ) -> Result<Self, DetectorError> {
         let command = command
-            .filter(|command| !command.trim().is_empty())
+            .filter(|command| !command.program.is_empty())
             .ok_or_else(|| DetectorError::Message(NO_COMMAND.to_owned()))?;
         Ok(Self::new(
-            ProcessConfig::with_command(command.to_owned()).with_timeout(timeout),
+            ProcessConfig::with_command(command.clone()).with_timeout(timeout),
         ))
     }
 }
@@ -61,7 +65,12 @@ impl Detector for ProcessDetector {
     /// cannot be started, no response arrives within the configured timeout, or
     /// the response violates the protocol contract.
     fn detect(&self, input: &str) -> Result<Vec<Entity>, DetectorError> {
-        let Some((program, args)) = protocol::split_command(self.config.command.as_deref()) else {
+        let Some(command) = self
+            .config
+            .command
+            .as_ref()
+            .filter(|command| !command.program.is_empty())
+        else {
             return Err(DetectorError::Message(NO_COMMAND.to_owned()));
         };
         let request = protocol::encode(
@@ -72,8 +81,14 @@ impl Detector for ProcessDetector {
             },
         )
         .map_err(DetectorError::Message)?;
-        let line = protocol::run_child("detector", program, &args, request, self.config.timeout)
-            .map_err(DetectorError::Message)?;
+        let line = protocol::run_child(
+            "detector",
+            &command.program,
+            &command.args,
+            request,
+            self.config.timeout,
+        )
+        .map_err(DetectorError::Message)?;
         let response: Response =
             protocol::decode("detector", &line).map_err(DetectorError::Message)?;
         if response.entities.is_empty() && response.text.is_none() {

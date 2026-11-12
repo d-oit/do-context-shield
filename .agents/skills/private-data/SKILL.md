@@ -64,12 +64,13 @@ printf '%s' 'Email Alice at alice@example.com' \
 ## Process plugins (any language)
 
 ```bash
+DETECTOR="${HOME}/.local/share/do-context-shield/detector.py"
 printf '%s' 'Email Alice at alice@example.com' \
   | do-context-shield sanitize --session issue-123 \
-      --detector process --detector-command "python3 ~/.local/share/do-context-shield/detector.py"
+      --detector process --detector-program python3 --detector-arg "$DETECTOR"
 ```
 
-- Any capability can run in another language: `--policy process --policy-command ...`, `--transformer process --transformer-command ...`, and `--vault process --vault-command ...` follow the same pattern; each executable reads one JSON request line on stdin and writes one JSON response line to stdout (`docs/process-plugin.md`). One process is started per operation, and command lines are split on whitespace, so quoting and shell expansion are not supported.
+- Any capability can run in another language: select `process`, pass its executable with `--<capability>-program`, and repeat `--<capability>-arg` for each literal argument. The executable reads one JSON request line on stdin and writes one JSON response line to stdout (`docs/process-plugin.md`); the host spawns it directly, without a shell or whitespace splitting. Structured file settings use `[process_plugins.<capability>]` in an explicitly trusted config file. CLI program/args replace that file tuple atomically; the old combined command flags and keys are rejected with a safe migration message.
 - Fails closed: a malformed response, an invalid span, a plan that leaves an entity undecided, text that keeps a value it should have replaced, a placeholder the configured vault cannot resolve, or a non-zero exit stops the call instead of passing text through unsanitized. `--process-timeout-ms` (default 30000) bounds each call.
 - A process transformer only stays reversible when the configured vault can resolve the placeholders it emits (typically `--vault process` over the same store). Otherwise keep the built-in `--transformer pseudonymize`.
 

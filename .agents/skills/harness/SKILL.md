@@ -14,6 +14,8 @@ metadata:
   tags: harness sensors feedback feedforward self-correction quality
 ---
 ## Guides
+See references/heuristics.md for distilled heuristics.
+## Guides
 
 See [references/heuristics.md](references/heuristics.md) for distilled repository heuristics.
 
@@ -27,7 +29,7 @@ Agent = Model + Harness. Feedforward guides (this skill, `AGENTS.md`, `CONTRIBUT
 |---|---|---|
 | Agent contract | `AGENTS.md` | Operating rules, 6-phase workflow, project rules |
 | Method catalog | `plans/methods.json` | HTN methods and their sensor gates |
-| Invariants | `plans/invariants.json` | Decision headers (invariant/rationale/sensor/category) |
+| Invariants | `plans/invariants.json` | Decision headers (invariant/rationale/sensor/category); four normalized categories with evidence rules in `AGENTS.md` → Machine-readable decisions |
 | Planning | `.agents/skills/htn-planner/SKILL.md` | Task decomposition |
 | Spikes | `.agents/skills/spike-runner/SKILL.md` | De-risking throwaway prototypes |
 | Distillation | `.agents/skills/skill-distiller/SKILL.md` | Turning recoveries into guides |
@@ -38,6 +40,8 @@ Agent = Model + Harness. Feedforward guides (this skill, `AGENTS.md`, `CONTRIBUT
 | Historical records | `docs/decisions/`, `docs/test-evidence/` | Dated decisions and detailed run evidence, outside the active list |
 
 ## Feedback sensors
+
+`do-harness.toml` is the canonical executable definition: every sensor's `argv` and every signal set live there and nowhere else. The table below is the stage/fix-hint map — `scripts/check-skills.sh` fails if a row's command or stage drifts from the config, so change the config first, then mirror it here.
 
 | Sensor | Command | Stage | Fix hint |
 |---|---|---|---|
@@ -65,7 +69,7 @@ Agent = Model + Harness. Feedforward guides (this skill, `AGENTS.md`, `CONTRIBUT
 | mcp-conformance | `bash scripts/check-mcp-conformance.sh` (MCP Inspector + stdio fixtures; pinned Node 22 / inspector 2.13.0) | CI | keep Node and the inspector version pinned; see `docs/client-integration.md` |
 | secret-scan | gitleaks (`.github/workflows/secret-scan.yml`) | CI | remove and rotate the secret |
 
-Changed-only gate: `do-harness verify --changed --set verification`; preview with `do-harness explain --set verification --changed`. The always-on `security-regression` sensor checks `plans/security-regression-map.json` against the actual selected sensors; global, unknown, ambiguous, renamed-out, or under-selected paths run full verification. Signal sets: `feedback` (edit loop), `verification` (full local gate, including the detached fuzz workspace), `release`, and `ci` (verification minus `commitlint` and `fuzz-check`; the fuzz job runs separately). CI is unfiltered and appends `do-harness explain --set ci --format json` to the job summary so each harness sensor has a selection reason. A tool that is unavailable prints `SKIP:` and is reported as WARN, never as a silent pass; under `--strict` a warn is not a pass.
+Changed-only gate: `do-harness verify --changed --set verification`; preview with `do-harness explain --set verification --changed`. Signal-set names and membership are defined only in `do-harness.toml`. The full local verification set includes the detached fuzz workspace; CI runs its configured set unfiltered and adds a JSON sensor-selection summary, while fuzz also runs as a separate CI job. The always-on `security-regression` sensor checks `plans/security-regression-map.json` against the actual selected sensors; global, unknown, ambiguous, renamed-out, or under-selected paths run full verification. A tool that is unavailable prints `SKIP:` and is reported as WARN, never as a silent pass; under `--strict` a warn is not a pass.
 
 ## Self-correction protocol
 

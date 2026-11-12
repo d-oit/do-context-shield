@@ -1,0 +1,68 @@
+name: Performance benchmarks
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Save a Criterion baseline or compare with an earlier workflow run
+        required: true
+        type: choice
+        options:
+          - save
+          - compare
+      baseline_run_id:
+        description: Earlier successful run ID containing the criterion-baseline artifact (compare mode only)
+        required: false
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Restore saved Criterion baseline
+        if: inputs.mode == 'compare'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASELINE_RUN_ID: ${{ inputs.baseline_run_id }}
+        run: |
+          if [[ -z "$BASELINE_RUN_ID" ]]; then
+            echo "baseline_run_id is required in compare mode" >&2
+            exit 2
+          fi
+          gh run download "$BASELINE_RUN_ID" --name criterion-baseline --dir target/criterion
+      - name: Save benchmark baseline
+        if: inputs.mode == 'save'
+        run: |
+          mkdir -p target/criterion
+          cargo bench -p do-context-shield-benchmarks -- --save-baseline manual 2>&1 | tee target/criterion/run.log
+      - name: Compare with saved benchmark baseline
+        if: inputs.mode == 'compare'
+        run: |
+          cargo bench -p do-context-shield-benchmarks -- --baseline manual 2>&1 | tee target/criterion/comparison.log
+      - name: Upload saved baseline
+        if: inputs.mode == 'save'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: criterion-baseline
+          path: target/criterion/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Upload comparison report
+        if: always() && inputs.mode == 'compare'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: criterion-comparison
+          path: target/criterion/
+          if-no-files-found: warn
+          retention-days: 90
