@@ -51,6 +51,18 @@
         "absent:plans/methods-generated.json",
         "not-contains:htn_receipt.txt|pizza"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "Every task in plans/tasks.json is done and an earlier PR is merged, but an open GitHub issue still lists a proposed code change. Can I treat the issue as blocked?",
+      "expected_output": "No. Compare each explicit proposed change and acceptance criterion against the current code and docs. A completed task snapshot or merged PR does not prove the open issue is fully implemented; implement any missing code before treating only an external dependency as a blocker.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "contextual",
+      "assertions": [
+        "contains:.agents/skills/htn-planner/references/heuristics.md|compare every explicit proposed change",
+        "contains:.agents/skills/htn-planner/references/heuristics.md|does not prove the issue is fully implemented"
+      ]
     }
   ]
 }

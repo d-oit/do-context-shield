@@ -539,5 +539,11 @@
     "rationale": "Separating current work from completed history keeps blockers and unresolved privacy limitations visible. Machine-checked statuses and local links prevent completed entries from being mistaken for open work or historical evidence from disappearing.",
     "sensor": "backlog sensor (scripts/check-backlog.sh and tests/test_backlog_validation.py)",
     "category": "workflow-rule"
+  },
+  {
+    "invariant": "The opt-in `--check-registry` release preflight verifies every package/version in `scripts/publish-crates.sh` ORDER against crates.io and fails for missing versions, network/API errors, or mismatched responses; the default preflight makes no registry requests",
+    "rationale": "The publish rehearsal intentionally treats unpublished versions as ready to publish and is not a completeness proof. An explicit registry check makes existing release coverage verifiable without triggering publication or changing release assets.",
+    "sensor": "python3 tests/test_crates_io_versions.py and release-preflight sensor (scripts/check-release-preflight.sh --check-registry)",
+    "category": "workflow-rule"
   }
 ]

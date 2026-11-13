@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-13",
+  "event": "distill",
+  "guides": [
+    {
+      "kind": "reference",
+      "path": ".agents/skills/htn-planner/references/heuristics.md"
+    },
+    {
+      "kind": "skill",
+      "path": ".agents/skills/htn-planner/SKILL.md"
+    }
+  ],
+  "payload": {
+    "from_trace": 33,
+    "heuristic_id": 24,
+    "pattern": "For an open issue, compare every explicit proposed change and acceptance criterion against the current code and docs; a completed task snapshot or merged PR records prior work but does not prove the issue is fully implemented.",
+    "to_fixture": false,
+    "trigger": "resolved-trace"
+  }
+}

@@ -98,7 +98,7 @@ when-changed = ["Cargo.toml", "scripts/publish-crates.sh", "scripts/check-publis
 [[sensors]]
 name = "release-preflight"
 argv = ["bash", "scripts/check-release-preflight.sh"]
-when-changed = ["scripts/check-release-preflight.sh", "scripts/publish-crates.sh", "scripts/check-publish-order.sh", "crates/*/Cargo.toml", "crates/*/README.md", "Cargo.toml", "Cargo.lock"]
+when-changed = ["scripts/check-release-preflight.sh", "scripts/publish-crates.sh", "scripts/check-publish-order.sh", "scripts/check_crates_io_versions.py", "tests/test_crates_io_versions.py", "crates/*/Cargo.toml", "crates/*/README.md", "Cargo.toml", "Cargo.lock"]
 
 [[sensors]]
 name = "backlog"
