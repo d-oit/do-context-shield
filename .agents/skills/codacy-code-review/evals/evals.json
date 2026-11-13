@@ -1,0 +1,52 @@
+{
+  "skill_name": "codacy-code-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Review the Codacy analysis for an existing PR and verify the local scan actually ran before reporting its findings.",
+      "expected_output": "Run the strict local PR analysis, inspect toolResults and unavailable capabilities, then supplement it with Codacy Cloud PR data when available.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "explicit",
+      "assertions": [
+        "contains:.agents/skills/codacy-code-review/SKILL.md|codacy-analysis analyze --pr --fail-if-missing --output-format json",
+        "contains:.agents/skills/codacy-code-review/SKILL.md|confirm `toolResults` is non-empty"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "A PR scan reports one Critical security issue and several minor style issues. Which findings block review?",
+      "expected_output": "Flag Critical and High severity findings as blockers; report the exact location and evidence, and keep lower-severity items distinct.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "implicit",
+      "assertions": [
+        "contains:.agents/skills/codacy-code-review/SKILL.md|Flag Critical and High severity issues as blockers",
+        "contains:.agents/skills/codacy-code-review/SKILL.md|severity, category, and file location"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "The repository is not available in Codacy Cloud. Can I still confirm its Cloud coverage delta and quality gate?",
+      "expected_output": "No. Coverage, quality-gate status, and duplication metrics are Cloud-only; report them as unavailable while keeping local analysis separate.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "contextual",
+      "assertions": [
+        "contains:.agents/skills/codacy-code-review/SKILL.md|only available from Codacy Cloud",
+        "contains:.agents/skills/codacy-code-review/SKILL.md|Local vs Cloud analysis"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Change a UI button label. No pull-request review or Codacy analysis is requested.",
+      "expected_output": "Make the UI change without creating a Codacy review report.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "negative",
+      "assertions": [
+        "absent:codacy-review-report.json"
+      ]
+    }
+  ]
+}
