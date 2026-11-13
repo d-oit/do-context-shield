@@ -301,6 +301,12 @@
     "category": "workflow-rule"
   },
   {
+    "invariant": "Every implementation change is delivered through a GitHub pull request; a local commit alone is not completed delivery, and missing write access blocks publication rather than justifying a false PR or merge claim; merge waits for all required checks (including Codacy when configured) and answered review threads",
+    "rationale": "A local branch has no remote review or CI evidence, and assuming a PR was opened can silently bypass the requested check/approval path; explicitly tracking credentials and checks keeps delivery truthful and reviewable",
+    "sensor": "review-only (AGENTS.md pull-request merges section; verify remote PR, required check statuses, and review threads)",
+    "category": "workflow-rule"
+  },
+  {
     "invariant": "The effective-configuration diagnostic (`do-context-shield config`) reports only whitelisted settings — validated plugin and vault names, enforcement-context values, numeric limits, and presence booleans — each with the layer that supplied it; raw process commands, filesystem paths, key material, and free-form `purpose` values never appear in its output, and the effective vault plus the contradictory-selection failure come from the same classifier the executing commands use",
     "rationale": "The report is designed to be pasted into an agent context, so any path, command line, key location, or free-form purpose text would leak operational detail that the four-layer precedence inspection does not need; a second copy of the vault-selection rules would let the report claim a vault the runtime refuses",
     "sensor": "cargo test -p do-context-shield --test cli_config_diag",

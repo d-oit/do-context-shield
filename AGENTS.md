@@ -43,12 +43,19 @@ Agent = Model + Harness: feedforward guides prevent errors before coding, feedba
 - Feature-gated builds (`--features gliner2`) are not part of the default sensor suite; run `cargo check`/`clippy`/`test` for the feature explicitly when touching those crates.
 - Probes and throwaway scripts stay under `target/` (gitignored); never commit them.
 
-### Pull-request merges (strict required checks)
+### Pull requests and merges (strict required checks)
 
 `main` accepts pull requests only, and requires the `CI Success` check on an up-to-date branch.
 The check is bound to the PR's merge commit, so **every merge to `main` invalidates the checks
 of every other open PR** — and GitHub auto-merge never updates the head branch, so it waits
 forever on a `BEHIND` PR instead of draining a batch.
+
+- Every implementation change must be delivered through a GitHub PR; a local
+  commit alone is not a completed delivery. Push the feature branch and open a
+  PR before reporting delivery. Do not merge until all required checks (including
+  Codacy when configured) pass and review comments are addressed. If authentication
+  or permissions prevent publishing, preserve the local branch and report the
+  exact blocker; never claim a PR was created or a change merged.
 
 - Run `scripts/update-pr-branches.sh` before merging: it rebases every open PR that is `BEHIND`
   through `gh pr update-branch --rebase` (server-side, no local checkout). Wait for `CI Success`,

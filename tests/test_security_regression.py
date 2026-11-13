@@ -187,10 +187,21 @@ class SecurityRegressionSelectionTests(unittest.TestCase):
         fixture = HarnessFixture()
         try:
             fixture.add("docs/quick-fix.md")
-            quick_fix = {item["name"] for item in fixture.explain("quick-fix")["selected"]}
+            fixture.add("docs/decisions/profile-selection.md")
+            quick_fix = {
+                item["name"]
+                for item in fixture.explain("quick-fix")["selected"]
+            }
+            self.assertIn("backlog", quick_fix)
+            fixture.add("docs/test-evidence/profile-selection.md")
+            quick_fix = {
+                item["name"]
+                for item in fixture.explain("quick-fix")["selected"]
+            }
+            self.assertIn("backlog", quick_fix)
             self.assertIn("security-regression", quick_fix)
             self.assertTrue(
-                {"fmt", "check", "clippy", "test", "security-regression"}
+                {"fmt", "check", "clippy", "test", "backlog", "security-regression"}
                 <= set(profile_sets["quick-fix"])
             )
 
@@ -210,7 +221,7 @@ class SecurityRegressionSelectionTests(unittest.TestCase):
             self.assertEqual(verification, set(profile_sets["security-critical"]))
             self.assertIn("security-regression", critical)
             for profile, path, sensors in (
-                ("quick-fix", "docs/quick-fix.md", quick_fix),
+                ("quick-fix", "docs/decisions + docs/test-evidence", quick_fix),
                 ("feature", "quality/corpus + shared-skill test", feature),
                 ("security-critical", "crates/plugin-api", critical),
             ):

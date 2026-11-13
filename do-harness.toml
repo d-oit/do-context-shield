@@ -16,8 +16,9 @@ ci = ["fmt", "check", "clippy", "test", "opencode-egress", "loc", "shellcheck", 
 # Workflow profiles (see the profile metadata in plans/security-regression-map.json).
 # These sets name sensors only; executable argv remains defined once below.
 # quick-fix is limited to explicit low-risk paths and retains formatting, lint,
-# test, and the always-on security-regression gate.
-quick-fix = ["fmt", "check", "clippy", "test", "loc", "security-regression"]
+# tests, decision/evidence backlog validation, and the always-on
+# security-regression gate.
+quick-fix = ["fmt", "check", "clippy", "test", "loc", "backlog", "security-regression"]
 # feature uses the verification sensor membership with --changed to select only
 # dependent sensors. security-critical uses the same full membership unfiltered
 # with --strict. Existing verification and ci sets remain unchanged.

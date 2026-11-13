@@ -41,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (Everyone, Users, Guests), NULL DACLs, callback/object ACEs, and unsupported
   ACE types fail closed with a path-free, non-sensitive diagnostic.
 
-- Added deterministic `quick-fix`, `feature`, and `security-critical` workflow profiles (issue #196). Classification uses fixed low-risk allowlists and escalates unknown, ambiguous, shared, workspace, and security-sensitive changes to full verification.
+- Added deterministic `quick-fix`, `feature`, and `security-critical` workflow profiles (issue #196). Classification uses fixed low-risk allowlists and escalates unknown, ambiguous, shared, workspace, and security-sensitive changes to full verification; quick-fix runs backlog-link validation for decision and test-evidence docs.
 
 - MCP stdio conformance gate (`scripts/check-mcp-conformance.sh`, `mcp-conformance`
   CI job, issue #181). The pinned MCP Inspector CLI (2.13.0, Node 22) runs over
