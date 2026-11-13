@@ -47,6 +47,20 @@
       "assertions": [
         "absent:codacy-analysis-results.json"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "A Codacy run flags a realistic secret fixture and subprocess.run. Should I keep provider-shaped credentials and suppress B603 broadly?",
+      "expected_output": "No. Replace credential-shaped values with synthetic fixtures, use a fixed executable and static argv with shell disabled, and keep any necessary rule suppression narrow.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "gotchas",
+      "assertions": [
+        "contains:.agents/skills/codacy-analysis-cli/SKILL.md|repository-verified remediation heuristics",
+        "contains:.agents/skills/codacy-analysis-cli/references/heuristics.md|synthetic, non-credential-shaped secret fixtures",
+        "contains:.agents/skills/codacy-analysis-cli/references/heuristics.md|fixed executable with static argv and shell disabled",
+        "not-contains:.agents/skills/codacy-analysis-cli/references/heuristics.md|suppress broadly"
+      ]
     }
   ]
 }

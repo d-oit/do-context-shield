@@ -19,7 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Official MCP Rust SDK (`rmcp` 3.x) interoperability tests (`crates/do-context-shield-cli/tests/mcp_rmcp_interop.rs`, issue #191). Exercises `do-context-shield mcp-stdio` using the official SDK client over stdio for both modern (2026-07-28 discovery/per-request meta) and legacy (2025-11-25 initialize handshake) protocols, verifying tool enumeration, default model-facing surface restrictions, sanitize/restore/forget lifecycles, and error reporting without raw canary leakage.
 
-- Added a fail-closed OpenCode V2 egress plugin (issue #192). The optional local adapter sanitizes supported model context through the existing MCP pipeline, scopes mappings by OpenCode session, and on deletion rejects new hooks, drains in-flight context processing, then forgets the scope; unload drains and forgets active scopes. Unsupported payloads and sanitizer failures stop dispatch; this is not a network proxy or universal egress control. See `adapters/opencode-egress/README.md`.
+- Added a fail-closed OpenCode V2 egress plugin (issue #192). The optional local adapter sanitizes supported model context through the existing MCP pipeline and scopes mappings by OpenCode session.
+  It cleans up after deletion or unload. Unsupported payloads and sanitizer failures stop dispatch; this is not a network proxy or universal egress control.
+  Its README identifies protected assets, trust boundaries, attacker capabilities, assumptions, and bypasses, and clarifies that loopback fake-provider tests do not prove complete egress interception or external canary coverage.
 
 - Structured process-plugin argv configuration (issue #193). Replaced whitespace-split command strings with separate executable paths and ordered argument vectors for all five process stages. CLI options and `[process_plugins.<capability>]` config preserve spaces, Unicode, empty arguments, and shell metacharacters literally; obsolete combined command settings fail with a safe migration hint.
 

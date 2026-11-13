@@ -1,0 +1,2 @@
+# Heuristics
+- **Use synthetic, non-credential-shaped secret fixtures; prefer a fixed executable with static argv and shell disabled for subprocess tests, and keep any necessary analyzer suppression narrow.**: When static analysis reports secret signatures in tests or dynamic subprocess invocation risk, preserve the behavior under test while removing credential-like signatures and using an auditable fixed command boundary. (from trace 31)

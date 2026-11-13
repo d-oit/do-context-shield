@@ -6,6 +6,8 @@ metadata:
   author: Codacy
   version: 1.5.0
 ---
+## Guides
+See references/heuristics.md for distilled heuristics.
 
 # Codacy Analysis CLI
 
@@ -81,6 +83,8 @@ Used with `init --remote`. See the [Provider section in the glossary](../../refe
 ## Detailed workflow
 
 Use [the analysis workflow reference](references/analysis-workflow.md) for setup, strict analysis, result interpretation, common workflows, and troubleshooting.
+
+For findings involving test secrets or subprocess commands, consult [repository-verified remediation heuristics](references/heuristics.md).
 
 ## Rationalizations
 

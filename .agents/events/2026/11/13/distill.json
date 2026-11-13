@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-13",
+  "event": "distill",
+  "guides": [
+    {
+      "kind": "reference",
+      "path": ".agents/skills/codacy-analysis-cli/references/heuristics.md"
+    },
+    {
+      "kind": "skill",
+      "path": ".agents/skills/codacy-analysis-cli/SKILL.md"
+    }
+  ],
+  "payload": {
+    "from_trace": 31,
+    "heuristic_id": 22,
+    "pattern": "Use synthetic, non-credential-shaped secret fixtures; prefer a fixed executable with static argv and shell disabled for subprocess tests, and keep any necessary analyzer suppression narrow.",
+    "to_fixture": true,
+    "trigger": "resolved-trace"
+  }
+}
