@@ -51,11 +51,8 @@ fn default_policy_explains_without_echoing_values() {
 #[test]
 fn secret_kinds_redact_and_unknown_recipient_blocks() {
     let dir = temp_dir();
-    let (secret, _, _) = run_json(
-        dir.path(),
-        "AKIAIOSFODNN7EXAMPLE",
-        &["--recipient", "local"],
-    );
+    let secret_input = format!("password={}", "x".repeat(16));
+    let (secret, _, _) = run_json(dir.path(), &secret_input, &["--recipient", "local"]);
     assert_eq!(secret["entities"][0]["action"], "redact");
     assert_eq!(secret["entities"][0]["reason_code"], "secret_kind");
 

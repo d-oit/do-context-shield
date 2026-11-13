@@ -45,6 +45,8 @@ Agent = Model + Harness: feedforward guides prevent errors before coding, feedba
 
 ### Pull requests and merges (strict required checks)
 
+Every implementation change MUST be delivered through a GitHub pull request. Never push directly to `main`; a local commit or branch is not completed delivery.
+
 `main` accepts pull requests only, and requires the `CI Success` check on an up-to-date branch.
 The check is bound to the PR's merge commit, so **every merge to `main` invalidates the checks
 of every other open PR** — and GitHub auto-merge never updates the head branch, so it waits

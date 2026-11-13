@@ -6,14 +6,14 @@ use do_context_shield_plugin_api::{DecisionReason, ReasonCode};
 #[test]
 fn simulation_reports_redaction_and_block_without_disclosing_values() {
     let planner = PolicyPlanner::new(Box::new(RegexDetector), Box::new(DefaultPolicy));
-    let secret = "AKIAIOSFODNN7EXAMPLE";
-    let decisions = match planner.explain(secret, &ProcessingContext::default()) {
+    let secret = format!("password={}", "x".repeat(16));
+    let decisions = match planner.explain(&secret, &ProcessingContext::default()) {
         Ok(decisions) => decisions,
         Err(error) => panic!("unexpected simulation error: {error}"),
     };
     assert_eq!(decisions[0].action, Action::Redact);
     assert_eq!(decisions[0].reason_code, ReasonCode::SecretKind);
-    assert!(!format!("{decisions:?}").contains(secret));
+    assert!(!format!("{decisions:?}").contains(&secret));
 
     let context = ProcessingContext {
         recipient: do_context_shield_plugin_api::RecipientClass::Unknown,

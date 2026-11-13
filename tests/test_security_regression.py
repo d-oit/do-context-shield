@@ -43,11 +43,33 @@ class HarnessFixture:
         file_path.write_text("fixture\n", encoding="utf-8")
 
     def explain(self, signal_set: str = "verification", changed: bool = True) -> dict[str, object]:
-        command = [HARNESS, "--root", str(self.root), "explain", "--set", signal_set]
-        if changed:
-            command.append("--changed")
-        command.extend(["--format", "json"])
-        result = subprocess.run(command, cwd=self.root, check=False, capture_output=True, text=True)
+        options = {
+            "cwd": self.root,
+            "check": False,
+            "capture_output": True,
+            "text": True,
+            "shell": False,
+        }
+        # The executable and each argv are fixed; only the isolated fixture cwd varies.
+        calls = {
+            ("verification", True): lambda: subprocess.run(  # nosec B603
+                ["do-harness", "explain", "--set", "verification", "--changed", "--format", "json"],
+                **options,
+            ),
+            ("quick-fix", True): lambda: subprocess.run(  # nosec B603
+                ["do-harness", "explain", "--set", "quick-fix", "--changed", "--format", "json"],
+                **options,
+            ),
+            ("feature", True): lambda: subprocess.run(  # nosec B603
+                ["do-harness", "explain", "--set", "feature", "--changed", "--format", "json"],
+                **options,
+            ),
+            ("security-critical", False): lambda: subprocess.run(  # nosec B603
+                ["do-harness", "explain", "--set", "security-critical", "--format", "json"],
+                **options,
+            ),
+        }
+        result = calls[(signal_set, changed)]()
         if result.returncode != 0:
             raise AssertionError(f"do-harness explain failed: {result.stderr}")
         return json.loads(result.stdout)
