@@ -1,18 +1,22 @@
-//! Black-box tests for the documented process-plugin selections.
+//! Black-box tests for the documented structured process-plugin selections.
 //!
-//! `--<capability> process --<capability>-command <program>` must run the
-//! configured local executable through the compiled binary: the child's answer
-//! decides the output, and a child that is missing, unusable, or too slow fails
-//! the call closed instead of silently falling back to a built-in plugin.
+//! `--<capability>-program` and repeated `--<capability>-arg` flags are passed
+//! literally to the selected local executable; a child failure never falls
+//! back to a built-in plugin.
 
 mod common;
 
-use common::{cmd, process_command, temp_dir};
+use common::{cmd, temp_dir};
+use std::ffi::OsStr;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
 /// `sanitize --session <session> <extra…>`, `input` on stdin; stdout on success.
-fn sanitize(dir: &Path, session: &str, extra: &[&str], input: &str) -> String {
+fn sanitize<I, S>(dir: &Path, session: &str, extra: I, input: &str) -> String
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     let assert = cmd(dir)
         .args(["sanitize", "--session", session])
         .args(extra)
@@ -22,22 +26,22 @@ fn sanitize(dir: &Path, session: &str, extra: &[&str], input: &str) -> String {
     String::from_utf8_lossy(&assert.get_output().stdout).into_owned()
 }
 
+fn process_selection(capability: &str, mode: &str) -> Vec<String> {
+    let mut args = vec![format!("--{capability}"), "process".to_owned()];
+    args.extend(common::process_plugin_args(capability, mode));
+    args
+}
+
 #[test]
 fn detector_process_selection_drives_detection() {
     let dir = temp_dir();
-    let command = process_command("detect-two");
     // `detect-two` reports `email` 0..5 plus `phone` 6..17, while the built-in
     // regex detector reports the whole address as one `email` span: only the
     // process child produces this pair of placeholders.
     let sanitized = sanitize(
         dir.path(),
         "proc",
-        &[
-            "--detector",
-            "process",
-            "--detector-command",
-            command.as_str(),
-        ],
+        process_selection("detector", "detect-two"),
         "alice@example.com",
     );
     let Some((local_part, domain_part)) = sanitized.split_once('@') else {
@@ -50,17 +54,9 @@ fn detector_process_selection_drives_detection() {
 #[test]
 fn detector_process_zero_entities_without_text_signal_fails_closed() {
     let dir = temp_dir();
-    let command = process_command("detect-zero");
     cmd(dir.path())
-        .args([
-            "sanitize",
-            "--session",
-            "proc",
-            "--detector",
-            "process",
-            "--detector-command",
-        ])
-        .arg(&command)
+        .args(["sanitize", "--session", "proc"])
+        .args(process_selection("detector", "detect-zero"))
         .write_stdin("secret@example.com\nAWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
         .assert()
         .code(1)
@@ -72,16 +68,10 @@ fn detector_process_zero_entities_without_text_signal_fails_closed() {
 #[test]
 fn detector_process_zero_entities_with_text_signal_succeeds() {
     let dir = temp_dir();
-    let command = process_command("detect-clean");
     let sanitized = sanitize(
         dir.path(),
         "proc",
-        &[
-            "--detector",
-            "process",
-            "--detector-command",
-            command.as_str(),
-        ],
+        process_selection("detector", "detect-clean"),
         "hello world\n",
     );
     assert_eq!(sanitized, "hello world\n");
@@ -90,19 +80,11 @@ fn detector_process_zero_entities_with_text_signal_succeeds() {
 #[test]
 fn detector_process_failure_fails_closed() {
     let dir = temp_dir();
-    let command = process_command("junk");
     // A built-in fallback would sanitize this address happily; the selected
     // child answered garbage, so the call must stop.
     cmd(dir.path())
-        .args([
-            "sanitize",
-            "--session",
-            "proc",
-            "--detector",
-            "process",
-            "--detector-command",
-        ])
-        .arg(&command)
+        .args(["sanitize", "--session", "proc"])
+        .args(process_selection("detector", "junk"))
         .write_stdin("alice@example.com")
         .assert()
         .code(1)
@@ -114,13 +96,12 @@ fn detector_process_failure_fails_closed() {
 #[test]
 fn policy_process_selection_drives_the_plan() {
     let dir = temp_dir();
-    let command = process_command("plan-two");
     // `plan-two` pseudonymizes the first entity and redacts the second; the
     // built-in policy would pseudonymize both.
     let sanitized = sanitize(
         dir.path(),
         "proc",
-        &["--policy", "process", "--policy-command", command.as_str()],
+        process_selection("policy", "plan-two"),
         "alice@example.com bob@example.com",
     );
     let Some((kept, redacted)) = sanitized.split_once(' ') else {
@@ -133,47 +114,24 @@ fn policy_process_selection_drives_the_plan() {
 #[test]
 fn transformer_process_selection_drives_the_output() {
     let dir = temp_dir();
-    let transformer = process_command("transform-wrapped");
-    let vault = process_command("vault-ok");
+    let mut args = process_selection("transformer", "transform-wrapped");
+    args.extend(process_selection("vault", "vault-ok"));
     // The child wraps the token it minted; the built-in transformer would emit
     // the bare token, and the paired process vault is what resolves it.
-    let sanitized = sanitize(
-        dir.path(),
-        "s1",
-        &[
-            "--transformer",
-            "process",
-            "--transformer-command",
-            transformer.as_str(),
-            "--vault",
-            "process",
-            "--vault-command",
-            vault.as_str(),
-        ],
-        "alice@example.com",
-    );
+    let sanitized = sanitize(dir.path(), "s1", args, "alice@example.com");
     assert_eq!(sanitized, "<<__DO_PRIVATE_EMAIL_1__>>");
 }
 
 #[test]
 fn transformer_process_leftover_value_fails_closed() {
     let dir = temp_dir();
-    let transformer = process_command("transform-leak");
-    let vault = process_command("vault-ok");
+    let mut args = process_selection("transformer", "transform-leak");
+    args.extend(process_selection("vault", "vault-ok"));
     // A built-in transformer never leaves the planned value behind; the
     // selected child does, so the call must stop.
     cmd(dir.path())
-        .args([
-            "sanitize",
-            "--session",
-            "s1",
-            "--transformer",
-            "process",
-            "--transformer-command",
-        ])
-        .arg(&transformer)
-        .args(["--vault", "process", "--vault-command"])
-        .arg(&vault)
+        .args(["sanitize", "--session", "s1"])
+        .args(args)
         .write_stdin("alice@example.com")
         .assert()
         .code(1)
@@ -185,13 +143,12 @@ fn transformer_process_leftover_value_fails_closed() {
 #[test]
 fn vault_process_selection_drives_token_minting() {
     let dir = temp_dir();
-    let command = process_command("vault-ok");
     // `vault-ok` holds exactly `__DO_PRIVATE_EMAIL_1__` for scope `s1`; the
     // built-in vaults mint 16 hex characters of entropy per mapping.
     let sanitized = sanitize(
         dir.path(),
         "s1",
-        &["--vault", "process", "--vault-command", command.as_str()],
+        process_selection("vault", "vault-ok"),
         "alice@example.com",
     );
     assert_eq!(sanitized, "__DO_PRIVATE_EMAIL_1__");
@@ -215,7 +172,7 @@ fn missing_process_command_fails_at_startup() {
             .assert()
             .code(1)
             .stderr(predicates::str::contains(format!(
-                "process {capability} unavailable (no command configured)"
+                "process {capability} unavailable (no executable configured)"
             )));
     }
 }
@@ -234,10 +191,13 @@ fn process_timeout_flag_bounds_each_call() {
             "proc",
             "--policy",
             "process",
-            "--policy-command",
-            "sleep 30",
+            "--policy-program",
+            "sleep",
+            "--policy-arg",
+            "30",
+            "--process-timeout-ms",
+            "200",
         ])
-        .args(["--process-timeout-ms", "200"])
         .write_stdin("alice@example.com")
         .assert()
         .code(1)
@@ -255,14 +215,11 @@ fn process_timeout_flag_bounds_each_call() {
 #[test]
 fn config_file_timeout_bounds_each_call() {
     let dir = temp_dir();
-    // Same direct `sleep` child as the flag test, but the bound comes from
-    // `[process] timeout_ms` alone: without the merge the built-in 30 000 ms
-    // default would let the child run to completion and this finishes only
-    // because the file value was applied. Process commands require an explicit
-    // `--config` flag to be used from a configuration file.
     common::write_config(
         &dir.path().join("do-context-shield.toml"),
-        "[plugins]\npolicy = \"process\"\npolicy_command = \"sleep 30\"\n\n[process]\ntimeout_ms = 200\n",
+        "[plugins]\npolicy = \"process\"\n\n\
+         [process_plugins.policy]\nprogram = \"sleep\"\nargs = [\"30\"]\n\n\
+         [process]\ntimeout_ms = 200\n",
     );
     let started = Instant::now();
     cmd(dir.path())
@@ -287,35 +244,127 @@ fn config_file_timeout_bounds_each_call() {
 }
 
 #[test]
-fn autodiscovered_config_process_command_is_ignored() {
+fn autodiscovered_config_process_selection_is_ignored() {
     let dir = temp_dir();
-    let command = process_command("detect-two").replace('\\', "\\\\");
-
-    common::write_config(
-        &dir.path().join("do-context-shield.toml"),
-        &format!("[plugins]\ndetector = \"process\"\ndetector_command = \"{command}\"\n"),
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin-process/tests/fixtures/plugin.sh");
+    let Some(fixture) = fixture.to_str() else {
+        panic!("process fixture path is not valid UTF-8");
+    };
+    let config = format!(
+        "[plugins]\ndetector = \"process\"\n\n\
+         [process_plugins.detector]\nprogram = \"sh\"\nargs = [{fixture:?}, \"detect-two\"]\n"
     );
+    common::write_config(&dir.path().join("do-context-shield.toml"), &config);
 
-    // Auto-discovery without `--config` ignores process commands in `do-context-shield.toml`,
-    // causing the command to fail closed without running the process detector.
+    // Auto-discovery without `--config` ignores process executables in
+    // `do-context-shield.toml`, so the selected detector fails closed.
     cmd(dir.path())
         .args(["sanitize", "--session", "amb", "--vault", "memory"])
         .write_stdin("alice@example.com")
         .assert()
         .code(1)
         .stderr(predicates::str::contains(
-            "process detector unavailable (no command configured)",
+            "process detector unavailable (no executable configured)",
         ));
 
-    // Explicit `--config` uses the configured process command.
+    // Explicit `--config` uses the configured process executable and argv.
     let sanitized = sanitize(
         dir.path(),
         "amb",
-        &["--config", "do-context-shield.toml", "--vault", "memory"],
+        ["--config", "do-context-shield.toml", "--vault", "memory"],
         "alice@example.com",
     );
     let Some((local_part, domain_part)) = sanitized.split_once('@') else {
         panic!("no `@` separator in `{sanitized}`");
+    };
+    common::assert_placeholder(local_part, "EMAIL", 1);
+    common::assert_placeholder(domain_part, "PHONE", 1);
+}
+
+#[test]
+fn structured_process_args_preserve_boundaries_and_shell_metacharacters() {
+    let dir = temp_dir();
+    let literal = "$(touch process-argv-sentinel)";
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin-process/tests/fixtures/plugin.sh");
+    let Some(fixture) = fixture.to_str() else {
+        panic!("process fixture path is not valid UTF-8");
+    };
+
+    let sanitized = cmd(dir.path())
+        .env("EXPECTED_PROCESS_LITERAL_ARG", literal)
+        .args([
+            "sanitize",
+            "--session",
+            "argv",
+            "--detector",
+            "process",
+            "--detector-program",
+            "sh",
+            "--detector-arg",
+            fixture,
+            "--detector-arg",
+            "detect-argv",
+            "--detector-arg",
+            "with spaces",
+            "--detector-arg",
+            "λ",
+            "--detector-arg",
+            "",
+            "--detector-arg",
+            literal,
+        ])
+        .write_stdin("alice@example.com")
+        .assert()
+        .success();
+    let sanitized = String::from_utf8_lossy(&sanitized.get_output().stdout);
+    common::assert_placeholder(&sanitized, "EMAIL", 1);
+    assert!(
+        !dir.path().join("process-argv-sentinel").exists(),
+        "shell syntax in an argument was executed"
+    );
+}
+
+#[test]
+fn structured_process_config_is_overridden_atomically_by_cli_argv() {
+    let dir = temp_dir();
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin-process/tests/fixtures/plugin.sh");
+    let Some(fixture) = fixture.to_str() else {
+        panic!("process fixture path is not valid UTF-8");
+    };
+    let config = format!(
+        "[plugins]\ndetector = \"process\"\n\n\
+         [process_plugins.detector]\nprogram = \"sh\"\nargs = [{fixture:?}, \"detect-clean\"]\n"
+    );
+    common::write_config(&dir.path().join("do-context-shield.toml"), &config);
+
+    let configured = sanitize(
+        dir.path(),
+        "argv-config",
+        ["--config", "do-context-shield.toml"],
+        "hello world",
+    );
+    assert_eq!(configured, "hello world");
+
+    let overridden = sanitize(
+        dir.path(),
+        "argv-cli",
+        [
+            "--config",
+            "do-context-shield.toml",
+            "--detector-program",
+            "sh",
+            "--detector-arg",
+            fixture,
+            "--detector-arg",
+            "detect-two",
+        ],
+        "alice@example.com",
+    );
+    let Some((local_part, domain_part)) = overridden.split_once('@') else {
+        panic!("CLI process argv did not override the configured detector");
     };
     common::assert_placeholder(local_part, "EMAIL", 1);
     common::assert_placeholder(domain_part, "PHONE", 1);

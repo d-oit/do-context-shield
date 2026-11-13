@@ -13,6 +13,19 @@ release = ["fmt", "check", "clippy", "test", "opencode-egress", "loc", "shellche
 # subject, while this repository enforces conventional PR titles. The detached
 # fuzz workspace remains a separate CI job.
 ci = ["fmt", "check", "clippy", "test", "opencode-egress", "loc", "shellcheck", "hooks", "skills", "skill-evals", "shared-skills", "deps", "audit", "publish-order", "release-preflight", "backlog", "security-regression"]
+# Workflow profiles (see the profile metadata in plans/security-regression-map.json).
+# These sets name sensors only; executable argv remains defined once below.
+# quick-fix is limited to explicit low-risk paths and retains formatting, lint,
+# tests, decision/evidence backlog validation, and the always-on
+# security-regression gate.
+quick-fix = ["fmt", "check", "clippy", "test", "loc", "backlog", "security-regression"]
+# feature uses the verification sensor membership with --changed to select only
+# dependent sensors. security-critical uses the same full membership unfiltered
+# with --strict. Existing verification and ci sets remain unchanged.
+feature = ["fmt", "check", "clippy", "test", "opencode-egress", "loc", "shellcheck", "hooks", "skills", "skill-evals", "shared-skills", "deps", "audit", "publish-order", "release-preflight", "backlog", "fuzz-check", "security-regression", "commitlint"]
+security-critical = ["fmt", "check", "clippy", "test", "opencode-egress", "loc", "shellcheck", "hooks", "skills", "skill-evals", "shared-skills", "deps", "audit", "publish-order", "release-preflight", "backlog", "fuzz-check", "security-regression", "commitlint"]
+# Manually escalate to security-critical whenever a path is unknown, ambiguous,
+# outside the explicit low-risk lists, or might affect a security boundary.
 
 [[sensors]]
 name = "fmt"
@@ -52,7 +65,7 @@ when-changed = ["**/*.sh", ".githooks/**", "scripts/check-shellcheck.sh"]
 [[sensors]]
 name = "skills"
 argv = ["bash", "scripts/check-skills.sh"]
-when-changed = [".agents/skills/**", ".agents/SKILLS.md", "plans/methods.json", "plans/invariants.json", "do-harness.toml", "scripts/check-skills.sh", "tests/test_shared_skills.py", "tests/fixtures/shared-skills/**"]
+when-changed = [".agents/skills/**", ".agents/SKILLS.md", "plans/methods.json", "plans/invariants.json", "do-harness.toml", "scripts/check-skills.sh", "tests/test_shared_skills.py", "tests/test_invariants_validation.py", "tests/fixtures/shared-skills/**"]
 
 [[sensors]]
 name = "skill-evals"

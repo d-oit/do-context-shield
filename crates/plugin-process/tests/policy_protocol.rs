@@ -101,7 +101,11 @@ fn rejects_unknown_action() {
 #[test]
 fn errors_without_command() {
     let message = error_message(&ProcessPolicy::default(), &entities());
-    assert!(message.contains("no command configured"), "got: {message}");
+    assert!(
+        message.contains("no executable configured"),
+        "got: {message}"
+    );
+    assert!(message.contains("--policy-program"), "got: {message}");
 }
 
 #[test]

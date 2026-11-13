@@ -1,0 +1,47 @@
+{
+  "version": 2,
+  "skills": {
+    "codacy-analysis-cli": {
+      "source": "codacy/codacy-skills",
+      "sourceType": "github",
+      "skillPath": "skills/codacy-analysis-cli/SKILL.md",
+      "computedHash": "4bc16455959ae803b391d0e284d7bdcba111154878601f14560db07a9cfd75f4",
+      "installMode": "copy"
+    },
+    "codacy-cloud-cli": {
+      "source": "codacy/codacy-skills",
+      "sourceType": "github",
+      "skillPath": "skills/codacy-cloud-cli/SKILL.md",
+      "computedHash": "8c0c27cf8663b4269bba439f1b9826c079cd87cb4d7329e185c0837fdadbdb3c",
+      "installMode": "copy"
+    },
+    "codacy-code-review": {
+      "source": "codacy/codacy-skills",
+      "sourceType": "github",
+      "skillPath": "skills/codacy-code-review/SKILL.md",
+      "computedHash": "ca34236812e7ac8c2fa015c06a0b8cb7c089750aa212ce96391464381b58383e",
+      "installMode": "copy"
+    },
+    "configure-codacy": {
+      "source": "codacy/codacy-skills",
+      "sourceType": "github",
+      "skillPath": "skills/configure-codacy/SKILL.md",
+      "computedHash": "7eb3bd4ac7ed0c1c91fecaa445dcc9ea10870ebbdd59047530987b110920582d",
+      "installMode": "copy"
+    },
+    "configure-codacy-cloud": {
+      "source": "codacy/codacy-skills",
+      "sourceType": "github",
+      "skillPath": "skills/configure-codacy-cloud/SKILL.md",
+      "computedHash": "8731e1307902192620a5e13818e419dd899dd02ed41c87d1254acdd582ceeec1",
+      "installMode": "copy"
+    },
+    "setup-coverage": {
+      "source": "codacy/codacy-skills",
+      "sourceType": "github",
+      "skillPath": "skills/setup-coverage/SKILL.md",
+      "computedHash": "8de698812be5133c095f78bcbab484c649d20abbf311bf3a1ab1936d8afbcb35",
+      "installMode": "copy"
+    }
+  }
+}

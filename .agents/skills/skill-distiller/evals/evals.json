@@ -31,13 +31,15 @@
     {
       "id": 3,
       "prompt": "How do you record a trap that was hit but never solved?",
-      "expected_output": "As a kind: gotchas eval case with negative assertions (absent:/not-contains:) naming the wrong action; strict-fixtures rejects a gotchas case without one.",
+      "expected_output": "Use a supported kind: `contextual` when the trap depends on skill guidance. Keep a `not-contains:` assertion for the wrong action and a positive assertion for the safe response; name the wrong action and why it failed in Anti-patterns. Repo-pinned do-harness v0.1.1 rejects `gotchas`.",
       "files": [],
       "dim": "discoverability",
       "kind": "contextual",
       "assertions": [
-        "contains:.agents/skills/skill-distiller/SKILL.md|kind: gotchas",
-        "contains:.agents/skills/skill-distiller/SKILL.md|assertions are negative"
+        "contains:.agents/skills/skill-distiller/SKILL.md|kind: contextual",
+        "contains:.agents/skills/skill-distiller/SKILL.md|not-contains:",
+        "contains:.agents/skills/skill-distiller/SKILL.md|Do not use `kind: gotchas`",
+        "contains:.agents/skills/skill-distiller/SKILL.md|rejects it"
       ]
     },
     {

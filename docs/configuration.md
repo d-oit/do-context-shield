@@ -12,12 +12,12 @@ The first existing candidate wins. Without any file, every option keeps its buil
 
 The one-shot commands use this search for built-in plugin selections, context, limits, and vault paths. Two settings are not trusted from a working-directory file, because that file is checked out with the repository:
 
-- Process plugin commands (`detector_command`, `policy_command`, `transformer_command`, `judge_command`, `vault_command`) are ignored: a repository shipping `do-context-shield.toml` cannot choose which local executables the CLI runs. They must come from an explicit `--config <path>` named by the operator or from explicit CLI flags.
+- Process plugin selections (`[process_plugins.<capability>]`) from a working-directory file are ignored: a repository shipping `do-context-shield.toml` cannot choose which local executables the CLI runs. They must come from an explicit `--config <path>` named by the operator or from explicit CLI program/argument flags.
 - The `[context]` section is ignored: a repository file cannot select a less protective recipient or data category for one-shot `sanitize`/`config` calls, which keep the conservative `external`/`personal` defaults. An explicit `--config <path>` opts the file's section in, and environment variables or CLI flags still set the context directly.
 
 `mcp-stdio` reads a file only when `--config <path>` names it: MCP clients spawn the server with the project as its working directory, so an ambient file there could otherwise select process plugins, loosen `[context]`, or expose `context.restore` merely by being the server's cwd. Without `--config` the MCP server starts from the built-in defaults (trusted `DO_CONTEXT_SHIELD_*` environment overrides still apply); register it as `do-context-shield mcp-stdio --config /absolute/trusted/config.toml`.
 
-The user-level `$HOME/.config/do-context-shield/config.toml` is operator configuration, so its `[context]` section is honored; process plugin commands there still require an explicit `--config <path>`. When a working-directory candidate exists it shadows the home file entirely (the first existing candidate wins), so an ignored `[context]` never falls back to the home file's values.
+The user-level `$HOME/.config/do-context-shield/config.toml` is operator configuration, so its `[context]` section is honored; process plugin selections there still require an explicit `--config <path>`. When a working-directory candidate exists it shadows the home file entirely (the first existing candidate wins), so an ignored `[context]` never falls back to the home file's values.
 
 Paths in the file are literal: environment variables and `~` are not expanded.
 
@@ -58,12 +58,24 @@ Every variable is optional; an unset or empty variable keeps the file value. Val
 | `judge` | `heuristics`, `process` | unset | judging is optional and off by default |
 | `tools` | `sanitize`, `restore`, `inspect`, `forget`, `all` (comma-separated) | `sanitize,inspect` | `mcp-stdio` only; pins the exposed MCP tool surface in the file (equivalent to `--tools`) |
 | `model_dir` | path | unset | `gliner2`/`hybrid` ONNX export directory |
-| `detector_command` | command line | unset | required with `detector = "process"` (requires explicit `--config <path>` or CLI flag) |
-| `policy_command` | command line | unset | required with `policy = "process"` (requires explicit `--config <path>` or CLI flag) |
-| `transformer_command` | command line | unset | required with `transformer = "process"` (requires explicit `--config <path>` or CLI flag) |
-| `judge_command` | command line | unset | required with `judge = "process"` (requires explicit `--config <path>` or CLI flag) |
 
-Command lines are split on whitespace; quoting and shell expansion are not supported (`docs/process-plugin.md`).
+### `[process_plugins.<capability>]`
+
+Use `detector`, `judge`, `policy`, `transformer`, or `vault` for
+`<capability>`. These tables configure the selected process plugin; the
+`program` and `args` values are passed literally, in order, without a shell.
+
+| Key | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `program` | string | unset | Executable path or name resolved through `PATH`; required when the process plugin is selected |
+| `args` | array of strings | `[]` | Ordered literal arguments; empty strings are preserved, and a non-empty array requires `program` |
+
+An explicit CLI program replaces the entire file tuple, including its
+arguments; repeat `--<capability>-arg` for the replacement arguments. Argument
+flags without the matching program are rejected before stdin is read. The
+removed `*_command` keys and `--*-command` flags receive a fixed migration
+message; split the old executable and arguments manually into `program` and
+`args` rather than relying on shell parsing.
 
 ### `[policy_matrix]`
 
@@ -132,7 +144,6 @@ section. `purpose` text is never reported by the `config` diagnostic.
 | --- | --- | --- | --- |
 | `vault` | `memory`, `json`, `process` | `memory` | `json` when `vault_file` is set and `vault` is omitted |
 | `vault_file` | path | unset | required by `vault = "json"`; selects the JSON vault on its own |
-| `vault_command` | command line | unset | required with `vault = "process"` (requires explicit `--config <path>` or CLI flag) |
 | `vault_ttl_seconds` | seconds | unset | memory or JSON vault; a one-shot process exits before a memory-vault lifetime matters, while a persisted JSON mapping is bounded across processes |
 | `vault_key_file` | path | unset | 64-hex-character key that encrypts the JSON vault at rest; requires `vault_file`, and permissions must be owner-only (Unix mode `0600`; Windows ACLs restricted to the current user, SYSTEM, and Administrators) |
 
@@ -196,14 +207,30 @@ Bounds one process-plugin response; the child is killed and reaped on timeout (`
 
 | Command | Reads from the file |
 | --- | --- |
-| `sanitize` | all sections, except `[context]` and process commands from an auto-discovered working-directory file (see above) |
-| `restore` | `[vault]`, `[audit]`, `[process]`; detector/policy/transformer selections are ignored (only the vault is built, and restore only resolves placeholders) |
-| `inspect` | detector keys of `[plugins]` (`detector`, `model_dir`, `detector_command`) and `[process]`; policy, transformer, audit, and vault selections are ignored |
-| `forget` | `[vault]`, `[audit]`, `[process]`; detector/policy/transformer selections are ignored |
+| `sanitize` | all sections, except `[context]` and `[process_plugins]` selections from an auto-discovered working-directory file (see above) |
+| `restore` | `[vault]`, `[audit]`, `[process]`, `[process_plugins.vault]`; detector/policy/transformer selections are ignored (only the vault is built, and restore only resolves placeholders) |
+| `inspect` | detector keys of `[plugins]` (`detector`, `model_dir`) and `[process_plugins.detector]`; policy, transformer, audit, and vault selections are ignored |
+| `forget` | `[vault]`, `[audit]`, `[process]`, `[process_plugins.vault]`; detector/policy/transformer selections are ignored |
 | `mcp-stdio` | all sections, but only from a file selected with `--config <path>` (auto-discovery is off); `[context]` becomes the server default for `context.sanitize` and per-call arguments override it (field by field); `[plugins] tools` sets the exposed tool surface |
 | `config` | all sections: it reports the merged one-shot view (the same merge `sanitize` uses) without building a plugin or reading stdin; an ignored working-directory `[context]` is reported as `default`/`none` |
 | `encrypt-vault` | nothing: both paths are explicit flags, so an ambient file can never trigger an in-place rewrite |
+| `explain-policy` | detector, policy, judge, and context settings; transformer, vault, and audit settings are ignored and never built |
 
+
+`explain-policy` reads text from stdin and resolves detector, judge, policy,
+and enforcement context with the same one-shot precedence as `sanitize`. It
+builds only detector, optional judge, and policy plugins; transformer, vault,
+and audit settings are ignored and no state files are created or written.
+`--format json` emits a stable value-free report containing the selected
+policy, whether any entity would be blocked, and per-entity kind, byte span,
+action, reason code, matched purpose-rule index when available, and
+`used_default`. Purpose and jurisdiction values are never emitted. This is a
+simulation only, not proof that any egress path is intercepted.
+
+```bash
+printf '%s' 'Email alice@example.com' |
+  do-context-shield explain-policy --recipient trusted --format json
+```
 A selection a command does not use is not built, so a plugin that cannot be constructed there (a `process` policy without a command, a JSON vault without a file) fails only the commands that run that stage — `inspect` still works with a broken `[vault]`, `forget` with a broken `[plugins]`.
 
 The session scope never comes from the file: the vault-scoping commands (`sanitize`, `restore`, `forget`) require `--session` explicitly so mappings cannot leak across implicit scopes.
@@ -241,11 +268,11 @@ executing command would print.
 **The report is a whitelist.** It contains validated plugin and vault names,
 the enforcement-context values (`recipient`, `data_category`, and the
 shape-checked `jurisdiction`), numeric limits, and *presence booleans* for
-path-shaped and command-shaped settings. It never contains the matched text,
-raw process commands (`detector_command`, `policy_command`, … are reported as
-`configured: true/false` only), filesystem paths (`vault_file`,
-`vault_key_file`, `audit_file`, `model_dir`), or the free-form `purpose` value (reported as
-a presence boolean), so the report is safe to paste into an agent context. The
+path-shaped and process-plugin settings. It never contains the matched text,
+program paths, or argv values (`[process_plugins.<capability>]` selections
+are reported only as configured/unconfigured), filesystem paths (`vault_file`,
+`vault_key_file`, `audit_file`, `model_dir`), or the free-form `purpose` value
+(reported as a presence boolean), so the report is safe to paste into an agent context.
 MCP tool surface does not expose it: `config` is a CLI diagnostic, and
 `[plugins] tools` is not part of this report (`mcp-stdio --help` and
 `tools/list` cover the MCP surface).
@@ -296,6 +323,7 @@ Startup fails, naming the offending field, when
 
 - the file contains an unknown key,
 - a plugin, recipient, or data-category name is unknown (the error lists the accepted values),
+- a process-plugin `args` array is non-empty but its `program` is missing, or the program is empty,
 - the `[plugins] tools` list is empty or names an unknown tool (the error lists the accepted values),
 - `jurisdiction` is not a two-letter ISO 3166-1 alpha-2 code (the value is forwarded to policies as written, so a typo must not reach them). The same shape predicate guards every layer: the file and the environment fail at load, `sanitize --jurisdiction` fails at argument parsing with exit 2 before stdin is read, and `context.sanitize` returns an `isError` result — a malformed value never falls back to a valid server default,
 - the `[vault]` combination cannot select one consistent vault:
@@ -344,6 +372,17 @@ judge = "heuristics"
 [vault]
 vault = "memory"
 vault_ttl_seconds = 3600
+```
+
+Configure one process detector with an explicit operator-owned file:
+
+```toml
+[plugins]
+detector = "process"
+
+[process_plugins.detector]
+program = "/opt/local tools/detector"
+args = ["--profile", "strict mode"]
 ```
 
 Registered as `do-context-shield mcp-stdio --config /path/to/do-context-shield.toml` (`docs/client-integration.md`).

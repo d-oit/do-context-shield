@@ -1,0 +1,66 @@
+{
+  "skill_name": "codacy-analysis-cli",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Run Codacy against an existing pull request and fail if configured scanners are missing. What command and result checks should I use?",
+      "expected_output": "Use codacy-analysis analyze --pr --fail-if-missing --output-format json. Check errors, toolResults, and capability gaps; do not claim success if no tools ran.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "explicit",
+      "assertions": [
+        "contains:.agents/skills/codacy-analysis-cli/references/analysis-workflow.md|--pr --fail-if-missing --output-format json",
+        "contains:.agents/skills/codacy-analysis-cli/references/trustworthy-results.md|toolResults"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The scan exited zero with no issues, but toolResults is empty. Is the repository clean?",
+      "expected_output": "No. Empty toolResults means nothing was scanned; treat the result as unverified and list missing tool coverage.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "implicit",
+      "assertions": [
+        "contains:.agents/skills/codacy-analysis-cli/references/trustworthy-results.md|Empty `toolResults` is the only reliable signal.",
+        "contains:.agents/skills/codacy-analysis-cli/references/trustworthy-results.md|Treat as **unverified**"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "I want to compare a broad Codacy config with the existing one without overwriting the default config. How?",
+      "expected_output": "Use --config-file to initialize and analyze a separate config, then compare results before promoting it.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "contextual",
+      "assertions": [
+        "contains:.agents/skills/codacy-analysis-cli/references/analysis-workflow.md|--config-file",
+        "exists:.agents/skills/codacy-analysis-cli/references/config-format.md"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Implement a Rust getter only. No static analysis or Codacy report is requested.",
+      "expected_output": "Make the code change without running Codacy or creating a scan report.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "negative",
+      "assertions": [
+        "absent:codacy-analysis-results.json"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "A Codacy run flags a realistic secret fixture and subprocess.run. Should I keep provider-shaped credentials and suppress B603 broadly?",
+      "expected_output": "No. Replace credential-shaped values with synthetic fixtures, use a fixed executable and static argv with shell disabled, and keep any necessary rule suppression narrow.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "contextual",
+      "assertions": [
+        "contains:.agents/skills/codacy-analysis-cli/SKILL.md|repository-verified remediation heuristics",
+        "contains:.agents/skills/codacy-analysis-cli/references/heuristics.md|synthetic, non-credential-shaped secret fixtures",
+        "contains:.agents/skills/codacy-analysis-cli/references/heuristics.md|fixed executable with static argv and shell disabled",
+        "not-contains:.agents/skills/codacy-analysis-cli/references/heuristics.md|suppress broadly"
+      ]
+    }
+  ]
+}

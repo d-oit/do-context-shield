@@ -159,7 +159,8 @@ fn sensitive_material_never_appears_in_the_report() {
         &config,
         "[vault]\nvault = \"json\"\nvault_file = \"/tmp/SECRET-VAULT.json\"\n\
          vault_key_file = \"/tmp/SECRET-KEY.hex\"\n\n\
-         [plugins]\ndetector = \"process\"\ndetector_command = \"sh /tmp/SECRET-PLUGIN.sh\"\n\n\
+         [plugins]\ndetector = \"process\"\n\n\
+         [process_plugins.detector]\nprogram = \"/tmp/SECRET-PLUGIN.sh\"\nargs = [\"SECRET-ARG\"]\n\n\
          [context]\npurpose = \"SECRET-PURPOSE-TEXT\"\njurisdiction = \"DE\"\n",
     );
 
@@ -189,6 +190,7 @@ fn sensitive_material_never_appears_in_the_report() {
         "SECRET-VAULT",
         "SECRET-KEY",
         "SECRET-PLUGIN",
+        "SECRET-ARG",
         "SECRET-PURPOSE-TEXT",
         "CLI-SECRET",
         audit_path_text,
@@ -220,7 +222,7 @@ fn sensitive_material_never_appears_in_the_report() {
     );
     assert!(!audit_path.exists());
     assert_eq!(
-        doc["detector_command"],
+        doc["detector_process"],
         serde_json::json!({"configured": true, "source": "file"})
     );
     assert_eq!(

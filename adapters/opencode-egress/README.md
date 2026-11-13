@@ -43,6 +43,26 @@ OpenCode's current plugin guide supports local package directories in `plugins`;
 - Calls `context.forget` after rejecting new hooks and draining in-flight context work on `session.deleted`, and drains then forgets active sessions during plugin unload. Failure of the lifecycle watcher or a forget call blocks later context processing.
 - Fails closed on malformed/unknown context shapes, media or file attachments, oversized context, sanitizer errors/timeouts, invalid configuration, or an unavailable/misbehaving MCP child. Errors are generic and do not include submitted text.
 
+## Threat model
+
+### Protected assets
+
+- Raw sensitive values in prompts, file/tool results, tool definitions, and request options.
+- Session-scoped vault mappings and their cleanup at session deletion or plugin unload.
+- Integrity of model-bound context: a request that cannot be sanitized must not continue.
+
+### Trust boundaries
+
+- For requests that traverse OpenCode's `context` hook, the adapter sanitizes the supported context before OpenCode dispatches it to a provider. The provider is outside the local trust boundary.
+- The plugin passes raw text to its local `mcp-stdio` sanitizer child; sanitized text returns to the hook, while mappings remain in the child's local memory vault.
+- The OpenCode host, plugin runtime, local executable, and operating system are trusted and assumed uncompromised. This adapter does not intercept traffic outside the registered hook.
+
+### Attacker capabilities and bypasses
+
+Treat prompts and context added by file reads, tools, or MCP results as attacker-controlled: they may contain sensitive values, malformed or unknown structures, media, or oversized content. The adapter rejects unsupported or invalid context and fails closed on sanitizer or lifecycle errors. An attacker or user able to disable or bypass the plugin, invoke a different client or hook, call a provider directly, or use shell/subprocess or unrelated-plugin network traffic can avoid this boundary; those paths are not protected. The regex detector is not exhaustive.
+
+The loopback fake-provider test verifies the supported hook boundary and failure behavior; it is not proof that every outbound path is intercepted or a canary from an external egress control.
+
 ## Limits
 
 This plugin registers only OpenCode's `context` hook. It is not a network filter and does not cover other OpenCode hooks such as title or compaction generation, direct provider/API calls, other clients, shell/subprocess traffic, or network requests made by unrelated plugins. Disabling or bypassing the plugin bypasses this boundary.

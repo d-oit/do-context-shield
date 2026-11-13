@@ -1,0 +1,52 @@
+{
+  "skill_name": "configure-codacy",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Configure Codacy for a project and reduce noisy patterns using repository evidence rather than guesses. What is the workflow?",
+      "expected_output": "Discover the stack, capture the baseline, run local analysis, tune only evidence-backed noise, preserve security coverage, and validate the result.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "explicit",
+      "assertions": [
+        "contains:.agents/skills/configure-codacy/references/setup-and-discovery.md|codacy-analysis discover --output-format json",
+        "contains:.agents/skills/configure-codacy/references/tuning.md|baseline results"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The repository is not on Codacy Cloud. Can I still prepare a local configuration?",
+      "expected_output": "Yes. Run the local-only workflow, skip Cloud-only actions, and state that the configuration is local until the repository is added to Codacy.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "implicit",
+      "assertions": [
+        "contains:.agents/skills/configure-codacy/references/setup-and-discovery.md|local-only",
+        "contains:.agents/skills/configure-codacy/references/setup-and-discovery.md|All configuration is done locally"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "A security pattern is noisy, but no other active pattern covers the same concern. Should I disable it?",
+      "expected_output": "No. Preserve at least one active pattern for each security concern; use targeted exclusions or keep the issue for review.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "contextual",
+      "assertions": [
+        "contains:.agents/skills/configure-codacy/references/tool-tuning.md|Never remove the last pattern covering a security concern",
+        "contains:.agents/skills/configure-codacy/references/tuning.md|Security patterns must cover every security concern"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Fix a Rust type error. No Codacy configuration change was requested.",
+      "expected_output": "Fix the code issue without generating or importing Codacy configuration.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "negative",
+      "assertions": [
+        "absent:.codacy/configure-codacy-summary.json"
+      ]
+    }
+  ]
+}

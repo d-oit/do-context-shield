@@ -6,6 +6,8 @@ use do_context_shield_mcp_server::ToolSet;
 use do_context_shield_plugin_api::is_valid_jurisdiction;
 use serde::Serialize;
 use std::path::PathBuf;
+mod process;
+pub(crate) use process::ProcessArgs;
 
 #[derive(Parser)]
 #[command(
@@ -43,6 +45,11 @@ pub(crate) enum Command {
     )]
     Inspect(InspectArgs),
     #[command(
+        about = "Simulate policy decisions without sanitizing or writing state",
+        long_about = "Simulate policy decisions over text from stdin. Reports entity kinds, byte spans, actions, and safe reason metadata only; it never sanitizes text, transforms values, writes vault mappings, or records audit events. This simulation is not proof of egress interception."
+    )]
+    ExplainPolicy(ExplainPolicyArgs),
+    #[command(
         about = "Delete every mapping stored for a session scope",
         long_about = "Delete every mapping stored for a session scope.\n\nAuto-discovers `./do-context-shield.toml` or `$HOME/.config/do-context-shield/config.toml` unless `--config` pins an explicit file."
     )]
@@ -76,6 +83,26 @@ pub(crate) enum Command {
     VerifyAudit(VerifyAuditArgs),
     #[command(about = "Check stdin for a canary marker issued by this shield for a session")]
     VerifyCanary(VerifyCanaryArgs),
+}
+
+impl Command {
+    /// Process-plugin options accepted by this command, if any.
+    pub(crate) fn process_args(&self) -> Option<&ProcessArgs> {
+        match self {
+            Self::Sanitize(args) => Some(&args.process),
+            Self::Restore(args) => Some(&args.process),
+            Self::Inspect(args) => Some(&args.process),
+            Self::ExplainPolicy(args) => Some(&args.process),
+            Self::Forget(args) => Some(&args.process),
+            Self::McpStdio(args) => Some(&args.process),
+            Self::Config(args) => Some(&args.process),
+            Self::Doctor(args) => Some(&args.process),
+            Self::CreateKey(_)
+            | Self::EncryptVault(_)
+            | Self::VerifyAudit(_)
+            | Self::VerifyCanary(_) => None,
+        }
+    }
 }
 
 /// Explicit local append-only JSONL audit destination.
@@ -131,6 +158,21 @@ pub(crate) struct InspectArgs {
     pub(crate) detector: DetectorSelection,
     #[command(flatten)]
     pub(crate) process: ProcessArgs,
+}
+
+#[derive(Args)]
+pub(crate) struct ExplainPolicyArgs {
+    #[command(flatten)]
+    pub(crate) detector: DetectorSelection,
+    #[command(flatten)]
+    pub(crate) policy: PolicySelection,
+    #[command(flatten)]
+    pub(crate) process: ProcessArgs,
+    #[command(flatten)]
+    pub(crate) context: ContextArgs,
+    /// `text` (default) or stable machine-readable `json`.
+    #[arg(long, value_parser = ["text", "json"], default_value = "text")]
+    pub(crate) format: String,
 }
 
 /// Delete every mapping stored for a session scope.
@@ -265,6 +307,8 @@ pub(crate) struct VerifyCanaryArgs {
 pub(crate) struct DoctorArgs {
     #[command(flatten)]
     pub(crate) detector: DetectorSelection,
+    #[command(flatten)]
+    pub(crate) process: ProcessArgs,
     /// `text` (human-readable, default) or `json` (one object with a stable
     /// `reason_code` for scripts).
     #[arg(long, value_parser = ["text", "json"], default_value = "text")]
@@ -321,10 +365,6 @@ pub(crate) struct DetectorSelection {
     /// never takes every core automatically.
     #[arg(long, value_name = "THREADS")]
     pub(crate) model_threads: Option<usize>,
-    /// Command line of a local detector executable; required with `--detector process`.
-    /// Split on whitespace; quoting and shell expansion are not supported.
-    #[arg(long)]
-    pub(crate) detector_command: Option<String>,
 }
 
 /// Vault plugin selection shared by sanitize, restore, and mcp-stdio.
@@ -333,10 +373,17 @@ pub(crate) struct VaultSelection {
     /// Vault plugin: `memory`, `json` (with `--vault-file`), or `process` (local executable).
     #[arg(long, value_parser = ["memory", "json", "process"])]
     pub(crate) vault: Option<String>,
-    /// Command line of a local vault executable; required with `--vault process`.
-    /// Split on whitespace; quoting and shell expansion are not supported.
-    #[arg(long)]
-    pub(crate) vault_command: Option<String>,
+}
+
+/// Policy and optional judge selection for a policy-only simulation.
+#[derive(Args, Default, Clone)]
+pub(crate) struct PolicySelection {
+    /// Optional semantic judge: `heuristics` or `process`.
+    #[arg(long, value_parser = ["heuristics", "process"])]
+    pub(crate) judge: Option<String>,
+    /// Policy plugin: `default`, `matrix`, or `process`.
+    #[arg(long, value_parser = ["default", "matrix", "process"])]
+    pub(crate) policy: Option<String>,
 }
 
 /// Policy and transformer selection shared by sanitize and mcp-stdio.
@@ -346,32 +393,20 @@ pub(crate) struct PipelineSelection {
     /// over newline-delimited JSON).
     #[arg(long, value_parser = ["heuristics", "process"])]
     pub(crate) judge: Option<String>,
-    /// Command line of a local judge executable; required with `--judge process`.
-    /// Split on whitespace; quoting and shell expansion are not supported.
-    #[arg(long)]
-    pub(crate) judge_command: Option<String>,
     /// Policy plugin (default `default`): `default`, `matrix` (opt-in jurisdiction
     /// adequacy and purpose mapping from `[policy_matrix]`), or `process` (local
     /// executable over newline-delimited JSON).
     #[arg(long, value_parser = ["default", "matrix", "process"])]
     pub(crate) policy: Option<String>,
-    /// Command line of a local policy executable; required with `--policy process`.
-    /// Split on whitespace; quoting and shell expansion are not supported.
-    #[arg(long)]
-    pub(crate) policy_command: Option<String>,
     /// Transformer plugin (default `pseudonymize`): `pseudonymize` (reversible
     /// vault-backed tokens), `generalize` (kind-only non-reversible tokens),
     /// `mask` (partial reveal, non-reversible), or `process` (local executable
     /// over newline-delimited JSON).
     #[arg(long, value_parser = ["pseudonymize", "generalize", "mask", "process"])]
     pub(crate) transformer: Option<String>,
-    /// Command line of a local transformer executable; required with `--transformer process`.
-    /// Split on whitespace; quoting and shell expansion are not supported.
-    #[arg(long)]
-    pub(crate) transformer_command: Option<String>,
 }
 
-/// Enforcement context for `sanitize`.
+/// Enforcement context for sanitize and explain-policy.
 #[derive(Args, Default, Clone)]
 pub(crate) struct ContextArgs {
     /// Recipient trust classification used by the policy (default `external`).
@@ -391,15 +426,6 @@ pub(crate) struct ContextArgs {
     /// declaration.
     #[arg(long, value_parser = parse_jurisdiction)]
     pub(crate) jurisdiction: Option<String>,
-}
-
-/// Timeout shared by every process plugin.
-#[derive(Args, Default, Clone)]
-pub(crate) struct ProcessArgs {
-    /// Milliseconds to wait for one process-plugin response (detector, policy, transformer, vault);
-    /// defaults to the config file value or the built-in timeout.
-    #[arg(long)]
-    pub(crate) process_timeout_ms: Option<u64>,
 }
 
 #[derive(Serialize)]

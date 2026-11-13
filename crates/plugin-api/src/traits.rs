@@ -30,11 +30,6 @@ pub trait Detector: Send + Sync {
 pub trait Policy: Send + Sync {
     /// Build transformation decisions.
     ///
-    /// `judgments` is empty when no semantic judge is configured; every index
-    /// has already been validated against `entities`. `context` carries the
-    /// enforcement context (recipient trust, data category, purpose, and
-    /// jurisdiction) the policy may consult.
-    ///
     /// # Errors
     ///
     /// Returns [`PolicyError`] when planning fails.
@@ -44,6 +39,33 @@ pub trait Policy: Send + Sync {
         judgments: &[Judgment],
         context: &ProcessingContext,
     ) -> Result<Vec<PlannedEntity>, PolicyError>;
+
+    /// Explain a validated plan without exposing matched values.
+    ///
+    /// The default reports generic metadata for custom policies.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PolicyError`] when explanation fails.
+    fn explain(
+        &self,
+        plan: &[PlannedEntity],
+        _judgments: &[Judgment],
+        _context: &ProcessingContext,
+    ) -> Result<Vec<crate::DecisionReason>, PolicyError> {
+        Ok(plan
+            .iter()
+            .map(|planned| crate::DecisionReason {
+                kind: planned.entity.kind.clone(),
+                start: planned.entity.start,
+                end: planned.entity.end,
+                action: planned.action,
+                reason_code: crate::ReasonCode::CustomPolicyPlan,
+                matched_rule: None,
+                used_default: false,
+            })
+            .collect())
+    }
 }
 
 /// Classify detected candidates semantically without producing text or spans.

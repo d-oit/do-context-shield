@@ -29,7 +29,7 @@
     {
       "id": 3,
       "prompt": "How do you implement a policy in a language other than Rust without a dynamic-library ABI?",
-      "expected_output": "Use the process protocol: newline-delimited JSON on stdin/stdout, selected with --policy process --policy-command, per docs/process-plugin.md.",
+      "expected_output": "Use the process protocol: newline-delimited JSON on stdin/stdout, selected with --policy process --policy-program and repeatable --policy-arg options, per docs/process-plugin.md.",
       "files": [],
       "dim": "discoverability",
       "kind": "contextual",

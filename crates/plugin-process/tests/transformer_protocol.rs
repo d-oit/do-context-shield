@@ -167,5 +167,9 @@ fn errors_without_command() {
         Ok(result) => panic!("expected an error, got text: {}", result.text),
         Err(error) => error.to_string(),
     };
-    assert!(message.contains("no command configured"), "got: {message}");
+    assert!(
+        message.contains("no executable configured"),
+        "got: {message}"
+    );
+    assert!(message.contains("--transformer-program"), "got: {message}");
 }

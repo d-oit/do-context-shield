@@ -7,7 +7,7 @@
 //! Raw process commands, filesystem paths, key material, and free-form
 //! `purpose` values never appear, so the report is safe to hand to an agent.
 
-use super::{CliSelection, Config, VaultKind, resolve, vault_kind};
+use super::{CliSelection, Config, ProcessPluginConfig, VaultKind, resolve, vault_kind};
 use serde::Serialize;
 
 /// The configuration layer that supplied a setting.
@@ -85,11 +85,11 @@ pub(crate) struct Explained {
     pub(crate) vault_key_file: Presence,
     pub(crate) vault_ttl_seconds: MaybeNumber,
     pub(crate) model_dir: Presence,
-    pub(crate) detector_command: Presence,
-    pub(crate) policy_command: Presence,
-    pub(crate) transformer_command: Presence,
-    pub(crate) judge_command: Presence,
-    pub(crate) vault_command: Presence,
+    pub(crate) detector_process: Presence,
+    pub(crate) policy_process: Presence,
+    pub(crate) transformer_process: Presence,
+    pub(crate) judge_process: Presence,
+    pub(crate) vault_process: Presence,
     pub(crate) context: Context,
     pub(crate) process_timeout_ms: Number,
 }
@@ -169,30 +169,30 @@ pub(crate) fn explain(
             false,
             config.plugins.model_dir.is_some(),
         ),
-        detector_command: presence(
-            cli.detector.detector_command.is_some(),
-            false,
-            config.plugins.detector_command.is_some(),
+        detector_process: process_presence(
+            cli.process.detector_program.is_some(),
+            config.process_plugins.detector.as_ref(),
+            config,
         ),
-        policy_command: presence(
-            cli.pipeline.policy_command.is_some(),
-            false,
-            config.plugins.policy_command.is_some(),
+        policy_process: process_presence(
+            cli.process.policy_program.is_some(),
+            config.process_plugins.policy.as_ref(),
+            config,
         ),
-        transformer_command: presence(
-            cli.pipeline.transformer_command.is_some(),
-            false,
-            config.plugins.transformer_command.is_some(),
+        transformer_process: process_presence(
+            cli.process.transformer_program.is_some(),
+            config.process_plugins.transformer.as_ref(),
+            config,
         ),
-        judge_command: presence(
-            cli.pipeline.judge_command.is_some(),
-            false,
-            config.plugins.judge_command.is_some(),
+        judge_process: process_presence(
+            cli.process.judge_program.is_some(),
+            config.process_plugins.judge.as_ref(),
+            config,
         ),
-        vault_command: presence(
-            cli.vault.vault_command.is_some(),
-            false,
-            config.vault.vault_command.is_some(),
+        vault_process: process_presence(
+            cli.process.vault_program.is_some(),
+            config.process_plugins.vault.as_ref(),
+            config,
         ),
         context: context(cli, config, &resolved),
         process_timeout_ms: number(
@@ -202,6 +202,16 @@ pub(crate) fn explain(
             config.process.timeout_ms.is_some(),
         ),
     })
+}
+
+fn process_presence(
+    cli_program: bool,
+    configured: Option<&ProcessPluginConfig>,
+    config: &Config,
+) -> Presence {
+    let configured =
+        config.is_explicit() && configured.is_some_and(|process| process.program.is_some());
+    presence(cli_program, false, configured)
 }
 
 /// The reported enforcement context.

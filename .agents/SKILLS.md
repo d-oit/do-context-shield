@@ -16,6 +16,12 @@ following the Agent Skills specification (frontmatter with `name`, `description`
 | `spike-runner` | [skills/spike-runner/SKILL.md](skills/spike-runner/SKILL.md) | De-risk unknown APIs, models, and protocols with throwaway spikes. |
 | `skill-distiller` | [skills/skill-distiller/SKILL.md](skills/skill-distiller/SKILL.md) | Compress verified traces into guides and anti-patterns. |
 | `skill-creator` | [skills/skill-creator/SKILL.md](skills/skill-creator/SKILL.md) | Author skills: layout, structure gate, eval fixtures. |
+| `codacy-analysis-cli` | [skills/codacy-analysis-cli/SKILL.md](skills/codacy-analysis-cli/SKILL.md) | Run local Codacy static analysis with strict gating and trustworthy tool-coverage checks. |
+| `codacy-cloud-cli` | [skills/codacy-cloud-cli/SKILL.md](skills/codacy-cloud-cli/SKILL.md) | Query Codacy Cloud repositories, issues, findings, pull requests, tools, patterns, and reanalysis. |
+| `codacy-code-review` | [skills/codacy-code-review/SKILL.md](skills/codacy-code-review/SKILL.md) | Enrich pull-request reviews with local analysis and Codacy Cloud data without overstating coverage. |
+| `configure-codacy` | [skills/configure-codacy/SKILL.md](skills/configure-codacy/SKILL.md) | Configure local Codacy analysis and reduce noise with evidence-backed, security-preserving tuning. |
+| `configure-codacy-cloud` | [skills/configure-codacy-cloud/SKILL.md](skills/configure-codacy-cloud/SKILL.md) | Tune an existing analyzed Codacy Cloud repository and report configuration changes. |
+| `setup-coverage` | [skills/setup-coverage/SKILL.md](skills/setup-coverage/SKILL.md) | Generate, upload, and verify test coverage reports for Codacy. |
 
 ## Cross-Repo Skill Export Contract
 
@@ -44,4 +50,4 @@ This repository exports portable, language-neutral safety workflows defined in `
 - `fail-closed-boundary` is the contributor review checklist for the privacy boundary itself: who owns spans, labels, actions, and restoration, what must be validated, and which fail-closed tests a change must keep.
 - `harness`, `htn-planner`, `spike-runner`, `skill-distiller`, and `skill-creator` are the development-methodology skills: feedforward guides for the workflow in `AGENTS.md`.
 - Every skill must pass `bash scripts/check-skills.sh` (structure gate + fixture shape) and is benchmarked by `do-harness eval`; `--strict-fixtures` rejects thin datasets. Do not add a skill without graded eval fixtures.
-- Deliberately no other skills: MCP server setup is documented in `docs/client-integration.md`, and review rules live in `AGENTS.md`.
+- Codacy skills are copied from [codacy/codacy-skills](https://github.com/codacy/codacy-skills); source hashes are recorded in `../skills-lock.json`, and the upstream MIT notice is retained at [references/codacy-skills-LICENSE](references/codacy-skills-LICENSE). Detailed runbooks live in linked references so every skill entry stays within the local body limit.

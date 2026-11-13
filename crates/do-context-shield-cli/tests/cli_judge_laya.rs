@@ -13,12 +13,15 @@ use common::{cmd, temp_dir};
 use std::path::Path;
 use std::process::Command;
 
-/// Command line selecting the example sidecar in offline stub mode.
-fn laya_stub_command() -> String {
-    format!(
-        "python3 {} --stub",
-        concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/laya-judge.py")
-    )
+/// Ordered CLI arguments selecting the example sidecar in offline stub mode.
+fn laya_stub_args() -> Vec<String> {
+    vec![
+        "--judge-program".to_owned(),
+        "python3".to_owned(),
+        "--judge-arg".to_owned(),
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/laya-judge.py").to_owned(),
+        "--judge-arg=--stub".to_owned(),
+    ]
 }
 
 /// Whether `python3` is available to spawn the sidecar fixture.
@@ -40,19 +43,12 @@ fn skip_without_python3() -> bool {
     true
 }
 
-/// `sanitize --session laya1 --judge process --judge-command <stub>`, `input`
-/// on stdin; asserts success and returns captured stdout.
+/// `sanitize --session laya1 --judge process --judge-program python3 ...`,
+/// `input` on stdin; asserts success and returns captured stdout.
 fn sanitize_with_laya(dir: &Path, input: &str) -> String {
     let assert = cmd(dir)
-        .args([
-            "sanitize",
-            "--session",
-            "laya1",
-            "--judge",
-            "process",
-            "--judge-command",
-        ])
-        .arg(laya_stub_command())
+        .args(["sanitize", "--session", "laya1", "--judge", "process"])
+        .args(laya_stub_args())
         .write_stdin(input)
         .assert()
         .success();

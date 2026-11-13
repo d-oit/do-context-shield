@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-12",
+  "event": "distill",
+  "guides": [
+    {
+      "kind": "reference",
+      "path": ".agents/skills/harness/references/heuristics.md"
+    },
+    {
+      "kind": "skill",
+      "path": ".agents/skills/harness/SKILL.md"
+    }
+  ],
+  "payload": {
+    "from_trace": 30,
+    "heuristic_id": 21,
+    "pattern": "For workspace Clippy under -D warnings, resolve all diagnostics from the full --all-targets/--all-features run, including test helpers and benches, before rerunning the sensor.",
+    "to_fixture": false,
+    "trigger": "resolved-trace"
+  }
+}

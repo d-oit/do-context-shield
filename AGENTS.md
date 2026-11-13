@@ -9,13 +9,11 @@
 |Changed-only gate|`do-harness verify --changed --set verification`|
 |Selection preview|`do-harness explain --set verification --changed`|
 |Evidence freshness|`do-harness status --set verification`|
-|Backlog check|`bash scripts/check-backlog.sh` (active status metadata and local Markdown links)|
-|Skill structure gate|`bash scripts/check-skills.sh`|
-|Hook wiring gate|`bash scripts/check-hooks.sh` (hook files, sensor parity, single hook mode)|
-|Skill evals|`bash scripts/check-skill-evals.sh` (wraps `do-harness eval --strict-fixtures`; narrow with `--skill <name>`)|
+|Single sensor|`do-harness verify --only <name>` (sensor names live in `do-harness.toml`)|
 |Feature build|`cargo check -p <crate> --features <feature>` (e.g. `do-context-shield-detector-gliner2 --features gliner2`)|
 |Setup|`git config core.hooksPath .githooks` after cloning|
-|Sensors|Declared in `do-harness.toml`; procedures in `.agents/skills/harness/SKILL.md`|
+|Canonical sensor commands + signal sets|`do-harness.toml` — the only executable definition; docs mirror it, never fork it|
+|Sensor stages, fix hints, procedures|`.agents/skills/harness/SKILL.md`|
 
 ## Harness model
 
@@ -45,12 +43,21 @@ Agent = Model + Harness: feedforward guides prevent errors before coding, feedba
 - Feature-gated builds (`--features gliner2`) are not part of the default sensor suite; run `cargo check`/`clippy`/`test` for the feature explicitly when touching those crates.
 - Probes and throwaway scripts stay under `target/` (gitignored); never commit them.
 
-### Pull-request merges (strict required checks)
+### Pull requests and merges (strict required checks)
+
+Every implementation change MUST be delivered through a GitHub pull request. Never push directly to `main`; a local commit or branch is not completed delivery.
 
 `main` accepts pull requests only, and requires the `CI Success` check on an up-to-date branch.
 The check is bound to the PR's merge commit, so **every merge to `main` invalidates the checks
 of every other open PR** — and GitHub auto-merge never updates the head branch, so it waits
 forever on a `BEHIND` PR instead of draining a batch.
+
+- Every implementation change must be delivered through a GitHub PR; a local
+  commit alone is not a completed delivery. Push the feature branch and open a
+  PR before reporting delivery. Do not merge until all required checks (including
+  Codacy when configured) pass and review comments are addressed. If authentication
+  or permissions prevent publishing, preserve the local branch and report the
+  exact blocker; never claim a PR was created or a change merged.
 
 - Run `scripts/update-pr-branches.sh` before merging: it rebases every open PR that is `BEHIND`
   through `gh pr update-branch --rebase` (server-side, no local checkout). Wait for `CI Success`,
@@ -76,7 +83,14 @@ forever on a `BEHIND` PR instead of draining a batch.
 
 ## Machine-readable decisions
 
-Every durable rule is recorded in `plans/invariants.json` as `{invariant, rationale, sensor, category}` and seeded into the state database (`do-harness seed --prune`). A rule whose `sensor` is review-only is not machine-enforced — prefer adding the sensor.
+Every durable rule is recorded in `plans/invariants.json` as `{invariant, rationale, sensor, category}` and seeded into the state database (`do-harness seed --prune`). `category` is exactly one of four concepts:
+
+- `security-contract` — an executable privacy/behavior guarantee; its `sensor` must cite executable test/sensor evidence and may never be `review-only`.
+- `architecture-constraint` — a constraint on the structure of the codebase and its interfaces.
+- `workflow-rule` — a process rule (commits, PRs, hooks, gates, evidence).
+- `historical-decisions` — dated rationale preserved in `docs/decisions/` or `plans/backlog.md`.
+
+These rules are enforced by `tests/test_invariants_validation.py` (run inside the `skills` sensor). Only `security-contract` forbids a `review-only` sensor; any other category may document a human-enforced rule that way, but a review-only rule is not machine-enforced — prefer adding the sensor.
 
 ## Project rules
 

@@ -12,6 +12,8 @@ metadata:
   version: "1.0"
   tags: distillation heuristics skills steering eval
 ---
+## Guides
+See references/heuristics.md for distilled heuristics.
 # Skill Distiller Skill
 
 Post-task loop that compresses verified traces into guides, so sensors fire less
@@ -44,16 +46,21 @@ over time.
 5. **Benchmark** —
    `python3 .agents/skills/skill-creator/scripts/quick_validate.py <skill-dir>`,
    then `bash scripts/check-skills.sh`, then `do-harness eval --skill <name>`.
-6. **Negative knowledge** — an unsolved trap is recorded as a `kind: gotchas`
-   eval case whose assertions are negative (`absent:` / `not-contains:`), and
-   the wrong action is named in the skill's Anti-patterns section.
-   `--strict-fixtures` rejects a gotchas case without a negative assertion.
+6. **Negative knowledge** — represent an unsolved trap using a supported eval
+   kind (`explicit`, `implicit`, `contextual`, or `negative`). For a trap that
+   depends on skill guidance, use `kind: contextual` and include a
+   `not-contains:` assertion for the wrong action plus a positive assertion for
+   the safe response. Record the wrong action and why it failed in
+   Anti-patterns.
 
 ## Anti-patterns
 
 Seed anti-patterns from real incidents only — an unsolved blocker, a repeated
 correction, a revert — never from speculation. Each names the observed wrong
 action and why it failed, so a future agent can recognize the trap.
+
+- Do not use `kind: gotchas` for eval fixtures: repo-pinned `do-harness v0.1.1`
+  rejects it; use a supported kind (`contextual` for guidance-dependent traps).
 
 ## Gotchas
 

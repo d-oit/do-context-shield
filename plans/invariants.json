@@ -3,529 +3,541 @@
     "invariant": "Maximum 500 LOC per source file; decompose when nearing 450",
     "rationale": "Bounds per-file complexity and keeps files reviewable and agent-sized",
     "sensor": "bash scripts/check-loc.sh (loc sensor)",
-    "category": "architecture"
+    "category": "architecture-constraint"
   },
   {
     "invariant": "`unwrap()` and `expect()` are forbidden in all Rust sources",
     "rationale": "Typed, recoverable errors at boundaries; panics are never an acceptable failure mode",
     "sensor": "cargo clippy --workspace --all-targets -- -D warnings (unwrap_used/expect_used deny) + python3 scripts/validate-structure.py",
-    "category": "errors"
+    "category": "architecture-constraint"
   },
   {
     "invariant": "No unsafe code in the workspace",
     "rationale": "Eliminates undefined-behavior classes from the privacy boundary",
     "sensor": "cargo check --workspace (workspace lint unsafe_code = forbid)",
-    "category": "safety"
+    "category": "security-contract"
   },
   {
     "invariant": "Runtime crates stay provider-agnostic: no cloud LLM SDK or network-client dependency",
     "rationale": "The privacy boundary must work offline and never leak context to a provider",
     "sensor": "bash scripts/check-deps.sh (layer direction + cargo deny check + the offline ban list: Cargo.lock must contain no network client, TLS stack, or hosted-model SDK, checked across every feature) + review of new dependency entries",
-    "category": "architecture"
+    "category": "architecture-constraint"
   },
   {
     "invariant": "Every detector, judge, policy, transformer, and vault implementation stays replaceable behind plugin-api traits",
     "rationale": "Capabilities must remain swappable and testable in isolation",
     "sensor": "cargo check --workspace (implementations compile against plugin-api) + cargo test -p do-context-shield-plugin-registry (known_names_construct, json_vault_is_registered_and_needs_its_path, regex_name_detects_and_hybrid_name_pairs_it_with_the_model) + review of new capability crates",
-    "category": "architecture"
+    "category": "architecture-constraint"
   },
   {
     "invariant": "Registry names map to the intended plugins and unknown names fail with a capability-naming error; `hybrid` wires regex together with the model half, so it fails closed without a model_dir instead of degrading to regex",
     "rationale": "The names are the user-facing selection surface for CLI and MCP; a silently remapped or degraded name would change what detects and transforms without any other sensor noticing",
     "sensor": "cargo test -p do-context-shield-plugin-registry",
-    "category": "contracts"
+    "category": "security-contract"
   },
   {
     "invariant": "Secrets are redacted, never pseudonymized; personal identifiers are pseudonymized",
     "rationale": "A reversible token for a secret would defeat the redaction guarantee",
     "sensor": "cargo test --workspace (privacy-core pipeline tests)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Raw sensitive input, vault mappings, and restored secrets are never logged or echoed outside the sanitized/blob contract",
     "rationale": "Logs and error messages are context that can leave the machine",
     "sensor": "cargo test -p do-context-shield-core --test privacy_invariants && cargo test -p do-context-shield-mcp-server (raw-value egress assertions)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Stage error text is scrubbed of the values the pipeline has seen (input plus detected entity values) before it leaves, so a plugin that formats raw input or an original value into its error cannot leak it to stderr, an MCP response, or a log",
     "rationale": "Plugins are replaceable and their error strings are arbitrary; the pipeline, not the backend, owns the guarantee that raw values never cross the boundary",
     "sensor": "cargo test -p do-context-shield-core (leaking_detector_error_is_scrubbed, leaking_judge_error_is_scrubbed, leaking_vault_error_is_scrubbed)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Mappings are scoped by an explicit session id; restore resolves only tokens of the same scope and vault",
     "rationale": "Prevents cross-task placeholder resolution and leaks between concurrent agents",
     "sensor": "cargo test --workspace (scope-isolation tests in privacy-core, plugin-process, mcp-server)",
-    "category": "contracts"
+    "category": "security-contract"
   },
   {
     "invariant": "Built-in memory and JSON vault mappings embed 64 bits of OS entropy per mapping (`__DO_PRIVATE_<KIND>_<N>_<16 hex>__`); legacy JSON tokens are never accepted as live aliases and are rotated when their mapping is reused",
     "rationale": "`restore` substitutes any token that matches a stored mapping; with predictable tokens a hostile model could enumerate session values it was never shown, or trick a harness into restoring fabricated placeholders. Per-mapping entropy makes guessing infeasible while repeated entities keep one stable pseudonym through the vault lookup, and rotating legacy mappings prevents an upgrade from preserving the old oracle.",
     "sensor": "cargo test -p do-context-shield-vault-memory -p do-context-shield-vault-json (fabricated_tokens_do_not_resolve, legacy_tokens_are_not_resolved_and_are_rotated_on_reinsert) + cargo test -p do-context-shield-plugin-api",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Every JsonVault resolve reads a fresh shared-locked snapshot, so a long-lived process observes external inserts and deletions and cannot restore a forgotten mapping",
     "rationale": "A cached vault state can outlive a separate process's forget or file deletion and disclose a raw value after retention was supposedly revoked; disk state must remain authoritative for every restore lookup.",
     "sensor": "cargo test -p do-context-shield-vault-json (an_existing_instance_observes_external_scope_deletion)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "ProcessVault get_or_insert succeeds only after an exact vault_resolve round-trip, and built-in minting rejects entity kinds that cannot be represented as restorable tokens",
     "rationale": "A shape-valid child token that its own store cannot resolve would make sanitize report success while restoration is impossible; malformed kind delimiters would likewise create tokens the restore scanner cannot parse.",
     "sensor": "cargo test -p do-context-shield-plugin-process (rejects_a_well_shaped_token_that_cannot_be_resolved, rejects_a_token_resolved_to_a_different_mapping) + cargo test -p do-context-shield-plugin-api (invalid_kinds_cannot_be_minted)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Process plugins fail closed: malformed response, invalid span, undecided entity, leftover value, unresolvable placeholder, a response past the 8 MiB cap, or non-zero exit stops the call instead of passing text through",
     "rationale": "A permissive plugin turns the privacy boundary into a passthrough",
     "sensor": "cargo test -p do-context-shield-plugin-process",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "MCP stdio tools/list stays in fixed order and every successful result carries resultType `complete`, with ttlMs/cacheScope hints on both server/discover and tools/list; the server/discover and initialize paths resolve to identical tool behavior; the namespaced request metadata `params._meta[io.modelcontextprotocol/protocolVersion]` must name a supported version when present (an unsupported one is rejected with -32022 before dispatch), while a request without it only warns and is answered as a pre-2026 client; tool executions report failures as `isError` results while protocol failures (malformed JSON-RPC, invalid request, unknown method/tool, non-object params or arguments, disabled tool) stay JSON-RPC errors with the standard codes",
     "rationale": "Clients cache tool lists and branch on resultType and cache hints; order, metadata, and error-code drift breaks that contract silently, and a version check that dispatched first would let a tool run under a protocol revision the client never negotiated",
     "sensor": "cargo test -p do-context-shield-mcp-server + cargo test -p do-context-shield (tests/mcp_stdio.rs: tool_failure_is_an_iserror_result, meta_version_warning_goes_to_stderr_for_legacy_requests)",
-    "category": "contracts"
+    "category": "architecture-constraint"
   },
   {
     "invariant": "GLiNER2 stays behind the opt-in gliner2 feature, requires a local model directory, and fails closed without one — including a single-file export whose `config.json` is missing or carries no usable `id2label` map, which would otherwise decode every token as `O` and report zero entities",
     "rationale": "Heavy ONNX dependencies must not burden the default build, models are never fetched automatically, and a misconfigured export must never look like a clean scan",
     "sensor": "cargo test -p do-context-shield-detector-gliner2 --features gliner2 (feature tests: id2label fail-closed, layout rejection; the Linux CI job runs them via --all-features) + cargo check -p do-context-shield-detector-gliner2 --features gliner2 (feature build; not part of the default suite)",
-    "category": "architecture"
+    "category": "architecture-constraint"
   },
   {
     "invariant": "Conventional commits with a type prefix; PR titles stay conventional because squash merges reuse them as the commit subject",
     "rationale": "Machine-parseable history for release drafting and commitlint",
     "sensor": "bash scripts/check-commitlint.sh (commitlint sensor) + CI action-semantic-pull-request",
-    "category": "workflow"
+    "category": "workflow-rule"
   },
   {
     "invariant": "Agent skills pass the structure gate and carry graded eval fixtures",
     "rationale": "Skills are load-bearing feedforward guides; unvalidated guidance drifts silently",
     "sensor": "bash scripts/check-skills.sh (skills sensor) + bash scripts/check-skill-evals.sh (skill-evals sensor, fails on a failed graded assertion)",
-    "category": "skills"
+    "category": "workflow-rule"
   },
   {
     "invariant": "A change is complete only when verification evidence for its signal set is green, and the evidence must be re-recorded after a pull, merge, rebase, or commit before its freshness is quoted",
     "rationale": "Exit codes and recorded evidence, not self-assessment, prove completion; `do-harness status` (0.1.1) compares the uncommitted workspace and config fingerprints rather than HEAD, so evidence recorded before HEAD moved still reports `current` and must not be trusted until the set has been re-run",
     "sensor": "do-harness verify --set verification --record + do-harness status --set verification",
-    "category": "verification"
+    "category": "workflow-rule"
   },
   {
     "invariant": "A sensor failing 3 consecutive times on the same subtask halts the loop and records its error signature",
     "rationale": "Blind re-runs of a broken sensor waste the loop and hide the defect",
     "sensor": "do-harness verify --record (strike counters) + do-harness errors list",
-    "category": "workflow"
+    "category": "workflow-rule"
   },
   {
     "invariant": "Hooks come from .githooks via core.hooksPath; do-harness hook install into .git/hooks is the per-developer alternative, never both at once",
     "rationale": "A core.hooksPath pointing at .githooks makes git ignore .git/hooks entirely",
     "sensor": "bash scripts/check-hooks.sh (hooks sensor: hook files executable, every sensor declared in do-harness.toml [hooks] really invoked by that hook, core.hooksPath pinned to .githooks, and no combined .git/hooks + core.hooksPath mode) + do-harness doctor (state-db skew only; for the pinned v0.1.1 it reports managed-hook presence for .git/hooks and cannot see the .githooks mode)",
-    "category": "workflow"
+    "category": "workflow-rule"
   },
   {
     "invariant": "Semantic judges classify existing candidates only: they return labels and confidence, never spans or text, and a judge can never downgrade a secret-like kind from redaction",
     "rationale": "A judge that could invent spans or rewrite values would move the privacy boundary into a model",
     "sensor": "cargo test -p do-context-shield-core -p do-context-shield-policy-default",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "A judge failure, an out-of-range or duplicated judgment index, or an out-of-range confidence fails the sanitize call closed",
     "rationale": "A judge trusted without validation turns a malformed response into a silent policy bypass",
     "sensor": "cargo test -p do-context-shield-core -p do-context-shield-plugin-process",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Recipient-aware default policy enforces GDPR/jurisdiction data categories: special-category data addressed to a non-local recipient blocks while `jurisdiction` is unset (external and unknown recipients always block; a trusted recipient blocks only without a declared jurisdiction), unknown recipients block non-secret data except when it is explicitly declared non-personal, and `purpose` is forwarded intent the default policy never reads — it cannot loosen a decision",
     "rationale": "Fail-closed boundary prevents sensitive personal data from leaking to unvetted recipients; an unset jurisdiction is unknown, and context fields that were validated and carried through every adapter but ignored made `--jurisdiction`/`--purpose` look enforced when they were not",
     "sensor": "cargo test -p do-context-shield-policy-default -p do-context-shield-core + cargo test -p do-context-shield --test cli_context (special_category_to_trusted_without_jurisdiction_blocks, special_category_to_trusted_with_a_jurisdiction_pseudonymizes, purpose_alone_never_loosens)",
-    "category": "security"
+    "category": "security-contract"
+  },
+  {
+    "invariant": "Policy simulation reuses the configured detector, judge, policy plan, and shared validators but never returns matched text or writes vault/audit state; unsafe entity kinds, inconsistent explanations, and stage failures fail closed",
+    "rationale": "Simulation output is user- and automation-facing metadata, so it must follow the sanitize decision path without disclosing values or creating production side effects",
+    "sensor": "cargo test -p do-context-shield-core simulation + cargo test -p do-context-shield --test cli_explain_policy",
+    "category": "security-contract"
   },
   {
     "invariant": "Detector output is validated centrally for a non-empty kind, confidence in 0..=1, UTF-8 character boundaries, input bounds, value matching, and non-overlapping spans before judging or planning; overlaps resolve longest-span-wins via plugin-api::resolve_overlaps, so a later span displacing a shorter overlapping one is kept (a later span that covers less text never wins)",
     "rationale": "Downstream pipeline stages (judge, policy, transformer) must never encounter corrupted offsets or overlapping entity replacements, and a leftmost-first dedup would drop a longer later span (for example a credential starting inside a shorter entity), leaving the uncovered tail of the value raw in the sanitized output; an empty kind or NaN/out-of-range confidence from an in-process detector must fail the call closed instead of reaching policy decisions or results",
     "sensor": "cargo test -p do-context-shield-core (tests::a_later_span_that_is_longer_displaces_a_shorter_overlapping_one, tests::overlapping_spans_resolved_to_longest)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Overlap resolution is one shared implementation: detectors, the process-plugin decoder, and the central pipeline validation call plugin-api::resolve_overlaps instead of hand-rolling a sort-and-retain pass, and the rule reads longest-span-wins with equal lengths keeping the reported order",
     "rationale": "Four copies of the sort-and-retain loop drifted into leftmost-first while the docs and plugin checklists promised longest-span-wins, so the same overlap shape resolved differently per detector and a dropped longer span left raw text in sanitized output",
     "sensor": "cargo test -p do-context-shield-plugin-api (resolve_overlaps tests), cargo test -p do-context-shield-plugin-process (detector_protocol::a_later_longer_span_wins_over_the_leftmost_one), cargo test -p do-context-shield-detector-gliner2 (decode_keeps_the_longest_overlapping_span)",
-    "category": "contracts"
+    "category": "architecture-constraint"
   },
   {
     "invariant": "Vault lifecycle supports explicit session deletion and TTL expiration; JSON vault serializes concurrent writers via file locking",
     "rationale": "Session cleanup bounds storage and protects privacy after agent tasks conclude; file locking prevents race conditions in multi-process workflows",
     "sensor": "cargo test -p do-context-shield-vault-memory -p do-context-shield-vault-json",
-    "category": "architecture"
+    "category": "architecture-constraint"
   },
   {
     "invariant": "JSON vault persistence surfaces every write failure before renaming, so a failed flush can never replace a healthy vault file or report success; a vault file deleted outside the process reloads as empty instead of resurrecting stale mappings",
     "rationale": "A BufWriter discards flush errors when it drops, which silently corrupted the vault on ENOSPC/I/O failure while the insert reported success; and honoring an external deletion is what keeps the on-disk file the source of truth for sequential processes",
     "sensor": "cargo test -p do-context-shield-vault-json (write_state_surfaces_flush_failures, failed_write_keeps_the_existing_vault, externally_deleted_vault_starts_over)",
-    "category": "architecture"
+    "category": "architecture-constraint"
   },
   {
     "invariant": "MCP tools reside in the context.* namespace and context.restore strictly requires an explicit session",
     "rationale": "Restoration resolves raw values and must never default to a shared or implicit session scope",
     "sensor": "cargo test -p do-context-shield-mcp-server",
-    "category": "contracts"
+    "category": "security-contract"
   },
   {
     "invariant": "The MCP surface defaults to the model-safe tool set: `mcp-stdio` exposes only `context.sanitize` and `context.inspect` unless `--tools`, `DO_CONTEXT_SHIELD_TOOLS`, or `[plugins] tools` opts into `restore`/`forget`/`all` (CLI flag > environment > file > default), because MCP tool results return to the calling model and a model-driven restore hands raw values into the context the boundary protects",
     "rationale": "Restore resolves raw values and forget destroys mappings; exposing them to a prompt-injected model lets it un-sanitize text it holds or destroy the harness's ability to restore. The fail-closed default keeps the model-facing surface non-revealing, and the CLI remains the harness-side restore path.",
     "sensor": "cargo test -p do-context-shield-mcp-server + cargo test -p do-context-shield (tests/mcp_stdio.rs, tests/cli_errors.rs)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Adapter context surfaces default to the most restrictive ProcessingContext and reject unknown recipient/data_category names or wrong argument types instead of silently downgrading",
     "rationale": "A typo in a client-supplied trust classification must fail the call, never weaken the recipient-aware policy",
     "sensor": "cargo test -p do-context-shield-mcp-server + CLI value parsers (clap value_parser + sanitize smoke)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Adapter argument surfaces are enforced, not just declared: CLI sanitize/restore/forget require an explicit --session, and MCP tools/call rejects a non-object `arguments` or a missing/non-string `text` instead of silently operating on empty input",
     "rationale": "An implicit session scope lets concurrent tasks resolve each other's placeholders, and a silent empty-input success hides a malformed client call behind a plausible response",
     "sensor": "cargo test -p do-context-shield (tests/cli_errors.rs session_is_required_exits_2) + cargo test -p do-context-shield-mcp-server (errors::argument_validation_failures_are_iserror_results, errors::unknown_method_malformed_json_and_bad_params_are_protocol_errors)",
-    "category": "contracts"
+    "category": "security-contract"
   },
   {
     "invariant": "Session mappings are deletable through explicit forget surfaces (MCP context.forget, CLI forget) that require a session, and a process vault must confirm deletion with deleted=true or the call fails closed",
     "rationale": "Retention must be bounded and a child that silently ignores a wipe would leave raw values resolvable",
     "sensor": "cargo test -p do-context-shield-core -p do-context-shield-plugin-process -p do-context-shield-mcp-server",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "The configuration file may only select known plugins and context names; unknown fields or values fail startup, and precedence is CLI flag > DO_CONTEXT_SHIELD_* environment variable > file value > built-in default, with every source validated the same way, and `mcp-stdio` accepts file values only through an explicit `--config` path (auto-discovery stays for the one-shot commands)",
     "rationale": "A config typo must never silently select a weaker plugin, and effective settings must not depend on which clap default happened to be compiled in or which source supplied a value",
     "sensor": "cargo test -p do-context-shield --bins (config module tests: unknown field/value rejected, CLI-over-config precedence, tools validation) + cargo test -p do-context-shield --test cli_config (env-over-file, flag-over-env, invalid env override, auto-discovery)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "CLI and MCP stdio behavior is tested black-box against the compiled `do-context-shield` binary, spawned with a hermetic working directory and `$HOME` so ambient config files can never change a test outcome",
     "rationale": "Behavior in the shipped artifact, not library internals, is the contract; a test reading the developer's real HOME or cwd config would be non-reproducible",
     "sensor": "cargo test -p do-context-shield (tests/cli_*.rs and tests/mcp_stdio.rs)",
-    "category": "verification"
+    "category": "architecture-constraint"
   },
   {
     "invariant": "Detector overlap dedup keeps the longest span (plugin-api::resolve_overlaps) and resolves equal-span ties by SPECS order: more specific kinds precede looser shapes, and semantic post-filters (Luhn for card numbers, ABA for US routing numbers, byte-bounded octets for IPv4, ISO 13616 mod-97 for IBAN) run before dedup",
     "rationale": "A looser pattern can match exactly the same text as a more specific kind, so list order decides the reported kind; filtering invalid candidates after dedup would silently drop the specific match, and a leftmost-first dedup would keep a shorter early span over a longer one that starts inside it",
     "sensor": "cargo test -p do-context-shield-detector-regex (overlap cases + luhn_gate_rejects_invalid_card_numbers, aba_gate_rejects_invalid_routing_numbers)",
-    "category": "contracts"
+    "category": "architecture-constraint"
   },
   {
     "invariant": "CodeQL code scanning runs through GitHub default setup (rust, python, actions) and must stay configured, because the main branch ruleset requires code-scanning results before a pull request can merge",
     "rationale": "With default setup disabled, or with no analysis on the target branch, the ruleset's code_scanning rule can never be satisfied and every merge needs an administrator bypass; an advanced-setup workflow added alongside default setup fails at analysis upload instead of taking over",
     "sensor": "gh api repos/d-oit/do-context-shield/code-scanning/default-setup (state=configured) + gh api repos/d-oit/do-context-shield/rulesets/rule-suites (code_scanning rule result)",
-    "category": "workflow"
+    "category": "workflow-rule"
   },
   {
     "invariant": "Hybrid detector merge keeps primary spans authoritative and resolves secondary-secondary overlaps longest-span-wins, keeping the earlier-returned span on equal lengths",
     "rationale": "The merged list must carry no overlapping secondary spans so hybrid output is stable before the pipeline's own dedup pass, while primary precedence stops a noisy model fragment from splitting an authoritative structured-identifier span",
     "sensor": "cargo test -p do-context-shield-detector-hybrid",
-    "category": "contracts"
+    "category": "architecture-constraint"
   },
   {
     "invariant": "The GLiNER2 backend loads ONNX Runtime dynamically and needs a runtime matching the ort release it was built against (1.28.x for ort 2.0.0-rc.13, supplied via ORT_DYLIB_PATH or the loader path)",
     "rationale": "ort is built with load-dynamic, so a missing or mismatched runtime fails at engine load; the version pin plus the official archive command is what users need to bring the model backend up",
     "sensor": "docs/plugins.md runtime note (pinned 1.28.x / ort 2.0.0-rc.13, verified 2026-09-20 with the fp16_v2 export) + GitHub CI: the Linux `Test` job fetches the pinned 1.28.0 archive, caches it, exports ORT_DYLIB_PATH and sets DO_HARNESS_REQUIRE_ORT=1 (so the runtime-backed tests fail instead of skipping; missing ORT_DYLIB_PATH is a failure) + gated model-backed E2E (cargo test -p do-context-shield --features gliner2 --test cli_model_e2e, which stays manual: it also needs DO_CONTEXT_SHIELD_E2E_MODEL_DIR)",
-    "category": "architecture"
+    "category": "architecture-constraint"
   },
   {
     "invariant": "CI runs the workspace tests on Linux with --all-features and on macOS and Windows with default features plus `cargo check --workspace --all-features --all-targets`, so platform-specific breakage in both default and feature-gated code is caught before merge",
     "rationale": "The CLI and MCP server ship as cross-platform binaries; Linux-only CI silently missed a Windows TOML path-escaping defect the first matrix run surfaced, and the native feature-gated path (gliner2/ort/tokenizers) previously only ever compiled on Linux, so a Windows/macOS build break could only surface after merge",
     "sensor": "GitHub CI: the `test` job (Linux, --all-features) and the `cross-platform` matrix (macos-latest, windows-latest: cargo test --workspace --no-fail-fast then cargo check --workspace --all-features --all-targets)",
-    "category": "verification"
+    "category": "workflow-rule"
   },
   {
     "invariant": "The shell surfaces (`scripts/*.sh`, `.githooks/*`) pass shellcheck; the sensor WARN-skips without the tool locally and fails closed in CI",
     "rationale": "The hooks and helper scripts are load-bearing contributor and CI gates; the SC2059-class printf defects a manual sweep had to fix should surface automatically instead",
     "sensor": "bash scripts/check-shellcheck.sh (shellcheck sensor, in the verification and ci sets)",
-    "category": "verification"
+    "category": "workflow-rule"
   },
   {
     "invariant": "Every documented adapter selection surface is covered black-box through the compiled binary: the process-plugin `--detector`/`--judge`/`--policy`/`--transformer`/`--vault process` pairs (with a missing command failing at startup), `--process-timeout-ms`, the enforcement-context flags (`--recipient`/`--data-category`/`--purpose`/`--jurisdiction`), config auto-discovery (working directory, then `$HOME`), the explicit `--vault json` round-trip, and the `--vault-ttl-seconds` vault restriction",
     "rationale": "The library-level protocol tests prove the plugin, not the adapter: a refactor that dropped a flag-to-wiring path would keep CI green while the shipped binary silently used a built-in plugin or the default context",
     "sensor": "cargo test -p do-context-shield (tests/cli_process_plugins.rs, tests/cli_context.rs, tests/cli_config.rs, tests/cli_errors.rs, tests/cli_sanitize.rs)",
-    "category": "verification"
+    "category": "architecture-constraint"
   },
 
   {
     "invariant": "The optional OpenCode V2 egress adapter sanitizes every supported context string before dispatch and locks structural strings only at schema-defined paths (generic property names such as `name` do not exempt their values), scopes vault mappings by OpenCode session ID, exposes no restore tool, ignores ambient `DO_CONTEXT_SHIELD_*` settings, and on session deletion/unload blocks new hooks, drains in-flight context work, then forgets mappings; it fails closed on unsupported context, invalid options, sanitizer failure, or failed lifecycle monitoring and is not a universal network proxy",
     "rationale": "OpenCode plugins are optional and hook-scoped; broad key-name exemptions can leave sensitive values in model input, an inherited jurisdiction can alter policy when the adapter omitted it, and forgetting before an in-flight sanitize drains can recreate mappings after deletion, so the sensor covers context, lifecycle ordering, and the stated limits",
     "sensor": "bash scripts/check-opencode-egress.sh (opencode-egress sensor: strict TypeScript check, adapter tests, compiled CLI and loopback fake-provider integration)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "The pipeline validates the policy plan before transforming: exactly one decision per detected entity, on the same kind and span, and a secret-kind entity is `Redact` (or `Block`, which fails the call)",
     "rationale": "A plan that drops an entity leaves its raw value in the sanitized output, and a reversible action on a credential stores it in the vault instead of redacting it, so both defeat the boundary no matter how correct the policy was for the entities it did decide",
     "sensor": "cargo test -p do-context-shield-core (tests::policy::short_plan_fails_closed, tests::policy::substituted_kind_fails_closed, tests::policy::substituted_span_fails_closed, tests::policy::substituted_decision_fails_closed, tests::policy::substituted_value_fails_closed, tests::policy::reversible_action_on_secret_fails_closed)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Non-reversible transformers (`generalize`, `mask`) never emit vault-resolvable tokens or mappings: generalize replaces a pseudonymization target with a kind-only `__DO_PRIVATE_<KIND>__` token whose kind passes the placeholder grammar, mask keeps only the last four characters, and `restore` is a no-op on either output",
     "rationale": "Claiming non-reversibility while emitting a mintable token or a mapping would keep the raw value recoverable from the vault; equal values of one kind collapsing to one token is the documented trade-off, and it must not silently degrade into pseudonymization",
     "sensor": "cargo test -p do-context-shield-transformer-generalize -p do-context-shield-transformer-mask + cargo test -p do-context-shield (tests/cli_transformers.rs)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "The JSON vault encrypts at rest when a key file is configured (XChaCha20-Poly1305 envelope, fresh nonce per write, format marker as associated data): a plaintext file requires an explicit `encrypt-vault` migration, and a wrong key, a modified envelope, or a file in the other format fails closed instead of being misread",
     "rationale": "The vault file holds raw originals by design; without a key they are readable by anything that reaches the file (backups, shared machines, an accidental copy), and a silent reinterpretation of the wrong format could persist plaintext the operator believes is encrypted",
     "sensor": "cargo test -p do-context-shield-vault-json + cargo test -p do-context-shield (tests/cli_vault_encryption.rs)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "The `[context]` values of an explicitly selected config file are the default enforcement context of the CLI `sanitize` call and, when selected with an explicit `--config`, of the `mcp-stdio` server for `context.sanitize` requests that omit the arguments (the MCP entry point never reads an ambient project file); a working-directory auto-discovery candidate's `[context]` is ignored, so a repository file cannot weaken the defaults; a per-call argument (or CLI flag) overrides the file value field by field, and the built-in fallback stays the most restrictive context (external recipient, personal data)",
     "rationale": "The config file was documented as supplying these defaults, but mcp-stdio resolved them and then dropped them, so a registration pinned to `recipient = \"local\"` silently ran with the external default; both directions are user-visible policy changes and the doc pages disagreed about which one held, the MCP side additionally reads file values only via `--config` so a project directory cannot set them for the server it spawns, and issue #161 showed the same ambient-trust problem for one-shot `sanitize` (a checked-out file could select `recipient = \"local\"` and keep a raw value)",
     "sensor": "cargo test -p do-context-shield --test mcp_stdio_config --test cli_config_discovery --test cli_config",
-    "category": "contracts"
+    "category": "security-contract"
   },
   {
     "invariant": "A working-directory `do-context-shield.toml` selected by auto-discovery cannot weaken the one-shot enforcement context: its `[context]` section is ignored unless the file is named with `--config`; the user-level `$HOME` file's `[context]`, `DO_CONTEXT_SHIELD_*` overrides, and CLI flags remain authoritative; process plugin commands from any auto-discovered file stay ignored, and the `config` diagnostic reports the ignored section as `default`/`none` rather than `file`",
     "rationale": "Repository configuration is checked out with project content, so trusting its recipient/data-category could silently keep sensitive input raw for an unconfigured sanitize call (issue #161); the conservative external/personal defaults must survive an ambient project file, while explicit operator configuration keeps its intentional local/non-personal workflows",
     "sensor": "cargo test -p do-context-shield --test cli_config_discovery --test cli_config --test cli_config_diag + cargo test -p do-context-shield --bins (config::tests::context_trust_follows_the_config_source)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "A pull request is armed with GitHub auto-merge (`gh pr merge --auto`) only while no review comment or review is unanswered, and every review comment and review is addressed (fixed or answered) before the merge is treated as done; auto-merge itself waits only for the required CI checks",
     "rationale": "Auto-merge enforces the check gate mechanically but is blind to review: arming it on a PR with an open question or a CHANGES_REQUESTED review merges over the reviewer, so the merge discipline must state both halves explicitly",
     "sensor": "review-only (GitHub auto-merge bound to the required `CI Success` check; comment triage stays maintainer-enforced)",
-    "category": "workflow"
+    "category": "workflow-rule"
+  },
+  {
+    "invariant": "Every implementation change is delivered through a GitHub pull request; a local commit alone is not completed delivery, and missing write access blocks publication rather than justifying a false PR or merge claim; merge waits for all required checks (including Codacy when configured) and answered review threads",
+    "rationale": "A local branch has no remote review or CI evidence, and assuming a PR was opened can silently bypass the requested check/approval path; explicitly tracking credentials and checks keeps delivery truthful and reviewable",
+    "sensor": "review-only (AGENTS.md pull-request merges section; verify remote PR, required check statuses, and review threads)",
+    "category": "workflow-rule"
   },
   {
     "invariant": "The effective-configuration diagnostic (`do-context-shield config`) reports only whitelisted settings — validated plugin and vault names, enforcement-context values, numeric limits, and presence booleans — each with the layer that supplied it; raw process commands, filesystem paths, key material, and free-form `purpose` values never appear in its output, and the effective vault plus the contradictory-selection failure come from the same classifier the executing commands use",
     "rationale": "The report is designed to be pasted into an agent context, so any path, command line, key location, or free-form purpose text would leak operational detail that the four-layer precedence inspection does not need; a second copy of the vault-selection rules would let the report claim a vault the runtime refuses",
     "sensor": "cargo test -p do-context-shield --test cli_config_diag",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Batch vault access (`Vault::resolve_many` for `restore`, `Vault::get_or_insert_many` for the pseudonymizing transformer) works against one authoritative snapshot per call, and no snapshot or per-item result is cached across calls: a scope deletion performed by another process between two calls stays visible to the second one",
     "rationale": "Both per-item paths re-read and re-wrote the whole JSON vault once per placeholder (measured with 5 000 mappings: ~9 ms per token to restore, ~15 ms per new entity to sanitize, i.e. 4.5 s for 500 tokens and ~3 s for 200 entities), while a cross-call cache would hide external forget/revocation — the batches fix the cost without trading away visibility (measured after: 8 ms for 500 tokens, 52 ms for 200 entities)",
     "sensor": "cargo test -p do-context-shield-vault-json + cargo test -p do-context-shield-vault-memory + cargo test -p do-context-shield-core + cargo test -p do-context-shield-transformer-pseudonymize",
-    "category": "contracts"
+    "category": "architecture-constraint"
   },
   {
     "invariant": "The default regex detector has a repeatable quality benchmark: every kind declared by the pattern table is generated with checksum-valid values and must be detected at its exact span, adversarial lookalikes must not produce their kind, and a benign prose/code corpus must produce no entities",
     "rationale": "Detection quality was only asserted by hand-written fixtures, so breadth (checksum gates at scale, boundary rules, lookalike precision) was unmeasured; the generated corpus self-validates its checksums and reads the kind list from the pattern table, so a new spec cannot pass without a generator",
     "sensor": "cargo test -p do-context-shield-detector-regex --test quality",
-    "category": "contracts"
+    "category": "architecture-constraint"
   },
   {
     "invariant": "A `vault_ttl_seconds` on the JSON vault bounds persisted mappings: every mapping is written with a Unix timestamp, reads hide a mapping older than the TTL, and the next locked write or `expire` purges it; nothing is deleted before a full TTL elapsed, counters are never reset, mappings written before the TTL was configured are stamped at the next locked write instead of being purged or ignored, and `forget` stays the immediate eraser",
     "rationale": "Persisted originals otherwise stayed resolvable until the file was deleted or the scope forgotten, so an operator who set a lifetime got it only for the memory vault (and the config layer rejected the combination outright); the decision needed cross-process semantics that do not destroy pre-existing mappings on upgrade and do not reissue an expired token for a different value",
     "sensor": "cargo test -p do-context-shield-vault-json + cargo test -p do-context-shield --test mcp_stdio_config",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Audit logging is strictly opt-in and structure-only (`AuditEvent`): operation, session, outcome, enforcement context without free-form purpose, per-kind action counts, and resolution counts; raw values, minted tokens, vault mappings, and purpose text are never representable or recorded, and resolved originals are scrubbed from restore audit error messages",
     "rationale": "An audit log that recorded original text or reversible tokens would recreate the exact exposure the privacy boundary exists to prevent; scrubbing restore audit errors ensures failure diagnostics cannot leak resolved originals",
     "sensor": "cargo test -p do-context-shield-core + cargo test -p do-context-shield --test cli_audit + cargo test -p do-context-shield --test mcp_stdio_audit",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "File audit logging (`FileAuditSink`) requires strict Unix filesystem safety: pre-existing parent directory, safe descriptor open with `O_RDWR | O_APPEND | O_CREAT | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC` and mode `0600`, exclusive advisory file locking during validation and append, refusal of non-regular files, multiple links, foreign ownership, symlinks, hardlinks, FIFOs, and paths aliasing vault files; non-Unix platforms fail explicitly without fallback",
     "rationale": "Audit trails are sensitive system metadata and must not be hijacked by symlink attacks, concurrent corruption, or file-descriptor replacement; failing closed before input processing prevents silent loss or disclosure of audit records",
     "sensor": "cargo test -p do-context-shield-audit-file + cargo test -p do-context-shield-plugin-registry",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "The opt-in `matrix` policy (`crates/policy-matrix`) never loosens the boundary: secret-kind and judge-`Secret` entities always redact under every purpose rule; unknown recipients block every non-secret entity except `non_personal` data; special-category data to external/unknown recipients blocks; and adequacy is a pair decision — an unset origin or a destination that is neither the origin itself nor a member of `adequate_jurisdictions` blocks special-category data to a trusted recipient, so an unconfigured matrix is never looser than the default policy; country codes are case-normalized",
     "rationale": "The matrix encodes the jurisdiction-pairing and purpose-mapping decisions the conservative default deliberately refuses to guess, so an operator-declared policy must fail closed on every incomplete pair rather than read as enforced while leaving special-category transfers unguarded; the `origin` field and `enforce_adequacy_for_trusted` default previously made an unconfigured matrix silently permit trusted-recipient transfers",
     "sensor": "cargo test -p do-context-shield-policy-matrix + cargo test -p do-context-shield --test cli_policy_matrix",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "`RecipientClass` and `DataCategory` serialize with their documented lowercase names (`local`/`trusted`/`external`/`unknown`, `non_personal`/`personal`/`special_category`), identical to `as_str`/`parse` used by the process protocol and MCP arguments, so every user-facing surface (config file, CLI, MCP) accepts the same names",
     "rationale": "A serde derive had produced PascalCase variants that no documented surface used, so a documented lowercase value failed config parsing (`unknown variant \\`local\\``) the first time these enums became serde-visible in the `[policy_matrix]` purpose rules; one name per enum across every boundary prevents a class of silent-mismatch defects",
     "sensor": "cargo test -p do-context-shield-plugin-api",
-    "category": "contracts"
+    "category": "architecture-constraint"
   },
   {
     "invariant": "A PR branch receives no new commits while GitHub auto-merge is armed: the merge fires on the revision that first satisfied the required checks, silently leaving later commits behind, so the whole slice is pushed before arming and an unavoidable follow-up disables auto-merge first (or opens its own PR)",
     "rationale": "A docs follow-up commit pushed while auto-merge was pending merged #105 without it and recreated the server-side branch head, stranding the change in a separate PR; the race is invisible in GitHub's UI because the PR still shows as merged",
     "sensor": "review-only (merge discipline; `AGENTS.md` pull-request merges section)",
-    "category": "workflow"
+    "category": "workflow-rule"
   },
   {
     "invariant": "Database connection URIs containing credentials (`db_credential`) and modern developer tokens (`stripe_key`, `huggingface_token`, `pypi_token`, `gitlab_token`, and fine-grained `github_pat_`) are recognized by the default regex detector and redacted as secret kinds (`is_secret_kind` covers any kind with `credential`), preventing connection passwords from being misclassified as `email` or leaked raw on non-domain hosts",
     "rationale": "Developer connection strings (`postgres://`, `mysql://`, `mongodb://`, `redis://`) paste into agent contexts frequently; previously, user:password@domain was falsely matched as personal email and pseudonymized while localhost/IP hosts were ignored completely, leaking production database passwords",
     "sensor": "cargo test -p do-context-shield-detector-regex + cargo test -p do-context-shield --test cli_sanitize",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "The `ORDER` array in `scripts/publish-crates.sh` lists every workspace crate exactly once and in topological order: each crate appears after every normal, non-optional workspace dependency of that crate (dev-dependencies and optional dependencies are stripped from the packaged manifest and do not gate the registry lookup), and the list contains no crate that is not a workspace member",
     "rationale": "The array omitted three workspace crates (`detector-hybrid`, `judge-heuristics`, `policy-matrix`) and ordered `plugin-registry` before its dependency `plugin-process`, so `cargo publish` resolved sibling path dependencies against the crates.io index mid-release and failed partway through with crates.io as the only oracle; the order is load-bearing release state that a rename or a new crate would silently drift out of, so completeness and topological validity are asserted against `cargo metadata` rather than maintained by hand",
     "sensor": "bash scripts/check-publish-order.sh (publish-order sensor, in the verification, release, and ci sets; WARN-skips without python3 locally and fails closed when CI=true or DO_HARNESS_REQUIRE_TOOLS=1, the same policy as check-shellcheck.sh)",
-    "category": "verification"
+    "category": "workflow-rule"
   },
   {
     "invariant": "Credential patterns must detect every value shape their declared alphabets admit at the declared width: an exact-width pattern's final word-character class includes every allowed word character (`google_api_key` accepts alphanumeric, `_`, and `-` final characters, the latter via the no-anchor hyphen branch), and a floor length counts every tail character including a `-`/`_` final character, so no in-alphabet credential shape passes through undetected and unredacted",
     "rationale": "The google_api_key final class was `[0-9A-Za-z]`, so an underscore-final 35-character tail matched neither the \\b-anchored word branch nor the hyphen branch and the whole key stayed raw in sanitized output; the boundary only protects values the detector reports",
     "sensor": "cargo test -p do-context-shield-detector-regex (google_api_key_matches_every_allowed_tail_ending pins all three endings with exact spans plus 34-/36-character width controls; the quality benchmark's separator-tail cases drive the same contract through the compiled SPECS)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Modern developer and cloud credentials (`anthropic_key` for `sk-ant-api03-`/`sk-ant-admin01-`, `openai_project_key` for `sk-proj-`/`sk-svcacct-`, and `azure_storage_credential` for Azure storage `DefaultEndpointsProtocol=...;AccountKey=...` connection strings) are detected as their own kinds, win over the generic `api_key` span, and are redacted as secret kinds; quality-corpus boundary cases verify full spans for `-`/`_` payload endings and Azure `==` padding",
     "rationale": "These tokens are pasted into agent contexts routinely; the generic `sk-` pattern would otherwise report them as `api_key` by span precedence, and an Azure connection string carries a raw account key that must never be pseudonymized into a reversible vault mapping",
     "sensor": "cargo test -p do-context-shield-detector-regex (unit and quality targets) + cargo test -p do-context-shield-plugin-api + cargo test -p do-context-shield-core",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Routable and versioned routable GitLab personal access tokens (`glpat-<payload>.<routing>`) are detected across their full multi-segment span, and dot-separated token segments require at least two characters after any dot (`(?:\\.[0-9a-zA-Z]{2,})*`) so prose sentence periods are never swallowed into the secret span",
     "rationale": "GitLab 16.9+ appends routing and CRC metadata after dots; omitting dot support truncates the detected span at the dot and leaks the routing suffix raw, while admitting bare dots in the token class would swallow sentence periods in prose",
     "sensor": "cargo test -p do-context-shield-detector-regex (detects_routable_gitlab_tokens asserts full routable and versioned routable span capture plus prose sentence period exclusion)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Canary boundary markers are HMAC-SHA256 tags over a domain-separated session scope, keyed by a per-install key file that is separate from the vault key and must be owner-only on Unix; `verify-canary` fails closed (non-zero exit) on a missing, forged, wrong-session, or wrong-key marker and never echoes the checked input",
     "rationale": "A canary an attacker can mint proves nothing at an egress firewall, and sharing the vault key would let a leaked canary key expose vault ciphertext; a plain string comparison would leak the tag through timing, so verification goes through the MAC's constant-time verifier",
     "sensor": "cargo test -p do-context-shield-core canary + cargo test -p do-context-shield (CLI suites)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Quoted generic secret assignments (`password=\"pass phrase!\"` and `API_SECRET='s3cr3t#pass;!'`) are detected across their full literal span including matching quotes, internal spaces, and special characters (`(?:\"[^\"]{4,}\"|'[^']{4,}')`), while unquoted assignments enforce an 8-character floor and word boundary (`\\S{8,}\\b`) to prevent keyword false positives in source code",
     "rationale": "Quoted passwords frequently contain spaces (passphrases) or end in punctuation and semicolons; unquoted non-whitespace matching `\\S{8,}` truncated multi-word passphrases at the first space and dropped closing quotes and trailing punctuation, leaking sensitive values raw",
     "sensor": "cargo test -p do-context-shield-detector-regex (detects_quoted_generic_secret_assignments asserts full quoted literal capture for spaces, trailing punctuation, and single/double quote delimiters)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "MCP `tools/list` emits schema-defined `ToolAnnotations` that match local tool effects: `context.inspect` is read-only, `context.sanitize` and `context.restore` are non-read-only but non-destructive, `context.forget` is destructive, and all four use `openWorldHint: false`; missing or malformed `clientCapabilities` for an explicitly supported namespaced version remains `-32602` invalid params, while `-32021` is reserved for an actually required undeclared capability",
     "rationale": "Tool annotations are untrusted hints that can drive client confirmation and display behavior; `priority`/`audience` are content/resource annotation fields, not tool annotation fields, and a wrong read-only/destructive claim misleads clients",
     "sensor": "cargo test -p do-context-shield-mcp-server (tools_list_advertises_spec_defined_behavior_hints and protocol_version_metadata_is_enforced)",
-    "category": "contracts"
+    "category": "architecture-constraint"
   },
   {
     "invariant": "Committed fuzz seed corpora contain only SYNTHETIC-marked credentials, and every CHANGELOG secret regression seed is pinned at its exact detected kind and byte span by fuzz/tests/seed_corpus.rs; the detached fuzz workspace stays out of the shipping lockfile and license policy",
     "rationale": "A real credential in fuzz/corpus would be committed history, and the gitleaks allowlist must target only the marked value (never the path) so scanning stays active; an unpinned seed loses its regression value silently, shrinking fuzz coverage without any failing test",
     "sensor": "cargo test --manifest-path fuzz/Cargo.toml --locked --test seed_corpus (CI fuzz-check job) + gitleaks secret-scan (.gitleaks.toml `(?i)synthetic` allowlist)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Fuzzing and mutation testing are scheduled or manually dispatched only and never a pull-request merge gate; the PR-time gate is the fuzz-check job, which compiles the targets and runs the seed tests",
     "rationale": "Full fuzz and mutation runs are heavy — a workspace-scoped manual mutation dispatch measured 511 mutants in 8–16 minutes per shard on two cores, and the test scope changes the numbers materially — and do not belong on every PR; every mutant must be tested against the whole workspace (`--test-workspace true`), because cargo-mutants' default (`TestPackages::Mutated`) runs only the mutated package's own tests and a mutant whose coverage lives in a consumer crate would survive falsely (privacy-core asserts the `plugin-api::validate_judgments` paths), with the mutant list sharded so each job stays inside its timeout; missed mutants (exit 2) and mutant test timeouts (exit 3) are test-gap signals that must only warn, while tool or setup failures (1 usage, 4 baseline failed, 5/6 diff filters, 70 internal) fail the job, so the signal is never silently skipped",
     "sensor": "review-only (workflow triggers in .github/workflows/fuzz.yml and mutants.yml; fuzz-check compile gate in ci.yml)",
-    "category": "workflow"
+    "category": "workflow-rule"
   },
   {
     "invariant": "A successful `sanitize` never returns text that still contains a value the plan removes: every plan decision must carry the same kind, span, and value as the detected entity it decides (a substituted value is rejected before transformation), and after transformation every `Redact`/`Pseudonymize` entity's value must be gone — a `Keep` on another entity carrying the same bytes does not exempt it — with the pipeline failing closed otherwise, so an undetected duplicate (a token glued to a word character, a copy hidden past a declared width) cannot leave the boundary as raw text",
     "rationale": "Regex detection is boundary- and width-based, so a second copy of a secret can sit just outside every detectable span, and replacing only the detected span would emit the original value as sanitized output. The process transformer already enforced this on its own output; enforcing it centrally makes the promise hold for built-in transformers too. The plan's value is validated because the postcondition reads it, and a keep alias is no exemption because a detector labelling one secret under both a secret and a non-secret kind would otherwise return the raw value; the refusal names the kind without echoing the value",
     "sensor": "cargo test -p do-context-shield-core (tests::redaction: glued duplicate, digit-glued duplicate, undetected pseudonymized copy, kept-value control, keep-alias refusal; tests::policy: substituted value) + cargo test --manifest-path fuzz/Cargo.toml --locked --test seed_corpus (sanitize_seed_fails_closed_when_a_copy_survives) + the fuzz_sanitize_pipeline target in the scheduled fuzz.yml matrix",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "A persisted JSON vault file that cannot be parsed is refused with a typed error and left byte-for-byte unchanged — never rewritten into an empty vault — and every token the vault mints round-trips: it resolves in the minting instance, from a fresh instance over the same file, and stops resolving after `delete_scope`",
     "rationale": "Silently starting over on an unreadable file would both invent data and destroy whatever the operator had persisted, and a token that fails to resolve (or keeps resolving after deletion) breaks restore and erasure; the fuzz target discarded every operation result, so none of these properties were asserted",
     "sensor": "cargo test --manifest-path fuzz/Cargo.toml --locked --test seed_corpus (vault_seeds_pin_parse_errors_and_round_trips) + the fuzz_vault_json target in the scheduled fuzz.yml matrix",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "RustSec advisories gate the committed lockfile: the audit sensor runs cargo-audit against the tracked `Cargo.lock` without re-resolving it (CI runs `cargo audit --file Cargo.lock` for the same reason), so the dependency graph that is audited is the graph that ships; a missing Cargo.lock fails, and a missing cargo-audit WARN-skips locally but fails closed when CI=true or DO_HARNESS_REQUIRE_TOOLS=1",
     "rationale": "An audit that re-resolved dependencies could report on a different graph than the committed lockfile ships; the lockfile is the shipping artifact, so its advisories must be the ones that block a merge, and a silently skipped scan must not be able to pass CI",
     "sensor": "bash scripts/check-audit.sh (audit sensor, in the verification, release, and ci sets) + CI `cargo audit --file Cargo.lock`",
-    "category": "verification"
+    "category": "workflow-rule"
   },
   {
     "invariant": "Every `uses:` reference in every GitHub Actions workflow is pinned to an immutable 40-hex commit SHA with the release version kept as a trailing comment, never a mutable tag (local `./` composite actions and `docker://` refs are exempt)",
     "rationale": "A mutable tag can be moved to a revision this repository never reviewed, which is a supply-chain path to the write tokens the labeler and release-drafter jobs hold and to the pull-request input the commitlint and secret-scan jobs process; PR #123 pinned the CI-critical workflows (ci, fuzz, mutants) and the remaining four (commitlint, labeler, release-drafter, secret-scan) followed, so the rule now covers every workflow",
     "sensor": "python3 scripts/validate-structure.py (structure sensor: rejects any `uses:` ref that is not `owner/repo@<40-hex sha>`; the version comment is review-checked) + CI `Structure` job",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Credential detection stays on the linear-time regex engine with word-boundary anchors; lookaround/backtracking engines and anchor-stripped weak-prefix patterns are rejected, and the glued-only residual (a secret with no detectable boundary anywhere) is accepted with the central redaction postcondition covering glued duplicates of detected values",
     "rationale": "Backtracking on untrusted input is a ReDoS vector at the privacy boundary and a new dependency against the local/CPU-minimal rule; dropping \b for weak prefixes (sk-, hf_, xox) redacts ordinary text such as disk-usage-of-the-container with no lookaround to separate glued-real from in-word, so neither option passes review and no slice follows the verdict",
     "sensor": "cargo test -p do-context-shield-detector-regex --test quality + review of new pattern entries",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "The MCP stdio transport reads each request frame with a bound of DEFAULT_MAX_REQUEST_BYTES (4 MiB, excluding the newline) and buffers at most the limit plus one detection byte; an oversized frame produces one null-id invalid-request error and ends the session without being parsed, so it can never reach a plugin, the vault, or the audit sink, and an unterminated trailing frame is a null-id parse error, never a partial request",
     "rationale": "An unbounded read_line let a client grow the long-lived server's input buffer without limit before any JSON parsing or tool validation; the limit is a transport resource bound, deliberately distinct from any sanitized-context size policy, and the recovery contract (terminate, never drain an attacker-controlled stream) keeps the bound deterministic",
     "sensor": "crates/mcp-server/src/transport.rs transport::tests (at-limit, one-byte-over, multibyte, unterminated, no-dispatch) + crates/do-context-shield-cli/tests/mcp_threat_matrix.rs oversized case",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "A JSON-RPC batch array is one invalid MCP message in both advertised revisions (2026-07-28 and 2025-11-25): it is rejected with a null-id invalid-request error and no member executes, even when the first member is a valid mutating tools/call",
     "rationale": "JSON-RPC batching was removed from MCP after 2025-03-26 and this server never advertised that revision; dispatching a member would let a batch smuggle a forget/sanitize past the per-request validation and authorization surface",
     "sensor": "crates/mcp-server/src/handle/tests/batch.rs + crates/do-context-shield-cli/tests/mcp_stdio_revisions.rs + fuzz/tests/seed_corpus.rs mcp_batch_seed_is_rejected_without_deleting_mappings",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "MCP method parameters are validated against a per-method schema before dispatch (tools/call requires a bounded non-empty name and an object arguments value; discover/list/initialize accept only their fields plus _meta), params._meta must be an object, and clientInfo — when supplied — must be an object with non-empty bounded name and version strings but is informational only, never used for authorization, tool selection, or policy",
     "rationale": "The generic request validator only checked that params was an object, so malformed metadata and wrong parameter shapes could reach dispatch; validating the schema before dispatch guarantees a rejected request produces no sanitizer, vault, plugin, or audit side effects, and treating client identity as informational prevents a client from influencing enforcement",
     "sensor": "crates/mcp-server/src/handle/tests/protocol_params.rs",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Key-file and configuration diagnostics never interpolate a resolved path, key bytes, ciphertext, OS error text, parser source excerpts, or mode bits: they name the operation and a safe failure category, with remediation pointing at the flag (and the pinned `chmod 600` guidance) instead",
     "rationale": "A key-file or config path can disclose a username, a private project name, or a mounted-secret location, and a TOML parser diagnostic quotes the offending source line, which may contain a raw configured value; data-minimized categories still distinguish missing file, permission rejection, invalid format, wrong key, and tamper",
     "sensor": "crates/vault-json/src/tests/encrypted.rs error_diagnostics_omit_paths_keys_and_ciphertext + crates/do-context-shield-cli/tests/cli_config_discovery.rs config_diagnostics_never_echo_paths_or_values + crates/do-context-shield-cli/tests/cli_canary.rs key_file_diagnostics_never_echo_the_path",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "The single-file GLiNER2 ONNX backend loads the tokenizer, label map, and session once per detector instance on a worker thread and reuses them for every detection; inference is bounded by explicit `max_tokens` (default 512) and `intra_threads` (default 2), with input split into overlapping byte windows and token windows rather than truncated, and any unevaluable window fails the whole call",
     "rationale": "Reloading `tokenizer.json` and creating/loading an ONNX session per call made every detection pay cold-start cost; an unbounded single sequence and an automatic thread count derived from the machine made memory, tensor size, and CPU usage unpredictable for long-lived CLI/MCP workloads, and silent truncation would leave tail PII unscanned",
     "sensor": "crates/detector-gliner2 tests: limits_default_to_conservative_values_and_clamp_floor, byte_windows_cover_the_input_with_bounded_overlapping_ranges, token_windows_bound_inference_and_preserve_boundary_spans, logits_shape_accepts_only_expected_ranks_and_transposes, non_finite_logits_are_rejected_not_mapped_to_a_score, repeated_detections_reuse_the_loaded_engine (model-backed, feature-gated)",
-    "category": "architecture"
+    "category": "architecture-constraint"
   },
   {
     "invariant": "`doctor` preflights a detector locally with no network, no model download, no model contents, and no path in its output: it distinguishes feature_disabled, not_configured, missing_model_dir, missing_model_file, missing_tokenizer, missing_labels, unsupported_export, incomplete_fragments, and runtime_unavailable with a stable reason_code, reports the effective token/thread limits, exits 1 when unavailable, and never presents a hybrid selection whose GLiNER2 half is unavailable as a regex-only success",
     "rationale": "A privacy product must let an operator prove a configured local model is loadable before routing private content; file existence alone is not readiness (a tokenizer/runtime/label mismatch only surfaces on inference), and treating a missing model as a clean regex scan would misrepresent the selected detection coverage",
     "sensor": "crates/do-context-shield-cli/tests/cli_doctor.rs + crates/detector-gliner2 tests readiness_reports_stable_categories and readiness_reports_runtime_unavailable_for_a_broken_export",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "A process plugin call terminates the whole process tree on timeout, error, or completion: Unix launches each child as its own process-group leader and signals the group, Windows assigns it to a kill-on-close Job Object, direct kill is only a containment fallback, the writer surfaces broken-pipe/write failures, and the stdout read handle stays open through bounded exit settlement after the first response line without parsing extra lines or weakening natural non-zero exit failures; the call stays bounded (timeout + exit grace + a fixed tree/thread wait, with pipe-blocked helper threads detached) with no shell in the launch path",
     "rationale": "Killing only the direct child left descendants that inherited stdout alive and blocked the reader, so a hostile plugin could hold a request open past its timeout and survive it; explicit per-platform containment with a bounded wait keeps the transport promise without introducing shell expansion. Closing the stdout read handle after the first line can also turn a child's extra write into a host-induced pipe error before its natural exit status is observed, so keep it open through settlement while parsing only the first line",
     "sensor": "crates/plugin-process/tests/process_tree.rs (Unix and Windows tree cases) + crates/plugin-process/tests/adversarial.rs (multiline response case) + crates/plugin-process/tests/detector_protocol.rs timeout/oversized and valid-response/non-zero-exit cases + cargo clippy --target x86_64-pc-windows-gnu",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Every audit record is a versioned v2 envelope (sequence, previous_hash, record_hash over the canonical event bytes); the full chain is verified on open and before append, `verify-audit` detects modification, deletion, truncation, and reordering and reports only a record index plus a safe category, legacy v1 files are never rewritten or upgraded and the sink refuses to append to them, and rotation is opt-in (`--audit-max-records`/`--audit-max-bytes`) with the previous file preserved as `<name>.1`",
     "rationale": "The append-only JSONL sink could not show whether earlier records had been edited or removed, and unbounded growth had no operator control; a SHA-256 chain makes tampering evident on open and on demand, while opt-in rotation preserves the default no-deletion posture and the versioned format keeps old files untouched",
     "sensor": "crates/audit-file tests (chain categories, rotation boundaries, tamper/legacy refusal) + crates/do-context-shield-cli/tests/cli_audit.rs verify-audit and retention cases",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Hostile but syntactically valid plugin responses cannot weaken the boundary: a policy that keeps a secret fails the call, overlapping aliases follow longest-span-wins so a wider secret label survives, a transformer edit outside the planned spans is accepted only because that text is documented as trusted while planned values and emitted placeholders stay validated and reversible, a second response line is never read, and a failed call does not poison the next one",
     "rationale": "The highest-risk composition is the interaction between a model-facing adapter, process plugins, the vault, and audit output; per-capability tests did not prove that a malicious response cannot bypass the whole boundary, and the transformer's out-of-span trust contract had to be pinned rather than implied",
     "sensor": "crates/plugin-process/tests/adversarial.rs + crates/plugin-process/tests/transformer_protocol.rs + crates/plugin-process/tests/vault_protocol.rs + crates/do-context-shield-cli/tests/mcp_threat_matrix.rs",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Vault and canary key files require owner-only permissions on Unix (mode 0600) and restrictive DACLs on Windows (effective-token user, SYSTEM, Administrators only); broad access, NULL DACLs, callback/object/unknown ACEs that can grant access, or unreadable files fail closed with a path-free diagnostic. Windows key creation supplies the protected allow-list DACL in the initial CREATE_NEW operation and derives the user SID directly from the effective access token. The create-key command atomically publishes a new random key only after restrictive permissions are verified, never replaces an existing path, and never changes permissions on existing key files",
     "rationale": "An encryption or canary key readable by other local users allows unauthorized decryption of stored mappings or forgery of egress canary tokens; unsupported ACE forms and NULL DACLs must not bypass the DACL policy. Account-name re-resolution can identify a colliding local account instead of the effective identity, and post-create DACL tightening leaves a WRITE_DAC-only handle race; applying the DACL in CREATE_NEW prevents inherited-access exposure while preserving the no-overwrite guarantee",
     "sensor": "crates/vault-json tests: key_files_are_read_and_permission_checked, error_diagnostics_omit_paths_keys_and_ciphertext, generated_key_file_is_valid_private_and_never_overwrites, generated_key_file_overrides_inherited_broad_permissions (including immediate-DACL check), effective_token_sid_matches_windows_identity, windows_key_file_acl_validation_rejects_unsafe_acl_changes + crates/do-context-shield-cli/src/canary_key.rs: effective_token_sid_matches_windows_identity + crates/do-context-shield-cli/tests/cli_canary.rs: group_or_world_readable_key_is_refused, key_file_diagnostics_never_echo_the_path, windows_canary_key_file_acl_validation + cli_vault_encryption.rs: create_key_command_creates_a_private_usable_key_without_loading_config + cargo check and clippy --target x86_64-pc-windows-gnu",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "The MCP server is interoperable with the official Rust SDK (`rmcp`) across both advertised revisions (2026-07-28 and 2025-11-25): tool discovery, execution, annotations, and default surface restrictions operate identically through the SDK client as through raw JSON-RPC frames, with zero canary leakage",
     "rationale": "Direct JSON-RPC transport implementation provides control and strict fail-closed validation, but ongoing interoperability against the official SDK client ensures protocol evolution does not introduce silent client-side breakage",
     "sensor": "crates/do-context-shield-cli/tests/mcp_rmcp_interop.rs + crates/do-context-shield-cli/tests/mcp_stdio_revisions.rs",
-    "category": "contracts"
+    "category": "architecture-constraint"
   },
   {
     "invariant": "Detection-quality examples are maintainer-authored synthetic values, reports contain only case IDs, kinds, byte spans, metrics, and content hashes (never corpus text or entity values), and credential false negatives carry manual-review priority",
     "rationale": "Evaluation fixtures and reports must not become another source of PII or credentials; stable offsets and hashes preserve reviewability without echoing sensitive values, while credential misses remain visible for human review",
     "sensor": "cargo test -p do-context-shield --test detection_quality (validates synthetic annotations, Unicode span conversion, value-free reports, and deterministic regex gate)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "Every publishable workspace crate declares a package-root README with `package.readme`, and the README appears in `cargo package --list` output even when `package.include` is explicit",
     "rationale": "Crates.io renders the README from the published archive, not from the workspace root. An explicit include allowlist can silently omit a README, so successful compilation or publish ordering alone does not guarantee a usable registry page.",
     "sensor": "bash scripts/check-release-preflight.sh (release-preflight: requires a package-root README and asserts the declared file appears in cargo package --list)",
-    "category": "workflow"
+    "category": "workflow-rule"
   },
   {
-    "invariant": "Changed-only verification maps security-critical detector, policy, transformer, vault, placeholder, process-plugin, MCP, audit, configuration, shared-API, fixture, and fuzz paths to mandatory sensors; global, unknown, ambiguous, renamed-out, or under-selected paths run the full verification set, and CI reports each selected harness sensor with its reason",
+    "invariant": "Changed-only workflow profiles use fixed quick-fix/feature allowlists and escalate mixed, security, workspace, harness, global, unknown, ambiguous, renamed-out, or under-selected paths to security-critical full verification; signal-set membership stays canonical in do-harness.toml and CI reports selected sensors with reasons",
     "rationale": "do-harness change filtering is sensor-local and silently skips paths matching no configured pattern. The always-on gate owns the dependency map, verifies required sensors against explain output, includes both sides of renames, and runs full verification whenever coverage is not proven; CI remains unfiltered and exposes its selected set.",
     "sensor": "security-regression sensor (scripts/check-security-regression.sh and tests/test_security_regression.py)",
-    "category": "security"
+    "category": "security-contract"
   },
   {
     "invariant": "The active backlog contains only actionable work, explicit external blockers, and documented residual risks with one validated status per item; completed investigations and decisions and detailed mutation/fuzz measurements remain in linked historical records.",
     "rationale": "Separating current work from completed history keeps blockers and unresolved privacy limitations visible. Machine-checked statuses and local links prevent completed entries from being mistaken for open work or historical evidence from disappearing.",
     "sensor": "backlog sensor (scripts/check-backlog.sh and tests/test_backlog_validation.py)",
-    "category": "workflow"
+    "category": "workflow-rule"
   }
 ]

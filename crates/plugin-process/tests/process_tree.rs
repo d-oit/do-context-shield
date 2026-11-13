@@ -1,18 +1,24 @@
 //! Process-tree lifetime: a timeout terminates descendants, not only the
 //! direct executable, and does not wait on a pipe they inherited.
 
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use do_context_shield_plugin_api::Detector;
-use do_context_shield_plugin_process::{ProcessConfig, ProcessDetector};
+use do_context_shield_plugin_process::{ProcessCommand, ProcessConfig, ProcessDetector};
 
-fn tree_command(pid_file: &Path) -> String {
-    format!(
-        "sh {} {}",
-        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/tree.sh"),
-        pid_file.display()
+fn tree_command(pid_file: &Path) -> ProcessCommand {
+    ProcessCommand::new(
+        "sh",
+        [
+            OsString::from(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/tree.sh"
+            )),
+            pid_file.as_os_str().to_os_string(),
+        ],
     )
 }
 

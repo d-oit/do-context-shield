@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-13",
+  "event": "distill",
+  "guides": [
+    {
+      "kind": "reference",
+      "path": ".agents/skills/skill-distiller/references/heuristics.md"
+    },
+    {
+      "kind": "skill",
+      "path": ".agents/skills/skill-distiller/SKILL.md"
+    }
+  ],
+  "payload": {
+    "from_trace": 32,
+    "heuristic_id": 23,
+    "pattern": "Keep skill-eval kinds within the pinned evaluator enum; represent guidance-dependent traps as contextual with a negative guard.",
+    "to_fixture": false,
+    "trigger": "resolved-trace"
+  }
+}

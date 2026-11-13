@@ -28,6 +28,16 @@ case "$mode" in
     # child deterministically, instead of racing SIGPIPE on a closed pipe.
     sleep 30 ;;
   detect-clean)    printf '%s\n' '{"entities":[],"text":""}' ;;
+  detect-argv)
+    if [ "$#" -ne 5 ] ||
+      [ "$2" != "with spaces" ] ||
+      [ "$3" != "λ" ] ||
+      [ "$4" != "" ] ||
+      [ "$5" != "${EXPECTED_PROCESS_LITERAL_ARG:-}" ]; then
+      exit 4
+    fi
+    printf '%s\n' '{"entities":[{"kind":"email","start":0,"end":17,"confidence":0.99}]}'
+    ;;
   detect-exit-after-response)
     printf '%s\n' '{"entities":[],"text":""}'
     exit 3 ;;

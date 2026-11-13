@@ -1,6 +1,6 @@
 use super::{
-    Config, DATA_CATEGORIES, DETECTORS, JUDGES, POLICIES, RECIPIENTS, TRANSFORMERS, ToolSet,
-    VAULTS, vault,
+    Config, DATA_CATEGORIES, DETECTORS, JUDGES, POLICIES, ProcessPluginConfig, RECIPIENTS,
+    TRANSFORMERS, ToolSet, VAULTS, vault,
 };
 use do_context_shield_plugin_api::is_valid_jurisdiction;
 /// Reject unknown plugin and context names, and contradictory vault
@@ -43,6 +43,17 @@ pub(crate) fn validate(config: &Config) -> Result<(), Box<dyn std::error::Error>
             validate_choice(value, field, allowed)?;
         }
     }
+    for (capability, process) in [
+        ("detector", config.process_plugins.detector.as_ref()),
+        ("judge", config.process_plugins.judge.as_ref()),
+        ("policy", config.process_plugins.policy.as_ref()),
+        ("transformer", config.process_plugins.transformer.as_ref()),
+        ("vault", config.process_plugins.vault.as_ref()),
+    ] {
+        if let Some(process) = process {
+            validate_process_plugin(capability, process)?;
+        }
+    }
     if let Some(tools) = plugins.tools.as_deref() {
         ToolSet::parse(tools)
             .map_err(|error| format!("config: invalid `tools` value `{tools}`: {error}"))?;
@@ -77,13 +88,10 @@ pub(crate) fn validate(config: &Config) -> Result<(), Box<dyn std::error::Error>
 ///
 /// # Errors
 ///
-/// Returns an error naming the field and the rejected value.
+/// Returns a fixed error that does not disclose the rejected value.
 fn validate_jurisdiction(value: &str) -> Result<(), Box<dyn std::error::Error>> {
     if !is_valid_jurisdiction(value) {
-        return Err(format!(
-            "config: `jurisdiction` must be an ISO 3166-1 alpha-2 code, got `{value}`"
-        )
-        .into());
+        return Err("config: `jurisdiction` must be an ISO 3166-1 alpha-2 code".into());
     }
     Ok(())
 }
@@ -105,6 +113,30 @@ fn validate_choice(
             allowed.join(", ")
         )
         .into());
+    }
+    Ok(())
+}
+
+/// Validate a process plugin's program/argv pair without including either
+/// value in diagnostics.
+///
+/// # Errors
+///
+/// Returns an error when arguments exist without a program or when the program
+/// is empty.
+fn validate_process_plugin(
+    capability: &str,
+    process: &ProcessPluginConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if process.program.as_deref() == Some("") {
+        return Err(
+            format!("config: `process_plugins.{capability}.program` must not be empty").into(),
+        );
+    }
+    if process.program.is_none() && !process.args.is_empty() {
+        return Err(
+            format!("config: `process_plugins.{capability}.args` requires `program`").into(),
+        );
     }
     Ok(())
 }

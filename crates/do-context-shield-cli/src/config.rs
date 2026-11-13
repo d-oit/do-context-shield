@@ -9,12 +9,16 @@
 use crate::cli::{ContextArgs, DetectorSelection, PipelineSelection, ProcessArgs, VaultSelection};
 use do_context_shield_mcp_server::ToolSet;
 use do_context_shield_plugin_api::{DataCategory, ProcessingContext, RecipientClass};
-use do_context_shield_plugin_process::DEFAULT_TIMEOUT_MS;
+use do_context_shield_plugin_process::{DEFAULT_TIMEOUT_MS, ProcessCommand};
+use process::{
+    ProcessPluginConfig, ProcessPlugins, reject_legacy_process_commands, resolve_process_command,
+};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 pub(crate) mod diag;
 mod env;
+mod process;
 mod validation;
 mod vault;
 
@@ -47,6 +51,8 @@ pub(crate) struct Config {
     #[serde(default)]
     pub(crate) plugins: Plugins,
     #[serde(default)]
+    pub(crate) process_plugins: ProcessPlugins,
+    #[serde(default)]
     pub(crate) vault: VaultConfig,
     #[serde(default)]
     pub(crate) audit: AuditConfig,
@@ -62,7 +68,7 @@ pub(crate) struct Config {
     pub(crate) env: env::EnvSet,
     /// Where the file came from; [`ConfigSource::None`] when no file was read.
     ///
-    /// Process plugin commands (`*_command`) are only honoured from an explicit
+    /// Process plugin executables are only honoured from an explicit
     /// `--config <path>` file. The `[context]` section of a working-directory
     /// file is ignored as well: the repository controls that file, whereas the
     /// user-level home file is operator configuration.
@@ -114,10 +120,6 @@ pub(crate) struct Plugins {
     pub(crate) judge: Option<String>,
     pub(crate) tools: Option<String>,
     pub(crate) model_dir: Option<PathBuf>,
-    pub(crate) detector_command: Option<String>,
-    pub(crate) policy_command: Option<String>,
-    pub(crate) transformer_command: Option<String>,
-    pub(crate) judge_command: Option<String>,
 }
 
 /// Vault selection and persistence.
@@ -126,7 +128,6 @@ pub(crate) struct Plugins {
 pub(crate) struct VaultConfig {
     pub(crate) vault: Option<String>,
     pub(crate) vault_file: Option<PathBuf>,
-    pub(crate) vault_command: Option<String>,
     pub(crate) vault_ttl_seconds: Option<u64>,
     pub(crate) vault_key_file: Option<PathBuf>,
 }
@@ -249,16 +250,25 @@ fn read(path: &Path, source: ConfigSource) -> Result<Config, Box<dyn std::error:
             "cannot read config (inaccessible, a directory, or not valid UTF-8); check `--config` or the discovered config location"
         }
     })?;
-    let mut config: Config = toml::from_str(&text).map_err(|error| {
-        // The full parser diagnostic quotes the offending source line, which
-        // may hold a raw configured value; only the schema error's own message
-        // (an unknown field name, never a value) is safe to surface.
+    let value: toml::Value = toml::from_str(&text).map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "cannot parse config as TOML; check `--config` or the discovered config location",
+        )
+    })?;
+    reject_legacy_process_commands(&value)?;
+    let mut config: Config = value.try_into().map_err(|error: toml::de::Error| {
         let message = error.message();
         if message.starts_with("unknown field") {
-            format!("cannot parse config: {message}")
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("cannot parse config: {message}"),
+            )
         } else {
-            "cannot parse config as TOML; check `--config` or the discovered config location"
-                .to_owned()
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "cannot parse config; check the documented schema",
+            )
         }
     })?;
     config.source = source;
@@ -295,21 +305,21 @@ pub(crate) struct Resolved {
     pub(crate) model_dir: Option<PathBuf>,
     pub(crate) model_max_tokens: Option<usize>,
     pub(crate) model_threads: Option<usize>,
-    pub(crate) detector_command: Option<String>,
+    pub(crate) detector_process: Option<ProcessCommand>,
     pub(crate) policy: String,
-    pub(crate) policy_command: Option<String>,
+    pub(crate) policy_process: Option<ProcessCommand>,
     pub(crate) transformer: String,
-    pub(crate) transformer_command: Option<String>,
+    pub(crate) transformer_process: Option<ProcessCommand>,
     pub(crate) policy_matrix: do_context_shield_policy_matrix::MatrixConfig,
     pub(crate) judge: Option<String>,
-    pub(crate) judge_command: Option<String>,
+    pub(crate) judge_process: Option<ProcessCommand>,
     pub(crate) vault: Option<String>,
     pub(crate) vault_file: Option<PathBuf>,
     pub(crate) vault_key_file: Option<PathBuf>,
     pub(crate) audit_file: Option<PathBuf>,
     pub(crate) audit_max_records: Option<u64>,
     pub(crate) audit_max_bytes: Option<u64>,
-    pub(crate) vault_command: Option<String>,
+    pub(crate) vault_process: Option<ProcessCommand>,
     pub(crate) vault_ttl_seconds: Option<u64>,
     pub(crate) recipient: String,
     pub(crate) data_category: String,
@@ -340,13 +350,7 @@ pub(crate) fn resolve(cli: &CliSelection, config: &Config) -> Resolved {
     let plugins = &config.plugins;
     let vault = &config.vault;
     let context = &config.context;
-    let process_cmd = |cmd: &Option<String>| {
-        if config.is_explicit() {
-            cmd.clone()
-        } else {
-            None
-        }
-    };
+    let process_plugins = &config.process_plugins;
     // A working-directory file is repository content: its `[context]` must not
     // weaken the conservative defaults. Environment overrides are applied over
     // the file, so a field the environment supplied is trusted regardless of
@@ -357,40 +361,50 @@ pub(crate) fn resolve(cli: &CliSelection, config: &Config) -> Resolved {
         model_dir: cli.detector.model_dir.or_else(|| plugins.model_dir.clone()),
         model_max_tokens: cli.detector.model_max_tokens,
         model_threads: cli.detector.model_threads,
-        detector_command: cli
-            .detector
-            .detector_command
-            .or_else(|| process_cmd(&plugins.detector_command)),
+        detector_process: resolve_process_command(
+            cli.process.detector_program,
+            cli.process.detector_args,
+            process_plugins.detector.as_ref(),
+            config.is_explicit(),
+        ),
         policy: pick(cli.pipeline.policy, plugins.policy.as_deref(), "default"),
-        policy_command: cli
-            .pipeline
-            .policy_command
-            .or_else(|| process_cmd(&plugins.policy_command)),
+        policy_process: resolve_process_command(
+            cli.process.policy_program,
+            cli.process.policy_args,
+            process_plugins.policy.as_ref(),
+            config.is_explicit(),
+        ),
         transformer: pick(
             cli.pipeline.transformer,
             plugins.transformer.as_deref(),
             "pseudonymize",
         ),
-        transformer_command: cli
-            .pipeline
-            .transformer_command
-            .or_else(|| process_cmd(&plugins.transformer_command)),
+        transformer_process: resolve_process_command(
+            cli.process.transformer_program,
+            cli.process.transformer_args,
+            process_plugins.transformer.as_ref(),
+            config.is_explicit(),
+        ),
         policy_matrix: config.policy_matrix.clone(),
         judge: cli.pipeline.judge.or_else(|| plugins.judge.clone()),
-        judge_command: cli
-            .pipeline
-            .judge_command
-            .or_else(|| process_cmd(&plugins.judge_command)),
+        judge_process: resolve_process_command(
+            cli.process.judge_program,
+            cli.process.judge_args,
+            process_plugins.judge.as_ref(),
+            config.is_explicit(),
+        ),
         vault: cli.vault.vault.or_else(|| vault.vault.clone()),
         vault_file: cli.vault_file.or_else(|| vault.vault_file.clone()),
         vault_key_file: cli.vault_key_file.or_else(|| vault.vault_key_file.clone()),
         audit_file: cli.audit_file.or_else(|| config.audit.audit_file.clone()),
         audit_max_records: cli.audit_max_records,
         audit_max_bytes: cli.audit_max_bytes,
-        vault_command: cli
-            .vault
-            .vault_command
-            .or_else(|| process_cmd(&vault.vault_command)),
+        vault_process: resolve_process_command(
+            cli.process.vault_program,
+            cli.process.vault_args,
+            process_plugins.vault.as_ref(),
+            config.is_explicit(),
+        ),
         vault_ttl_seconds: cli.vault_ttl_seconds.or(vault.vault_ttl_seconds),
         recipient: pick(
             cli.context.recipient,

@@ -29,12 +29,12 @@
     {
       "id": 3,
       "prompt": "A teammate wants detection implemented in Python instead of Rust. What does the skill say?",
-      "expected_output": "Process plugins run any capability in another language over stdin/stdout JSON with --detector-command (and --policy-command/--transformer-command/--vault-command) per docs/process-plugin.md.",
+      "expected_output": "Process plugins run any capability in another language over stdin/stdout JSON with --detector-program and repeatable --detector-arg (and matching options for policy, transformer, judge, and vault) per docs/process-plugin.md.",
       "files": [],
       "dim": "discoverability",
       "kind": "contextual",
       "assertions": [
-        "contains:.agents/skills/private-data/SKILL.md|detector-command",
+        "contains:.agents/skills/private-data/SKILL.md|detector-program",
         "contains:.agents/skills/private-data/SKILL.md|docs/process-plugin.md"
       ]
     },

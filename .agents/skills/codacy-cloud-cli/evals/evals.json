@@ -1,0 +1,52 @@
+{
+  "skill_name": "codacy-cloud-cli",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Fetch the Codacy Cloud analysis summary for pull request 42 in this repository as machine-readable data.",
+      "expected_output": "Use codacy pull-request with the repository or auto-detected provider, then request JSON output; cloud results describe the analyzed PR HEAD.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "explicit",
+      "assertions": [
+        "contains:.agents/skills/codacy-cloud-cli/SKILL.md|The CLI is the authoritative source of truth",
+        "contains:.agents/skills/codacy-cloud-cli/references/command-reference.md|codacy pull-request gh my-org my-repo <prNumber>"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The remote PR analysis is stale after changing Codacy settings. How do I wait for fresh data?",
+      "expected_output": "Trigger pull-request reanalysis with --reanalyze-and-wait and inspect the completed delta before reporting results.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "implicit",
+      "assertions": [
+        "contains:.agents/skills/codacy-cloud-cli/SKILL.md|--reanalyze-and-wait",
+        "contains:.agents/skills/codacy-cloud-cli/SKILL.md|Configuration changes are not instant"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "A Codacy SCA advisory lists vulnerable functions. How should I assess whether my code uses the vulnerable API?",
+      "expected_output": "Use the affected-functions and dependency-chain data to check local call sites; treat missing reachability data as unknown.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "contextual",
+      "assertions": [
+        "contains:.agents/skills/codacy-cloud-cli/SKILL.md|vulnerableFunctions",
+        "contains:.agents/skills/codacy-cloud-cli/SKILL.md|treat it as unknown"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Refactor a Rust iterator. The request does not involve Codacy or remote analysis.",
+      "expected_output": "Complete the refactor without querying Codacy Cloud or creating a Codacy report.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "negative",
+      "assertions": [
+        "absent:codacy-cloud-report.json"
+      ]
+    }
+  ]
+}

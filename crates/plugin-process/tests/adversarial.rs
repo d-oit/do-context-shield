@@ -130,9 +130,10 @@ fn a_failed_hostile_call_does_not_poison_the_next_one() {
         Err(error) => panic!("cannot create a temp directory: {error}"),
     };
     let marker = directory.path().join("counter.marker");
-    let command = format!("{} {}", command("counter"), marker.display());
+    let mut plugin_command = command("counter");
+    plugin_command.args.push(marker.as_os_str().to_owned());
     let detector = ProcessDetector::new(
-        ProcessConfig::with_command(command).with_timeout(Duration::from_secs(5)),
+        ProcessConfig::with_command(plugin_command).with_timeout(Duration::from_secs(5)),
     );
     let first = detector.detect(EMAIL);
     assert!(first.is_err(), "the first (hostile) call must fail");

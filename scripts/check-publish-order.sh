@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# check-publish-order.sh — the publish script's ORDER must match the workspace.
+# check-publish-order.sh — the publish script's ORDER must match publishable workspace crates.
 #
 # Sensor: scripts/check-publish-order.sh
-# scripts/publish-crates.sh publishes bottom-up through a hardcoded ORDER
+# `scripts/publish-crates.sh` publishes bottom-up through a hardcoded ORDER
 # array, and `cargo publish` resolves sibling path deps via the crates.io
 # index — so a crate missing from ORDER, or listed before one of its workspace
 # dependencies, fails mid-release with crates.io as the oracle. Cargo requires
-# every workspace path dependency to be available from the registry, including
-# optional, build, and development dependencies.
+# every publishable workspace path dependency to be available from the registry,
+# including optional, build, and development dependencies. Workspace tools with
+# `publish = false` are deliberately excluded from the release order.
 # This sensor uses `cargo metadata` as the single source of truth and asserts
-# completeness (every workspace crate is listed) and topological validity
-# (every workspace dependency appears earlier).
+# completeness (every publishable workspace crate is listed) and topological
+# validity (every workspace dependency appears earlier).
 # Missing python3 fails closed when CI=true or DO_HARNESS_REQUIRE_TOOLS=1 and
 # is a WARN skip otherwise — the same policy as check-shellcheck.sh.
 set -euo pipefail
@@ -62,9 +63,9 @@ meta = json.loads(result.stdout)
 # cargo metadata reports host-native paths; normalize separators so the
 # Windows backslash form (`...\crates\...`) passes the same filter as POSIX.
 crates = {p['name']: p for p in meta['packages']
-          if '/crates/' in p['manifest_path'].replace('\\', '/')}
+          if '/crates/' in p['manifest_path'].replace('\\', '/') and p.get('publish') != []}
 if not crates:
-    print('FAIL: cargo metadata reports no workspace crates under crates/.')
+    print('FAIL: cargo metadata reports no publishable workspace crates under crates/.')
     sys.exit(1)
 
 pos = {}

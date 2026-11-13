@@ -11,16 +11,16 @@
 //! and starts one child per operation, so stability across calls is whatever
 //! that store provides. A stateless child re-issues tokens per call.
 
-use crate::ProcessConfig;
 use crate::protocol;
+use crate::{ProcessCommand, ProcessConfig};
 use do_context_shield_plugin_api::{Mapping, ScopeId, Vault, VaultError, is_placeholder_token};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-/// Guidance returned when no vault command is configured.
+/// Guidance returned when no vault executable is configured.
 const NO_COMMAND: &str =
-    "process vault unavailable (no command configured); pass `--vault-command <program> [args...]`";
+    "process vault unavailable (no executable configured); pass `--vault-program <path>`";
 
 /// Vault backed by a local executable over the NDJSON protocol.
 pub struct ProcessVault {
@@ -44,25 +44,39 @@ impl ProcessVault {
     ///
     /// # Errors
     ///
-    /// Returns [`VaultError`] when no usable command is configured, so a
-    /// missing `--vault-command` fails at startup instead of on the first call.
-    pub fn from_selection(command: Option<&str>, timeout: Duration) -> Result<Self, VaultError> {
+    /// Returns [`VaultError`] when no executable is configured, so a missing
+    /// selection fails at startup instead of on the first call.
+    pub fn from_selection(
+        command: Option<&ProcessCommand>,
+        timeout: Duration,
+    ) -> Result<Self, VaultError> {
         let command = command
-            .filter(|command| !command.trim().is_empty())
+            .filter(|command| !command.program.is_empty())
             .ok_or_else(|| VaultError::Message(NO_COMMAND.to_owned()))?;
         Ok(Self::new(
-            ProcessConfig::with_command(command.to_owned()).with_timeout(timeout),
+            ProcessConfig::with_command(command.clone()).with_timeout(timeout),
         ))
     }
 
     /// Run one vault operation against the configured child.
     fn request<T: Serialize, R: DeserializeOwned>(&self, request: &T) -> Result<R, VaultError> {
-        let Some((program, args)) = protocol::split_command(self.config.command.as_deref()) else {
+        let Some(command) = self
+            .config
+            .command
+            .as_ref()
+            .filter(|command| !command.program.is_empty())
+        else {
             return Err(VaultError::Message(NO_COMMAND.to_owned()));
         };
         let encoded = protocol::encode("vault", request).map_err(VaultError::Message)?;
-        let line = protocol::run_child("vault", program, &args, encoded, self.config.timeout)
-            .map_err(VaultError::Message)?;
+        let line = protocol::run_child(
+            "vault",
+            &command.program,
+            &command.args,
+            encoded,
+            self.config.timeout,
+        )
+        .map_err(VaultError::Message)?;
         protocol::decode("vault", &line).map_err(VaultError::Message)
     }
 }

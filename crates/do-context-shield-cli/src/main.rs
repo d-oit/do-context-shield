@@ -8,21 +8,17 @@ use cli::{
 };
 use do_context_shield_core::canary::{canary_marker, verify_canary};
 use do_context_shield_plugin_api::ScopeId;
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 
 mod canary_key;
 mod cli;
 mod config;
+mod explain;
 mod file_commands;
+mod input;
 mod pipeline;
 
 use pipeline::{build_pipeline, inspect_pipeline, vault_pipeline};
-
-fn read_stdin() -> Result<String, Box<dyn std::error::Error>> {
-    let mut input = String::new();
-    io::stdin().read_to_string(&mut input)?;
-    Ok(input)
-}
 
 /// Run one subcommand against the merged configuration.
 fn run_simple(command: Command, config: &config::Config) -> Result<(), Box<dyn std::error::Error>> {
@@ -30,6 +26,7 @@ fn run_simple(command: Command, config: &config::Config) -> Result<(), Box<dyn s
         Command::Sanitize(args) => run_sanitize(args, config)?,
         Command::Restore(args) => run_restore(args, config)?,
         Command::Inspect(args) => run_inspect(args, config)?,
+        Command::ExplainPolicy(args) => explain::run(args, config)?,
         Command::Forget(args) => run_forget(args, config)?,
         Command::McpStdio(args) => run_mcp(args, config)?,
         Command::Doctor(args) => run_doctor(args, config)?,
@@ -72,7 +69,7 @@ fn run_sanitize(
         config,
     );
     let mut pipeline = build_pipeline(&resolved)?;
-    let input = read_stdin()?;
+    let input = input::read_stdin()?;
     let result = pipeline.sanitize(&scope, &input, &resolved.to_context())?;
     print!("{}", result.text);
     if let Some(path) = &canary_key_file {
@@ -85,7 +82,7 @@ fn run_sanitize(
 /// Check stdin for a valid canary marker; fails closed when it is absent or forged.
 fn run_verify_canary(args: &cli::VerifyCanaryArgs) -> Result<(), Box<dyn std::error::Error>> {
     let key = canary_key::read_canary_key(&args.canary_key_file)?;
-    let input = read_stdin()?;
+    let input = input::read_stdin()?;
     if verify_canary(&key, &ScopeId(args.session.clone()), &input)? {
         println!("ok");
         Ok(())
@@ -124,7 +121,7 @@ fn run_restore(
     // the configuration: a broken detector/policy/transformer selection must
     // not fail it.
     let pipeline = vault_pipeline(&resolved)?;
-    let input = read_stdin()?;
+    let input = input::read_stdin()?;
     let result = pipeline.restore(&ScopeId(session), &input)?;
     print!("{result}");
     Ok(())
@@ -153,7 +150,7 @@ fn run_inspect(
     // `inspect` only runs the detector; the other stages are defaults so a
     // broken selection for them cannot fail the command.
     let pipeline = inspect_pipeline(&resolved)?;
-    let input = read_stdin()?;
+    let input = input::read_stdin()?;
     let entities = pipeline.inspect(&input)?;
     serde_json::to_writer_pretty(io::stdout(), &InspectOutput { entities })?;
     println!();
@@ -216,20 +213,20 @@ fn run_mcp(args: McpArgs, config: &config::Config) -> Result<(), Box<dyn std::er
         audit_max_records: resolved.audit_max_records,
         audit_max_bytes: resolved.audit_max_bytes,
         vault: resolved.vault,
-        vault_command: resolved.vault_command,
+        vault_process: resolved.vault_process,
         vault_ttl_seconds: resolved.vault_ttl_seconds,
         detector: resolved.detector,
         model_dir: resolved.model_dir,
         model_max_tokens: resolved.model_max_tokens,
         model_threads: resolved.model_threads,
-        detector_command: resolved.detector_command,
+        detector_process: resolved.detector_process,
         policy: resolved.policy,
-        policy_command: resolved.policy_command,
+        policy_process: resolved.policy_process,
         judge: resolved.judge,
         policy_matrix: resolved.policy_matrix,
-        judge_command: resolved.judge_command,
+        judge_process: resolved.judge_process,
         transformer: resolved.transformer,
-        transformer_command: resolved.transformer_command,
+        transformer_process: resolved.transformer_process,
         process_timeout_ms: resolved.process_timeout_ms,
         context,
     })?;
@@ -272,9 +269,9 @@ fn doctor_report(resolved: &config::Resolved) -> DoctorReport {
         },
         "process" => {
             let configured = resolved
-                .detector_command
-                .as_deref()
-                .is_some_and(|command| !command.trim().is_empty());
+                .detector_process
+                .as_ref()
+                .is_some_and(|command| !command.program.is_empty());
             DoctorReport {
                 detector,
                 available: configured,
@@ -287,7 +284,7 @@ fn doctor_report(resolved: &config::Resolved) -> DoctorReport {
                     "local detector executable configured; doctor checks configuration only and does not run it"
                         .to_owned()
                 } else {
-                    "set `--detector-command` (or the pinned config file's `[plugins] detector_command`) to a local executable"
+                    "set `--detector-program` (and repeat `--detector-arg` as needed) or configure `[process_plugins.detector]`"
                         .to_owned()
                 },
                 layout: None,
@@ -357,6 +354,7 @@ fn run_doctor(args: DoctorArgs, config: &config::Config) -> Result<(), Box<dyn s
     let resolved = config::resolve(
         &config::CliSelection {
             detector: args.detector,
+            process: args.process,
             ..config::CliSelection::default()
         },
         config,
@@ -418,6 +416,9 @@ fn run_config(args: ConfigArgs, config: &config::Config) -> Result<(), Box<dyn s
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
+    if let Some(process) = cli.command.process_args() {
+        process.validate()?;
+    }
     let explicit_config = cli.config;
     match cli.command {
         Command::CreateKey(args) => file_commands::create_key(&args),

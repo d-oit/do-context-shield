@@ -1,0 +1,52 @@
+{
+  "skill_name": "setup-coverage",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Set up coverage for a Python pytest project and upload the real report to Codacy from CI. What should the workflow include?",
+      "expected_output": "Generate Cobertura XML with pytest-cov, upload it after the test and coverage step, then verify that Codacy received it.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "explicit",
+      "assertions": [
+        "contains:.agents/skills/setup-coverage/references/workflow.md|pytest --cov --cov-report=xml:cobertura.xml",
+        "contains:.agents/skills/setup-coverage/references/workflow.md|**after** the test/coverage step"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Coverage is generated in CI, but Codacy still shows no PR coverage delta. What should I check?",
+      "expected_output": "Verify upload on every push and ensure the PR head and common ancestor both have coverage data; inspect upload logs and commit identity.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "implicit",
+      "assertions": [
+        "contains:.agents/skills/setup-coverage/references/workflow.md|every push",
+        "contains:.agents/skills/setup-coverage/references/workflow.md|common ancestor commit"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "The project is not registered in Codacy. Can a coverage reporter upload still work?",
+      "expected_output": "No. The repository must first be added to Codacy, and the upload token must be provided securely by the CI secret store.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "contextual",
+      "assertions": [
+        "contains:.agents/skills/setup-coverage/SKILL.md|The repository must be added to Codacy",
+        "contains:.agents/skills/setup-coverage/references/workflow.md|CODACY_PROJECT_TOKEN"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Change a Rust function's return type. No coverage or Codacy upload setup is requested.",
+      "expected_output": "Make the code change without creating a coverage report or upload workflow.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "negative",
+      "assertions": [
+        "absent:coverage/cobertura.xml"
+      ]
+    }
+  ]
+}

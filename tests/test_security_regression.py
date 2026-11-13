@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,14 +42,34 @@ class HarnessFixture:
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text("fixture\n", encoding="utf-8")
 
-    def explain(self) -> dict[str, object]:
-        result = subprocess.run(
-            [HARNESS, "--root", str(self.root), "explain", "--set", "verification", "--changed", "--format", "json"],
-            cwd=self.root,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
+    def explain(self, signal_set: str = "verification", changed: bool = True) -> dict[str, object]:
+        options = {
+            "cwd": self.root,
+            "check": False,
+            "capture_output": True,
+            "text": True,
+            "shell": False,
+        }
+        # The executable and each argv are fixed; only the isolated fixture cwd varies.
+        calls = {
+            ("verification", True): lambda: subprocess.run(  # nosec B603
+                ["do-harness", "explain", "--set", "verification", "--changed", "--format", "json"],
+                **options,
+            ),
+            ("quick-fix", True): lambda: subprocess.run(  # nosec B603
+                ["do-harness", "explain", "--set", "quick-fix", "--changed", "--format", "json"],
+                **options,
+            ),
+            ("feature", True): lambda: subprocess.run(  # nosec B603
+                ["do-harness", "explain", "--set", "feature", "--changed", "--format", "json"],
+                **options,
+            ),
+            ("security-critical", False): lambda: subprocess.run(  # nosec B603
+                ["do-harness", "explain", "--set", "security-critical", "--format", "json"],
+                **options,
+            ),
+        }
+        result = calls[(signal_set, changed)]()
         if result.returncode != 0:
             raise AssertionError(f"do-harness explain failed: {result.stderr}")
         return json.loads(result.stdout)
@@ -84,6 +105,163 @@ class SecurityRegressionSelectionTests(unittest.TestCase):
             selected = {item["name"] for item in report["selected"]}
             self.assertTrue(expected <= selected, f"{path}: expected {expected}; selected {selected}")
             return report
+        finally:
+            fixture.close()
+
+    def test_complete_path_sets_select_exactly_one_deterministic_profile(self) -> None:
+        cases = {
+            ("docs/architecture.md",): "quick-fix",
+            ("quality/corpus/v1.json",): "feature",
+            ("crates/plugin-api/src/lib.rs",): "security-critical",
+            ("Cargo.toml",): "security-critical",
+            ("unknown/opaque.yaml",): "security-critical",
+            ("tests/test_shared_skills.py",): "feature",
+        }
+        for paths, expected in cases.items():
+            with self.subTest(paths=paths):
+                self.assertEqual(expected, security_regression.classify_profile(list(paths), self.security_map)["name"])
+
+        self.assertEqual(
+            "feature",
+            security_regression.classify_profile(
+                ["docs/architecture.md", "quality/corpus/v1.json"], self.security_map
+            )["name"],
+        )
+        for paths in (
+            ["quality/corpus/v1.json", "crates/plugin-api/src/lib.rs"],
+            ["crates/plugin-api/src/lib.rs", "quality/corpus/v1.json"],
+        ):
+            self.assertEqual(
+                "security-critical",
+                security_regression.classify_profile(paths, self.security_map)["name"],
+            )
+
+    def test_security_component_workspace_global_and_ambiguous_paths_are_strict(self) -> None:
+        paths = (
+            "crates/plugin-api/src/lib.rs",
+            "crates/plugin-api/README.md",
+            "Cargo.toml",
+            "crates/benchmarks/Cargo.toml",
+            "do-harness.toml",
+            ".github/workflows/ci.yml",
+            "../outside",
+            "docs//malformed.md",
+            "docs/./malformed.md",
+            r"docs\malformed.md",
+            "",
+            "unknown/config.yaml",
+        )
+        for path in paths:
+            with self.subTest(path=path):
+                self.assertEqual(
+                    "security-critical",
+                    security_regression.classify_profile([path], self.security_map)["name"],
+                )
+
+        ambiguous_map = copy.deepcopy(self.security_map)
+        ambiguous_map["components"].append(
+            {
+                "name": "conflicting-document-rule",
+                "prefixes": ["docs/"],
+                "suffixes": [".md"],
+                "required_sensors": ["test"],
+            }
+        )
+        self.assertEqual(
+            "security-critical",
+            security_regression.classify_profile(["docs/architecture.md"], ambiguous_map)["name"],
+        )
+
+    def test_low_risk_profiles_cannot_be_broadened_to_unmapped_code(self) -> None:
+        broadened_safe = copy.deepcopy(self.security_map)
+        broadened_safe["safe_paths"]["prefixes"].append("crates/")
+        self.assertEqual(
+            "security-critical",
+            security_regression.classify_profile(
+                ["crates/new-component/src/lib.rs"], broadened_safe
+            )["name"],
+        )
+
+        broadened_feature = copy.deepcopy(self.security_map)
+        quality_rule = next(
+            rule
+            for rule in broadened_feature["path_rules"]
+            if rule["name"] == "detector-quality-corpus"
+        )
+        quality_rule["prefixes"] = ["crates/"]
+        self.assertEqual(
+            "security-critical",
+            security_regression.classify_profile(
+                ["crates/new-component/src/lib.rs"], broadened_feature
+            )["name"],
+        )
+
+        broadened_feature["feature_path_rules"].append("process-plugin-fixtures")
+        self.assertEqual(
+            "security-critical",
+            security_regression.classify_profile(
+                ["crates/plugin-process/tests/fixtures/plugin.sh"], broadened_feature
+            )["name"],
+        )
+
+    def test_profile_signal_sets_select_expected_sensors_with_explain(self) -> None:
+        profile_sets = tomllib.loads((ROOT / "do-harness.toml").read_text(encoding="utf-8"))["signal-sets"]
+        fixture = HarnessFixture()
+        try:
+            fixture.add("docs/quick-fix.md")
+            quick_fix = {
+                item["name"]
+                for item in fixture.explain("quick-fix")["selected"]
+            }
+            self.assertNotIn("backlog", quick_fix)
+            self.assertIn("security-regression", quick_fix)
+            quick_fix_cases = [("docs/quick-fix.md", quick_fix)]
+            for doc_path in (
+                "docs/decisions/profile-selection.md",
+                "docs/test-evidence/profile-selection.md",
+            ):
+                with self.subTest(path=doc_path):
+                    doc_fixture = HarnessFixture()
+                    try:
+                        doc_fixture.add(doc_path)
+                        selected = {
+                            item["name"]
+                            for item in doc_fixture.explain("quick-fix")["selected"]
+                        }
+                        self.assertIn("backlog", selected)
+                        self.assertIn("security-regression", selected)
+                        quick_fix_cases.append((doc_path, selected))
+                    finally:
+                        doc_fixture.close()
+            self.assertTrue(
+                {"fmt", "check", "clippy", "test", "backlog", "security-regression"}
+                <= set(profile_sets["quick-fix"])
+            )
+
+            fixture.add("quality/corpus/new-case.json")
+            feature = {item["name"] for item in fixture.explain("feature")["selected"]}
+            self.assertTrue({"test", "security-regression"} <= feature)
+            fixture.add("tests/test_shared_skills.py")
+            feature = {item["name"] for item in fixture.explain("feature")["selected"]}
+            self.assertIn("skills", feature)
+
+
+            fixture.add("crates/plugin-api/src/public.rs")
+            critical = {item["name"] for item in fixture.explain("security-critical", changed=False)["selected"]}
+            verification = set(profile_sets["verification"])
+            self.assertEqual(verification, critical)
+            self.assertEqual(verification, set(profile_sets["feature"]))
+            self.assertEqual(verification, set(profile_sets["security-critical"]))
+            self.assertIn("security-regression", critical)
+            for path, sensors in quick_fix_cases:
+                print(f"Workflow profile dry-run quick-fix ({path}):")
+                print(f"  sensors: {', '.join(sorted(sensors))}")
+            for profile, path, sensors in (
+                ("feature", "quality/corpus + shared-skill test", feature),
+                ("security-critical", "crates/plugin-api", critical),
+            ):
+                print(f"Workflow profile dry-run {profile} ({path}):")
+                print(f"  sensors: {', '.join(sorted(sensors))}")
         finally:
             fixture.close()
 

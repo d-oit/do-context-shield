@@ -1,0 +1,43 @@
+[package]
+name = "do-context-shield-benchmarks"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Reproducible synthetic benchmarks for do-context-shield pipeline stages"
+homepage.workspace = true
+repository.workspace = true
+readme = "README.md"
+publish = false
+
+[lib]
+bench = false
+
+[features]
+default = []
+gliner2 = ["dep:do-context-shield-detector-gliner2"]
+
+[dependencies]
+do-context-shield-plugin-api.workspace = true
+do-context-shield-detector-regex.workspace = true
+do-context-shield-detector-hybrid.workspace = true
+do-context-shield-detector-gliner2 = { workspace = true, features = ["gliner2"], optional = true }
+do-context-shield-policy-default.workspace = true
+do-context-shield-transformer-pseudonymize.workspace = true
+do-context-shield-transformer-mask.workspace = true
+do-context-shield-vault-memory.workspace = true
+do-context-shield-vault-json.workspace = true
+do-context-shield-plugin-process.workspace = true
+
+[dev-dependencies]
+criterion = "0.5"
+tempfile = "3"
+
+[[bench]]
+name = "pipeline"
+harness = false
+
+[[bench]]
+name = "gliner2"
+harness = false
+required-features = ["gliner2"]

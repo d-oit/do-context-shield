@@ -325,16 +325,9 @@ fn mcp_startup_failure(extra: &[&str]) -> (i32, String) {
 
 #[test]
 fn vault_ttl_with_a_process_vault_fails_at_startup() {
-    // Memory and JSON vaults both have a lifetime policy; a process vault
+    // Memory and JSON vaults both have a lifetime policy; the process vault
     // keeps retention on the child's side, so a TTL is rejected.
-    let (code, stderr) = mcp_startup_failure(&[
-        "--vault",
-        "process",
-        "--vault-command",
-        "does-not-matter",
-        "--vault-ttl-seconds",
-        "5",
-    ]);
+    let (code, stderr) = mcp_startup_failure(&["--vault", "process", "--vault-ttl-seconds", "5"]);
     assert_eq!(code, 1, "stderr: {stderr}");
     assert!(stderr.contains("--vault-ttl-seconds"), "stderr: {stderr}");
 }

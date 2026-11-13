@@ -1,0 +1,52 @@
+{
+  "skill_name": "configure-codacy-cloud",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Tune the configuration of an existing Codacy Cloud repository. What must be verified before making changes?",
+      "expected_output": "Confirm the repository is already on Codacy, has a completed analysis, and the CLI is at least version 1.3.0; stop if any prerequisite fails.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "explicit",
+      "assertions": [
+        "contains:.agents/skills/configure-codacy-cloud/SKILL.md|The repository is already on Codacy.",
+        "contains:.agents/skills/configure-codacy-cloud/SKILL.md|at least 1.3.0"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The imported config omits a currently enabled supported tool. What happens during import, and what about cloud-only tools?",
+      "expected_output": "Import disables supported tools absent from the config; cloud-only tools are outside that import and retain their state.",
+      "files": [],
+      "dim": "effectiveness",
+      "kind": "implicit",
+      "assertions": [
+        "contains:.agents/skills/configure-codacy-cloud/SKILL.md|is **disabled** by the import",
+        "contains:.agents/skills/configure-codacy-cloud/SKILL.md|Cloud-only tools"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "How should the cloud configuration workflow map Warning and Info levels into its summary severity names?",
+      "expected_output": "Map Warning to Medium and Info to Minor, preserving the original Cloud level meanings in the summary.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "contextual",
+      "assertions": [
+        "contains:.agents/skills/configure-codacy-cloud/references/cloud-workflow.md|Map them to the summary's severity names",
+        "contains:.agents/skills/configure-codacy-cloud/references/cloud-workflow.md|Warning` → `Medium`"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "The repository is not on Codacy Cloud. Do not add or configure it; this request is only to explain a local build error.",
+      "expected_output": "Explain the local build error and do not create, import, or modify Codacy Cloud configuration.",
+      "files": [],
+      "dim": "discoverability",
+      "kind": "negative",
+      "assertions": [
+        "absent:.codacy/auto.config.json"
+      ]
+    }
+  ]
+}

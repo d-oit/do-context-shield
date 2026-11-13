@@ -10,10 +10,20 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from workflow_profile_rules import (
+    FEATURE_RULE_PATHS,
+    SAFE_EXACT_PATHS,
+    SAFE_PREFIXES,
+    matches_explicit_feature_path,
+)
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 MAP_PATH = REPOSITORY_ROOT / "plans" / "security-regression-map.json"
 SIGNAL_SET = "verification"
 SECURITY_SENSOR = "security-regression"
+PROFILES = ("quick-fix", "feature", "security-critical")
+PROFILE_RANK = {name: rank for rank, name in enumerate(PROFILES)}
+
 
 # Keep the map and gate self-protecting: a malformed or edited map cannot
 # classify its own inputs as documentation-only and bypass broader checks.
@@ -68,8 +78,46 @@ def load_map(path: Path = MAP_PATH) -> dict[str, Any]:
     safe_paths = data.get("safe_paths")
     if not isinstance(safe_paths, dict):
         raise ValueError("missing safe path rules")
-    _string_list(safe_paths.get("exact"), "safe exact paths")
-    _string_list(safe_paths.get("prefixes"), "safe path prefixes")
+    safe_exact = set(_string_list(safe_paths.get("exact"), "safe exact paths"))
+    safe_prefixes = set(_string_list(safe_paths.get("prefixes"), "safe path prefixes"))
+    if not safe_exact <= SAFE_EXACT_PATHS or not safe_prefixes <= set(SAFE_PREFIXES):
+        raise ValueError("safe path rules exceed the fixed low-risk allowlist")
+    profiles = data.get("profiles")
+    if not isinstance(profiles, dict) or set(profiles) != set(PROFILES):
+        raise ValueError("security map must define exactly the three workflow profiles")
+    for name, profile in profiles.items():
+        if not isinstance(profile, dict) or profile.get("signal_set") != name:
+            raise ValueError(f"profile {name} must reference its named signal set")
+        for field in ("invocation", "recon", "planning", "tests", "evidence", "rationale"):
+            if not isinstance(profile.get(field), str) or not profile[field]:
+                raise ValueError(f"profile {name} has invalid {field}")
+    if profiles["quick-fix"]["invocation"] != "do-harness verify --changed --set quick-fix --strict":
+        raise ValueError("quick-fix invocation must use changed-only strict selection")
+    if profiles["feature"]["invocation"] != "do-harness verify --changed --set feature --strict":
+        raise ValueError("feature invocation must use changed-only strict selection")
+    if profiles["security-critical"]["invocation"] != "do-harness verify --set security-critical --strict":
+        raise ValueError("security-critical invocation must run full strict verification")
+
+    critical_paths = data.get("security_critical_paths")
+    if not isinstance(critical_paths, list) or not critical_paths:
+        raise ValueError("missing security-critical path rules")
+    for rule in critical_paths:
+        if not isinstance(rule, dict) or not any(field in rule for field in ("exact", "prefixes", "suffixes")):
+            raise ValueError("invalid security-critical path matcher")
+        for field in ("exact", "prefixes", "suffixes"):
+            if field in rule:
+                _string_list(rule[field], f"security-critical {field}")
+
+    feature_rules = _string_list(data.get("feature_path_rules"), "feature path rules")
+    known_path_rules = {rule["name"] for rule in data["path_rules"]}
+    if (
+        not feature_rules
+        or len(feature_rules) != len(set(feature_rules))
+        or not set(feature_rules) <= known_path_rules
+        or not set(feature_rules).issubset(FEATURE_RULE_PATHS)
+    ):
+        raise ValueError("feature profile references unknown, duplicate, or non-allowlisted path rules")
+
     return data
 
 
@@ -92,8 +140,108 @@ def _matches_group(path: str, rules: dict[str, Any]) -> bool:
     )
 
 
+def classify_profile_path(path: str, data: dict[str, Any]) -> dict[str, str]:
+    classification = classify_path(path, data)
+    if classification["kind"] == "fallback":
+        return {"profile": "security-critical", "reason": classification["reason"]}
+
+    component_prefixes = {
+        prefix for rule in data["components"] for prefix in rule.get("prefixes", [])
+    }
+    if any(path.startswith(prefix) for prefix in component_prefixes):
+        return {"profile": "security-critical", "reason": "security component or shared API path"}
+    if any(_matches_path(path, rule) for rule in data["components"]):
+        return {"profile": "security-critical", "reason": "security component or shared API path"}
+    if any(_matches_path(path, rule) for rule in data["security_critical_paths"]):
+        return {"profile": "security-critical", "reason": "workspace or security-critical path"}
+
+    if classification["kind"] == "safe" and (
+        path in SAFE_EXACT_PATHS or path.startswith(SAFE_PREFIXES)
+    ):
+        return {"profile": "quick-fix", "reason": "explicitly safe low-risk path"}
+
+    feature_rule_names = set(data["feature_path_rules"])
+    matched_names = {
+        rule["name"] for rule in data["path_rules"] if _matches_path(path, rule)
+    }
+    if (
+        matched_names
+        and matched_names <= feature_rule_names
+        and matches_explicit_feature_path(path, matched_names)
+    ):
+        return {"profile": "feature", "reason": "explicitly mapped low-risk dependent path"}
+    return {"profile": "security-critical", "reason": "path is not explicitly eligible for a low-risk profile"}
+
+
+def _profile_for_paths(paths: list[str], data: dict[str, Any]) -> dict[str, Any]:
+    decisions = sorted(
+        ({"path": path, **classify_profile_path(path, data)} for path in paths),
+        key=lambda item: item["path"],
+    )
+    if not decisions:
+        return {"name": None, "reason": "no changed paths", "paths": []}
+    strictest = max(decisions, key=lambda item: PROFILE_RANK[item["profile"]])
+    return {
+        "name": strictest["profile"],
+        "reason": strictest["reason"],
+        "paths": decisions,
+    }
+
+
+def classify_profile(paths: list[str], data: dict[str, Any]) -> dict[str, Any]:
+    """Return one deterministic workflow profile for the complete changed-path set."""
+    return _profile_for_paths(paths, data)
+
+
+def classify_paths(paths: list[str], data: dict[str, Any]) -> dict[str, Any]:
+    profile = _profile_for_paths(paths, data)
+    if not paths:
+        return {
+            "fallback": False,
+            "kind": "unchanged",
+            "required_sensors": [],
+            "names": [],
+            "profile": profile,
+        }
+
+    required: set[str] = set()
+    names: set[str] = set()
+    safe_count = 0
+    for path in paths:
+        decision = classify_path(path, data)
+        if decision["kind"] == "fallback":
+            return {
+                "fallback": True,
+                "kind": "fallback",
+                "reason": decision["reason"],
+                "required_sensors": [],
+                "names": [],
+                "profile": profile,
+            }
+        if decision["kind"] == "safe":
+            safe_count += 1
+        else:
+            required.update(decision["required_sensors"])
+            names.update(decision["names"])
+
+    return {
+        "fallback": False,
+        "kind": "mapped" if names else "safe",
+        "required_sensors": sorted(required),
+        "names": sorted(names),
+        "safe_count": safe_count,
+        "profile": profile,
+    }
+
 def classify_path(path: str, data: dict[str, Any]) -> dict[str, Any]:
-    if not path or path.startswith("/") or "\x00" in path or ".." in path.split("/"):
+    segments = path.split("/")
+    if (
+        not path
+        or path.startswith("/")
+        or "\\" in path
+        or "\x00" in path
+        or any(segment in ("", ".", "..") for segment in segments)
+    ):
         return {"kind": "fallback", "reason": "unsafe or malformed repository path"}
 
     if _matches_group(path, data["global_paths"]):
@@ -122,35 +270,6 @@ def classify_path(path: str, data: dict[str, Any]) -> dict[str, Any]:
     return {"kind": "fallback", "reason": "unmapped path"}
 
 
-def classify_paths(paths: list[str], data: dict[str, Any]) -> dict[str, Any]:
-    if not paths:
-        return {"fallback": False, "kind": "unchanged", "required_sensors": [], "names": []}
-
-    required: set[str] = set()
-    names: set[str] = set()
-    safe_count = 0
-    for path in paths:
-        decision = classify_path(path, data)
-        if decision["kind"] == "fallback":
-            return {
-                "fallback": True,
-                "reason": decision["reason"],
-                "required_sensors": [],
-                "names": [],
-            }
-        if decision["kind"] == "safe":
-            safe_count += 1
-        else:
-            required.update(decision["required_sensors"])
-            names.update(decision["names"])
-
-    return {
-        "fallback": False,
-        "kind": "mapped" if names else "safe",
-        "required_sensors": sorted(required),
-        "names": sorted(names),
-        "safe_count": safe_count,
-    }
 
 
 def _decode_git_paths(raw: bytes, statuses: bool) -> list[str]:
@@ -243,11 +362,19 @@ def run_gate(root: Path) -> int:
         return run_full_verification(root, f"change classification failed ({type(error).__name__})")
 
     decision = classify_paths(paths, data)
-    if decision["fallback"]:
-        return run_full_verification(root, decision["reason"])
     if decision["kind"] == "unchanged":
         print("Security regression gate: no working-tree changes to classify.")
         return 0
+
+    profile = decision["profile"]
+    print(
+        f"Workflow profile: {profile['name']} — {profile['reason']}.",
+        flush=True,
+    )
+    if decision["fallback"]:
+        return run_full_verification(root, decision["reason"])
+    if profile["name"] == "security-critical":
+        return run_full_verification(root, "security-critical workflow profile selected")
 
     try:
         report = _explain(root)

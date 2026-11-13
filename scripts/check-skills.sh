@@ -12,6 +12,12 @@
 #      a row, and a row may only claim a stage the sensor is wired into
 #   6. `.agents/SKILLS.md` names exactly the skill directories and links each
 #      one at `skills/<name>/SKILL.md`
+#   7. the harness skill's sensor-table commands mirror each do-harness.toml
+#      sensor's argv: do-harness.toml is the canonical executable definition,
+#      and the table is only the stage/fix-hint map (issue #197)
+#   8. plans/invariants.json category/evidence rules (four normalized
+#      categories; security contracts cite executable evidence) — enforced by
+#      tests/test_invariants_validation.py, run below
 #
 # python3 is required for the gate; a missing interpreter WARN-skips locally and
 # fails closed when CI=true or DO_HARNESS_REQUIRE_TOOLS=1.
@@ -122,6 +128,14 @@ else:
 
 config = (root / "do-harness.toml").read_text()
 sensor_names = set(re.findall(r'^name = "([a-z0-9-]+)"', config, re.M))
+sensor_argv = {
+    match.group(1): [
+        part.strip().strip('"') for part in match.group(2).split(",") if part.strip()
+    ]
+    for match in re.finditer(
+        r'\[\[sensors\]\]\s*name\s*=\s*"([^"]+)"\s*argv\s*=\s*\[(.*?)\]', config, re.S
+    )
+}
 methods = json.loads((root / "plans/methods.json").read_text())["methods"]
 for method in methods:
     for subtask in method["subtasks"]:
@@ -153,8 +167,10 @@ header = next((i for i, line in enumerate(lines) if line.startswith("| Sensor | 
 if header is None:
     failures.append("harness SKILL.md: no `| Sensor | Command | Stage |` table found")
     rows = {}
+    commands = {}
 else:
     rows = {}
+    commands = {}
     for line in lines[header + 1 :]:
         if not line.startswith("|"):
             break
@@ -162,6 +178,7 @@ else:
         if len(cells) < 3 or set(cells[0]) <= set("- ") or not cells[0]:
             continue
         rows[cells[0]] = cells[2].lower()
+        commands[cells[0]] = cells[1]
 
 missing = sorted(sensor_names - set(rows))
 if missing:
@@ -195,14 +212,22 @@ for name, stage in rows.items():
             marker in token for marker in ("pre-commit", "pre-push", "ci", "verification", "commit-msg")
         ):
             failures.append(f"harness SKILL.md: {name} names unrecognized stage `{token}`")
-
-invariants = json.loads((root / "plans/invariants.json").read_text())
-for entry in invariants:
-    for field in ("invariant", "rationale", "sensor", "category"):
-        if not entry.get(field):
+    # do-harness.toml is the only executable definition of a sensor command:
+    # the table's command cell must mirror the sensor's argv, so config and
+    # table cannot drift into teaching agents two different commands.
+    if name in sensor_names:
+        listed = commands.get(name, "").replace("`", "").split(" (")[0].split()
+        if listed != sensor_argv.get(name):
             failures.append(
-                f"invariants.json: entry missing {field}: {entry.get('invariant', '<no invariant>')}"
+                f"harness SKILL.md: row `{name}` command `{commands.get(name, '')}` "
+                f"does not match do-harness.toml argv {sensor_argv.get(name)}"
             )
+
+# Entry-level invariant rules (required fields, the four normalized
+# categories, security-contract executable evidence) live in
+# tests/test_invariants_validation.py, which this script runs below; the
+# catalog is loaded here only for the gate summary.
+invariants = json.loads((root / "plans/invariants.json").read_text())
 
 # Verify do-harness.toml compiler inputs and manifest coverage for Rust sensors
 rust_sensors = {"fmt", "check", "clippy", "test"}
@@ -252,6 +277,11 @@ fi
 
 if ! python3 "$ROOT/tests/test_shared_skills.py"; then
     echo "FAIL: shared skills integration test suite failed"
+    FAIL=1
+fi
+
+if ! python3 "$ROOT/tests/test_invariants_validation.py"; then
+    echo "FAIL: invariant catalog validation test suite failed"
     FAIL=1
 fi
 

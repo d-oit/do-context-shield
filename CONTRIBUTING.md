@@ -33,8 +33,9 @@ git clone https://github.com/d-oit/do-context-shield.git
 cd do-context-shield
 git config core.hooksPath .githooks  # install the pre-commit hook (see do-harness.toml)
 cargo build
-cargo test --workspace
 ```
+
+Then run the quality gates below.
 
 ### Quality Gates
 
@@ -49,44 +50,30 @@ curl -fsSL https://raw.githubusercontent.com/d-o-hub/do-harness/32120c3644ac3023
   | sh -s -- --version v0.1.1
 ```
 
-Then run the whole local gate with one command, or the sensors directly:
+Then run the whole local gate with one command:
 
 ```bash
-do-harness verify --set verification          # fmt, check, clippy, test, loc, shellcheck, hooks, skills, skill-evals, deps, audit, commitlint
+do-harness verify --set verification          # full local gate (sensor set declared in do-harness.toml)
 do-harness verify --changed --set verification   # only sensors whose inputs changed
 do-harness explain --set verification --changed  # show the selection without running it
-do-harness status --set verification          # evidence freshness without running sensors
-do-harness eval --strict-fixtures             # skill structure + hermetic walkthroughs
-bash scripts/check-skill-evals.sh             # graded skill evals (the skill-evals sensor)
-bash scripts/check-skills.sh                  # skill gate + planning-catalog check
-bash scripts/check-shellcheck.sh              # shell lint for hooks and scripts
-bash scripts/check-hooks.sh                   # hook wiring: sensor parity + single hook mode
-
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace
-cargo deny check
-cargo audit
-python3 scripts/validate-structure.py
+do-harness status --set verification             # evidence freshness without running sensors
+do-harness verify --only <name>                  # a single sensor by name
+do-harness eval --strict-fixtures                # skill structure + hermetic walkthroughs
 ```
 
-Local sensors are declared in `do-harness.toml` (`pre-commit`: fmt, check, loc; `pre-push`: the full verification set) with shell implementations in `scripts/check-*.sh`; CI enforces the same sensors plus structure validation, secret scanning, publish-surface checks, and a macOS/Windows test matrix (default-feature tests plus `cargo check --workspace --all-features --all-targets`, so feature-gated code is compiled on every supported OS; the Linux jobs cover the `--all-features` test run). The `Harness` CI job installs the pinned `do-harness` and runs the `ci` signal set (`verification` minus `commitlint`, since PR titles are the enforced commit contract) with `--format json --strict`, verifies evidence freshness (`status --set ci`); the skill corpus runs inside that set through the `skill-evals` sensor (`bash scripts/check-skill-evals.sh`), which fails on a failed graded assertion.
+Every sensor command and signal set has exactly one executable definition: `do-harness.toml`. The sensor map, stages, and fix hints live in [.agents/skills/harness/SKILL.md](.agents/skills/harness/SKILL.md) — its command column is a mirror that `scripts/check-skills.sh` validates against the config, so docs never fork from it silently; anywhere else, link the config instead of copying argv.
 
-Git hooks: `.githooks/` is this repository's hook source of truth — versioned and reviewed alongside the code (`git config core.hooksPath .githooks`). It ships `pre-commit` (staged secret scan, LOC and `unwrap`/`expect` hygiene, TOML syntax, fmt, check), `commit-msg` (commitlint on the prepared subject), and `pre-push` (the full local gate: fmt, check, clippy, test, loc, shellcheck, hooks, deps, audit, commitlint). `do-harness hook install` is a per-developer alternative that writes managed hooks into `.git/hooks/`; the two do not combine, because a `core.hooksPath` pointing at `.githooks` makes git ignore `.git/hooks/` entirely — pick one. The `hooks` sensor (`bash scripts/check-hooks.sh`) enforces that choice plus sensor parity: every sensor `do-harness.toml` declares for a hook must actually be invoked by that hand-written hook, so adding a sensor without mirroring it fails locally instead of silently weakening the gate. (Upstream, for the pinned v0.1.1: `hook status`/`doctor` ignore the `core.hooksPath` shadowing — [d-o-hub/do-harness#108](https://github.com/d-o-hub/do-harness/issues/108), fixed upstream and awaiting a release — and `hook install`/`uninstall` ignore `--dry-run` — [d-o-hub/do-harness#159](https://github.com/d-o-hub/do-harness/issues/159).)
+Local sensors and their hook wiring are declared in `do-harness.toml`, with shell implementations in `scripts/check-*.sh`; CI enforces the same sensors plus structure validation, secret scanning, publish-surface checks, and a macOS/Windows test matrix (default-feature tests plus `cargo check --workspace --all-features --all-targets`, so feature-gated code is compiled on every supported OS; the Linux jobs cover the `--all-features` test run). The `Harness` CI job installs the pinned `do-harness`, runs the `ci` signal set with `--format json --strict`, and verifies evidence freshness (`status --set ci`); the skill corpus runs inside that set through the `skill-evals` sensor, which fails on a failed graded assertion.
+
+Git hooks: `.githooks/` is this repository's hook source of truth — versioned and reviewed alongside the code (`git config core.hooksPath .githooks`). The `pre-commit`, `commit-msg`, and `pre-push` hooks are hand-written mirrors of the sensor sets declared in `do-harness.toml`, so they run without the do-harness binary; `do-harness hook install` is a per-developer alternative that writes managed hooks into `.git/hooks/`; the two do not combine, because a `core.hooksPath` pointing at `.githooks` makes git ignore `.git/hooks/` entirely — pick one. The `hooks` sensor enforces that choice plus sensor parity: every sensor `do-harness.toml` declares for a hook must actually be invoked by that hand-written hook, so adding a sensor without mirroring it fails locally instead of silently weakening the gate. (Known upstream issues for the pinned v0.1.1: [d-o-hub/do-harness#108](https://github.com/d-o-hub/do-harness/issues/108) — `hook status`/`doctor` ignore the `core.hooksPath` shadowing — and [d-o-hub/do-harness#159](https://github.com/d-o-hub/do-harness/issues/159) — `hook install`/`uninstall` ignore `--dry-run`.)
 
 ## Agent workflow
 
-Work follows the harness phases in `AGENTS.md`: recon -> plan (`plans/methods.json`: `vertical-plugin-slice`, `spike-and-resolve`, `decision`, persisted with `do-harness task add --method`) -> spike when uncertain (throwaway under `target/spikes/`) -> failing contract test first -> implementation -> sensors -> distillation back into `.agents/skills/`. Durable rules live in `plans/invariants.json` with the sensor that enforces each one (`do-harness seed`). Three consecutive sensor failures on one subtask halt the loop (fail-fast); `.agents/skills/harness/SKILL.md` carries the response protocol, and `htn-planner`, `spike-runner`, `skill-distiller`, `skill-creator` carry the rest of the runbooks.
+Agent-facing work follows the 6-phase harness protocol in [AGENTS.md](AGENTS.md) (recon → plan → spike → failing contract test → sensors → distillation), with fail-fast, steering-loop, and evidence rules there; `.agents/skills/harness/SKILL.md` carries the sensor response protocol, and `htn-planner`, `spike-runner`, `skill-distiller`, `skill-creator` carry the runbooks. Durable rules live in `plans/invariants.json` with the sensor that enforces each one (`do-harness seed`).
 
 ## Project Rules
 
-See [AGENTS.md](AGENTS.md):
-
-- Keep the core provider-agnostic. No cloud LLM SDKs in runtime crates.
-- Every detector, judge, policy, transformer, and vault stays behind `plugin-api` traits.
-- Prefer local/CPU implementations.
-- Never log raw sensitive input or vault mappings.
-- Secrets are redacted by default.
+Binding project rules live in [AGENTS.md](AGENTS.md) and apply to every contribution.
 
 ## Making Changes
 
@@ -134,20 +121,7 @@ Release notes are drafted automatically from merged PRs (see `.github/release-dr
 
 ### Preflight and Publishing
 
-Verify release preflight locally:
-
-```bash
-bash scripts/check-release-preflight.sh v0.1.0
-bash scripts/smoke-test-release.sh
-```
-
-Workspace crates depend on each other via versioned path dependencies, so they are published **bottom-up in dependency order**. The publishing script is idempotent and checks crates.io status before publishing:
-
-```bash
-scripts/publish-crates.sh --dry-run  # rehearse package surface and status
-cargo login                          # once; the script uses these credentials
-scripts/publish-crates.sh            # publish idempotently in order
-```
+Local preflight verification, release smoke tests, and bottom-up publishing (including `cargo login` for a crate's first publish) are documented in [docs/releasing.md](docs/releasing.md) — follow that canonical procedure instead of duplicating its commands here.
 
 ## Reporting Issues
 
