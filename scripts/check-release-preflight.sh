@@ -8,12 +8,39 @@
 #   3. Package metadata completeness (description, license, repository).
 #   4. Publish order array completeness and topological sorting (via check-publish-order.sh).
 #   5. Package surface hygiene and README inclusion (cargo package --list for every workspace crate).
+#   6. Optional crates.io verification for each package/version in publish order.
 set -euo pipefail
 
 require_tools() { [[ "${CI:-}" == "true" || "${DO_HARNESS_REQUIRE_TOOLS:-}" == "1" ]]; }
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+CHECK_REGISTRY=0
+TARGET_TAG=""
+while (($# > 0)); do
+    case "$1" in
+        --check-registry) CHECK_REGISTRY=1 ;;
+        --help)
+            printf '%s\n' "Usage: $0 [--check-registry] [release-tag]"
+            exit 0
+            ;;
+        --*)
+            printf 'FAIL: unknown option: %s\n' "$1" >&2
+            exit 2
+            ;;
+        *)
+            if [[ -n "$TARGET_TAG" ]]; then
+                echo "FAIL: only one release tag may be supplied." >&2
+                exit 2
+            fi
+            TARGET_TAG="$1"
+            ;;
+    esac
+    shift
+done
+if [[ -z "$TARGET_TAG" ]]; then
+    TARGET_TAG="${RELEASE_TAG:-}"
+fi
 
 if ! command -v python3 >/dev/null 2>&1; then
     if require_tools; then
@@ -23,8 +50,8 @@ if ! command -v python3 >/dev/null 2>&1; then
     echo "WARN: python3 not installed; skipping release preflight check."
     exit 0
 fi
+python3 tests/test_crates_io_versions.py
 
-TARGET_TAG="${1:-${RELEASE_TAG:-}}"
 
 echo "--- 1. Checking publish order completeness and topology ---"
 bash scripts/check-publish-order.sh
@@ -117,6 +144,10 @@ if problems:
 
 print(f"release-preflight: {len(crates)} crates verified at version {workspace_version}; declared READMEs are included.")
 PYEOF
+if [[ "$CHECK_REGISTRY" == "1" ]]; then
+    echo "--- 3. Verifying published package versions on crates.io ---"
+    bash scripts/publish-crates.sh --verify-published
+fi
 
 
 echo "check-release-preflight OK."

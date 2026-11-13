@@ -12,6 +12,8 @@ metadata:
   version: "1.0"
   tags: htn planning decomposition tasks sensors
 ---
+## Guides
+See references/heuristics.md for distilled heuristics.
 # HTN Planner Skill
 
 Turn an objective into a deterministic task network: named method -> ordered

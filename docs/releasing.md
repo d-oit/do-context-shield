@@ -32,6 +32,8 @@ Before publication, the release automation enforces preflight verification (`scr
 - **Topological Order**: `scripts/publish-crates.sh` must maintain a complete and topologically valid publishing order (`scripts/check-publish-order.sh`).
 - **Package Surface Hygiene**: Every workspace crate must satisfy `cargo package --list` without error.
 
+- **Registry completeness (opt-in)**: `scripts/check-release-preflight.sh --check-registry [vX.Y.Z]` checks the exact package/version set in `scripts/publish-crates.sh` against the crates.io API. Missing versions and registry/network failures fail the check; without the flag, preflight remains local-only. `scripts/publish-crates.sh --dry-run` is a publication rehearsal, not proof that every expected version is present.
+
 ## Release Smoke Testing
 
 Release candidate binaries are tested before publishing assets (`scripts/smoke-test-release.sh`):

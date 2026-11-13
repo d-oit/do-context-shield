@@ -14,6 +14,7 @@
 # Usage:
 #   scripts/publish-crates.sh --dry-run   # rehearse package surfaces and check status
 #   scripts/publish-crates.sh --needs-publish  # exit 0 when a version is missing
+#   scripts/publish-crates.sh --verify-published  # fail unless every ordered version is live
 #   scripts/publish-crates.sh             # uses the credentials from `cargo login`
 #   CARGO_REGISTRY_TOKEN=... scripts/publish-crates.sh  # explicit token
 set -euo pipefail
@@ -49,6 +50,7 @@ MODE="publish"
 case "${1:-}" in
     --dry-run | --check) MODE="dry-run" ;;
     --needs-publish) MODE="needs-publish" ;;
+    --verify-published) MODE="verify-published" ;;
 esac
 
 get_crate_version() {
@@ -90,6 +92,15 @@ if [ "$MODE" = "needs-publish" ]; then
     done
     echo "all crate versions are already published" >&2
     exit 1
+fi
+if [ "$MODE" = "verify-published" ]; then
+    package_versions=()
+    for crate in "${ORDER[@]}"; do
+        version=$(get_crate_version "$crate")
+        package_versions+=("$crate@$version")
+    done
+    python3 scripts/check_crates_io_versions.py "${package_versions[@]}"
+    exit 0
 fi
 
 # Rehearsal validates package surfaces and queries current index status

@@ -58,6 +58,7 @@ forever on a `BEHIND` PR instead of draining a batch.
   Codacy when configured) pass and review comments are addressed. If authentication
   or permissions prevent publishing, preserve the local branch and report the
   exact blocker; never claim a PR was created or a change merged.
+- Use the currently active `gh` account (`gh auth status`) for GitHub operations. Run commands in that account's `HOME`/`GH_CONFIG_DIR` context; do not switch accounts or request tokens in chat. If an automation shell sets `CI=true` and `gh` rejects stored credentials, run in the login user's context and set `GH_TOKEN` only for that command from `gh auth token`; never print, log, or paste the credential. Verify the account with `gh api user --jq .login`. Auth errors are failed operations, never empty query results.
 
 - Run `scripts/update-pr-branches.sh` before merging: it rebases every open PR that is `BEHIND`
   through `gh pr update-branch --rebase` (server-side, no local checkout). Wait for `CI Success`,
