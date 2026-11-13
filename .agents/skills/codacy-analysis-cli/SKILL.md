@@ -15,7 +15,7 @@ The Codacy Analysis CLI (`codacy-analysis`) runs static analysis locally on a re
 
 Always use `--output-format json` for structured output in agentic workflows.
 
-For gating runs (pre-commit, PR review, CI), also pass `--fail-if-missing` — see [Strict mode](#strict-mode).
+For gating runs (pre-commit, PR review, CI), also pass `--fail-if-missing` — see [Strict mode](references/analysis-workflow.md#strict-mode).
 
 ## Setup
 
