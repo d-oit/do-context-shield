@@ -187,19 +187,30 @@ class SecurityRegressionSelectionTests(unittest.TestCase):
         fixture = HarnessFixture()
         try:
             fixture.add("docs/quick-fix.md")
-            fixture.add("docs/decisions/profile-selection.md")
             quick_fix = {
                 item["name"]
                 for item in fixture.explain("quick-fix")["selected"]
             }
-            self.assertIn("backlog", quick_fix)
-            fixture.add("docs/test-evidence/profile-selection.md")
-            quick_fix = {
-                item["name"]
-                for item in fixture.explain("quick-fix")["selected"]
-            }
-            self.assertIn("backlog", quick_fix)
+            self.assertNotIn("backlog", quick_fix)
             self.assertIn("security-regression", quick_fix)
+            quick_fix_cases = [("docs/quick-fix.md", quick_fix)]
+            for doc_path in (
+                "docs/decisions/profile-selection.md",
+                "docs/test-evidence/profile-selection.md",
+            ):
+                with self.subTest(path=doc_path):
+                    doc_fixture = HarnessFixture()
+                    try:
+                        doc_fixture.add(doc_path)
+                        selected = {
+                            item["name"]
+                            for item in doc_fixture.explain("quick-fix")["selected"]
+                        }
+                        self.assertIn("backlog", selected)
+                        self.assertIn("security-regression", selected)
+                        quick_fix_cases.append((doc_path, selected))
+                    finally:
+                        doc_fixture.close()
             self.assertTrue(
                 {"fmt", "check", "clippy", "test", "backlog", "security-regression"}
                 <= set(profile_sets["quick-fix"])
@@ -220,8 +231,10 @@ class SecurityRegressionSelectionTests(unittest.TestCase):
             self.assertEqual(verification, set(profile_sets["feature"]))
             self.assertEqual(verification, set(profile_sets["security-critical"]))
             self.assertIn("security-regression", critical)
+            for path, sensors in quick_fix_cases:
+                print(f"Workflow profile dry-run quick-fix ({path}):")
+                print(f"  sensors: {', '.join(sorted(sensors))}")
             for profile, path, sensors in (
-                ("quick-fix", "docs/decisions + docs/test-evidence", quick_fix),
                 ("feature", "quality/corpus + shared-skill test", feature),
                 ("security-critical", "crates/plugin-api", critical),
             ):
