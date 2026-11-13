@@ -54,7 +54,7 @@
       "expected_output": "No. Replace credential-shaped values with synthetic fixtures, use a fixed executable and static argv with shell disabled, and keep any necessary rule suppression narrow.",
       "files": [],
       "dim": "effectiveness",
-      "kind": "gotchas",
+      "kind": "contextual",
       "assertions": [
         "contains:.agents/skills/codacy-analysis-cli/SKILL.md|repository-verified remediation heuristics",
         "contains:.agents/skills/codacy-analysis-cli/references/heuristics.md|synthetic, non-credential-shaped secret fixtures",

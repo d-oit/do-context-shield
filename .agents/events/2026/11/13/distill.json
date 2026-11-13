@@ -4,18 +4,18 @@
   "guides": [
     {
       "kind": "reference",
-      "path": ".agents/skills/codacy-analysis-cli/references/heuristics.md"
+      "path": ".agents/skills/skill-distiller/references/heuristics.md"
     },
     {
       "kind": "skill",
-      "path": ".agents/skills/codacy-analysis-cli/SKILL.md"
+      "path": ".agents/skills/skill-distiller/SKILL.md"
     }
   ],
   "payload": {
-    "from_trace": 31,
-    "heuristic_id": 22,
-    "pattern": "Use synthetic, non-credential-shaped secret fixtures; prefer a fixed executable with static argv and shell disabled for subprocess tests, and keep any necessary analyzer suppression narrow.",
-    "to_fixture": true,
+    "from_trace": 32,
+    "heuristic_id": 23,
+    "pattern": "Keep skill-eval kinds within the pinned evaluator enum; represent guidance-dependent traps as contextual with a negative guard.",
+    "to_fixture": false,
     "trigger": "resolved-trace"
   }
 }
